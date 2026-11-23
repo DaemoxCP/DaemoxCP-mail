@@ -1,4 +1,4 @@
-// The panel card at the top of the dashboard (reperto 183), in Chromium with a simulated server and the
+// The panel card at the top of the dashboard (finding 183), in Chromium with a simulated server and the
 // panel's Content-Security-Policy.
 //
 //  1. How long it has been running: the duration and the start date, with the time zone; counted with

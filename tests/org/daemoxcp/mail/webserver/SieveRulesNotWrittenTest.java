@@ -30,10 +30,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 
 /**
- * The page is told when the panel's Sieve rules were NOT written (reperto 223).
+ * The page is told when the panel's Sieve rules were NOT written (finding 223).
  *
  * <p>{@code SieveGenerator.saveSieveScript} returns false when it does not write a mailbox's rules: a bad address, and
- * since reperto 221 also while any folder from / to /var/mail/sieve can be changed by others (for example /var/mail
+ * since finding 221 also while any folder from / to /var/mail/sieve can be changed by others (for example /var/mail
  * without its sticky bit). Its callers dropped that result, so the page said the change was done while Dovecot kept
  * running the earlier rules.
  *

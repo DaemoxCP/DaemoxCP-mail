@@ -1,4 +1,4 @@
-// MySQL stopped for a while on the TEST VM, with the panel open in a browser (reperto 209). On the real server, on
+// MySQL stopped for a while on the TEST VM, with the panel open in a browser (finding 209). On the real server, on
 // 09/11/2026, MySQL restarted inside "Update everything": for 9 seconds every request got "401 not authorized", the
 // Updates card lost the job in progress and filled with errors, and a page opened in that moment led to the sign-in
 // page with a session that was still good. Now:

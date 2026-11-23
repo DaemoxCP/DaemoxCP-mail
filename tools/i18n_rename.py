@@ -1,14 +1,13 @@
-"""Chiavi di traduzione e segnaposto: file di lingua, codice che usa le chiavi, JavaScript.
+"""Translation keys and placeholders: language files, code that uses the keys, JavaScript.
 
-  - i file di lingua: le chiavi rinominate, e i {segnaposto} rinominati dentro i testi; se in uno
-    stesso testo due segnaposto finiscono sullo stesso nome, si ferma;
-  - le chiavi citate nel codice: stringhe esatte fra virgolette, {{t:chiave}}, data-i18n;
-  - i segnaposto nel JavaScript: le chiavi degli oggetti passati a t()/tn()/tNodes(), e le
-    proprieta' abbreviate { nome } (che diventano { name: nome }).
-Il Java dei segnaposto (Map.of dentro I18n.tr) lo fa PlaceholderRename.java, col compilatore.
+  - the language files: the keys renamed, and the {placeholders} renamed inside the texts; if in
+    the same text two placeholders end up with the same name, it stops;
+  - the keys quoted in the code: exact strings in quotes, {{t:key}}, data-i18n;
+  - the placeholders in the JavaScript: the keys of the objects passed to t()/tn()/tNodes(), and
+    the shorthand properties { nome } (which become { name: nome }).
+The Java of the placeholders (Map.of inside I18n.tr) is done by PlaceholderRename.java, with the compiler.
 
-Uso: python3 i18n_rename.py <radice> <chiavi.json> <segnaposto.txt> [--dry]
-"""
+Usage: python3 i18n_rename.py <root> <keys.json> <placeholders.txt> [--dry]"""
 import re, sys, json, glob, os, collections
 root, keyfile, phfile = sys.argv[1], sys.argv[2], sys.argv[3]
 dry = "--dry" in sys.argv
@@ -17,7 +16,7 @@ ph = dict(l.split() for l in open(phfile, encoding="utf-8") if l.strip())
 counts = collections.Counter()
 problems = []
 
-# 1. file di lingua
+# 1. language files
 PH = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 for lang in ("it", "en"):
     p = os.path.join(root, f"src/main/resources/lang/{lang}.json")
@@ -42,11 +41,11 @@ for lang in ("it", "en"):
         with open(p, "w", encoding="utf-8") as f:
             f.write(json.dumps(out, ensure_ascii=False, indent=2) + "\n")
 
-# 2. le chiavi citate nel codice
+# 2. the keys quoted in the code
 alt = "|".join(sorted(map(re.escape, keys), key=len, reverse=True))
 QK = re.compile(r"""(\\?['"])(""" + alt + r""")(\\?['"])""")
 TK = re.compile(r"""\{\{t:(""" + alt + r""")\}\}""")
-# 3. i segnaposto negli oggetti di t()/tn()/tNodes()
+# 3. the placeholders in the objects of t()/tn()/tNodes()
 I18N_CALL = re.compile(r"""\b(?:t|tn|tNodes)\(\s*\\?['"][^'"]+\\?['"]\s*,\s*(?:[^,{}()'"]+,\s*)?\{""")
 phalt = "|".join(sorted(map(re.escape, ph), key=len, reverse=True))
 OBJKEY = re.compile(r"([{,]\s*)(" + phalt + r")(\s*:)(?!:)")
@@ -63,7 +62,7 @@ def js_placeholders(text, where):
                 if depth == 0: break
             i += 1
         obj = text[m.end() - 1:i + 1]
-        # solo il primo livello: gli oggetti annidati dentro i valori restano
+        # only the first level: the objects nested inside the values stay
         def r_key(mm):
             counts["segnaposto js " + where] += 1
             return mm.group(1) + ph[mm.group(2)] + mm.group(3)
@@ -85,7 +84,7 @@ for f in sorted(files):
         if m.group(1).lstrip("\\") != m.group(3).lstrip("\\"): return m.group(0)
         counts["chiavi nel codice"] += 1
         return m.group(1) + keys[m.group(2)] + m.group(3)
-    # con una mappa di chiavi vuota l'alternativa e' vuota e prenderebbe la stringa vuota
+    # with an empty key map the alternation is empty and would match the empty string
     t2 = QK.sub(r_q, t) if keys else t
     t2 = t2 if not keys else TK.sub(lambda m: (counts.update(["chiavi {{t:}}"]) or "{{t:" + keys[m.group(1)] + "}}"), t2)
     if f.endswith((".js", ".html")) or f.endswith(".java"):

@@ -179,7 +179,8 @@ public class FullMailStackScript {
             pw groupadd vmail -g 5000 2>/dev/null || true
             pw useradd vmail -c "Virtual Mail" -d /var/vmail -s /usr/sbin/nologin -u 5000 -g 5000 2>/dev/null || true
             """
-            // Le cartelle della posta a vmail senza dargli file di altri: niente hard link, niente collegamenti (reperto 252)
+            // The mail folders to vmail without giving it other people's files: no hard links, no symbolic links
+            // (finding 252)
             + org.daemoxcp.mail.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail") + """
 
             # ============ 1. MySQL ============
@@ -376,8 +377,8 @@ REDISCONF
             service sendmail stop 2>/dev/null || true
 
             """
-            // Postfix come MTA locale: senza, la posta di sistema esce da dma. Lo stesso pezzo
-            // e' in FullMailServerScript e PostfixScript.
+            // Postfix as the local MTA: without it, the system mail goes out through dma. The same piece
+            // is in FullMailServerScript and PostfixScript.
             + LocalMtaScript.SHELL + """
 
             mkdir -p /usr/local/etc/postfix
@@ -534,8 +535,8 @@ scache    unix  -       -       n       -       1       scache
 MASTERCONF
 
             """
-            // Il livello di compatibilita' che chiede il Postfix installato, se esaminato (reperto 251). Lo stesso pezzo
-            // e' in FullMailServerScript e PostfixScript.
+            // The compatibility level the installed Postfix asks for, if examined (finding 251). The same piece
+            // is in FullMailServerScript and PostfixScript.
             + PostfixLevelScript.shell() + """
 
             sysrc postfix_enable="YES"
@@ -560,14 +561,15 @@ MASTERCONF
             pkg install -y $DOVECOT_PACKAGES
 
             """
-            // Sorgente UNICA della configurazione Dovecot. Prima scriveva dbname=daemoxcp_mail, cablato e diverso da quello configurato.
+            // SINGLE source of the Dovecot configuration. Before, it wrote dbname=daemoxcp_mail, hard-coded and
+            // different from the configured one.
             + DovecotConfig.fromPanelConfig().scriptFragment() + """
 
             # Generate master user password for SSO
             echo "Configuring master user for SSO..."
             """
-            // Lo stesso pezzo di FullMailServerScript e DovecotScript. Qui il file era di
-            // root:wheel, e Dovecot, che lo legge come dovecot, non poteva aprirlo.
+            // The same piece as in FullMailServerScript and DovecotScript. Here the file was owned by
+            // root:wheel, and Dovecot, which reads it as dovecot, could not open it.
             + org.daemoxcp.mail.system.DovecotMasterUser.shell() + """
 
             # Generate self-signed SSL cert
@@ -609,8 +611,8 @@ autolearn = true;
 EOF
 
             """
-            // Il risolutore ricorsivo locale, prima che rspamd parta: senza, le liste di Spamhaus
-            // non rispondono. Lo stesso pezzo e' in FullMailServerScript e RspamdScript.
+            // The local recursive resolver, before rspamd starts: without it, the Spamhaus lists
+            // do not answer. The same piece is in FullMailServerScript and RspamdScript.
             + LocalResolverScript.SHELL + """
 
             # dig: the panel uses it for the DNS checks and the base system does not have it

@@ -17,7 +17,7 @@
 // With REMOTE=root@<host> (and REMOTE_KEY=<ssh key>) the server and the panel's console commands run
 // on that machine over ssh, in the folder given as argument (with the jar and, in TESTS_CLASSES, the
 // compiled tests): here only the browser runs. That is how it runs against the FreeBSD test
-// machine (reperto 178): servers and Java do not run on the Mac. PORT picks the port (the test
+// machine (finding 178): servers and Java do not run on the Mac. PORT picks the port (the test
 // machine's firewall lets the panel's 2096 through).
 //
 // Usage (from the project root, after mvn package, with the test MySQL of README.md):
@@ -129,7 +129,7 @@ async function shot(page, name) {
         const page = await context.newPage();
         const errors = [];
         page.on('pageerror', e => errors.push(e.message));
-        // The Content-Security-Policy violations the real server sends (reperto 178).
+        // The Content-Security-Policy violations the real server sends (finding 178).
         csp.watch(page, errors);
         page.on('dialog', d => d.accept());
         const cdp = await context.newCDPSession(page);
@@ -171,7 +171,7 @@ async function shot(page, name) {
         await page.fill('#consoleCode', m ? m[1] : '');
         await Promise.all([page.waitForURL('**/account?setup=passkey'), page.click('#btnConsole')]);
         check('the right code: signed in, sent to Account to create a passkey', new URL(page.url()).pathname === '/account');
-        // The cookie as the server sets it at sign-in (reperto 184): Strict, and a browser-session cookie.
+        // The cookie as the server sets it at sign-in (finding 184): Strict, and a browser-session cookie.
         const sessionCookie = (await context.cookies()).find(c => c.name === '__Host-DaemoxCPMail');
         check('the session cookie the server set: SameSite=Strict, HttpOnly, Secure, gone when the browser closes ('
             + (sessionCookie ? sessionCookie.sameSite + ' ' + sessionCookie.expires : 'none') + ')', !!sessionCookie

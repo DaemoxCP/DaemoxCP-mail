@@ -15,13 +15,13 @@
         <maven.compiler.source>25</maven.compiler.source>
         <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Il numero di build e il commit da cui si costruisce il jar, letti nella dashboard
-             (src/main/build-info, reperto 183). Maven da solo non sa leggere git: li passa
-             tools/build-jar.sh. Vuoti, il pannello dice che non sono stati registrati. -->
+        <!-- The build number and the commit the jar is built from, read in the dashboard
+             (src/main/build-info, finding 183). Maven alone cannot read git: tools/build-jar.sh
+             passes them. When empty, the panel says they were not recorded. -->
         <panel.build></panel.build>
         <panel.commit></panel.commit>
         <panel.modified></panel.modified>
-        <!-- maven.build.timestamp e' gia' in UTC: qui solo la forma, ISO 8601 (r13). -->
+        <!-- maven.build.timestamp is already in UTC: here only the form, ISO 8601 (r13). -->
         <maven.build.timestamp.format>yyyy-MM-dd'T'HH:mm:ss'Z'</maven.build.timestamp.format>
     </properties>
 
@@ -70,12 +70,12 @@
     </dependencies>
 
     <build>
-        <!-- Il jar si chiama sempre daemoxcp-mail.jar, senza la versione: i comandi da console, lo script di avvio e il
-             README restano uguali da una versione all'altra. La versione e' dentro il jar (build-info). -->
+        <!-- The jar is always called daemoxcp-mail.jar, without the version: the console commands, the start script
+             and the README stay the same from one version to the next. The version is inside the jar (build-info). -->
         <finalName>daemoxcp-mail</finalName>
-        <!-- Le risorse si copiano cosi' come sono; solo build-info.properties passa dal filtro
-             di Maven, che ci scrive versione, build, commit e data. Il filtro su tutte le risorse
-             toccherebbe i ${...} degli script delle pagine e i caratteri dei font. -->
+        <!-- Resources are copied as they are; only build-info.properties goes through the Maven
+             filter, which writes version, build, commit and date into it. Filtering all resources
+             would touch the ${...} in the page scripts and the bytes of the fonts. -->
         <resources>
             <resource>
                 <directory>src/main/resources</directory>
@@ -105,11 +105,12 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <!-- La Public Suffix List che httpclient5 si porta dietro non entra nel jar. Il pannello
-                                 non costruisce client HTTP di httpclient5: l'unico uso della libreria e' il controllo
-                                 del nome host nelle attestazioni Android SafetyNet di webauthn-server-core, che crea
-                                 DefaultHostnameVerifier() senza elenco (PublicSuffixMatcher null) e non lo legge mai.
-                                 Il file lo caricano solo CookieSpecSupport e HttpsSupport, cioe' i client HTTP. -->
+                            <!-- The Public Suffix List that httpclient5 carries along does not go into the jar. The
+                                 panel builds no httpclient5 HTTP clients: the library's only use is the host name check
+                                 in the Android SafetyNet attestations of webauthn-server-core, which creates
+                                 DefaultHostnameVerifier() without a list (PublicSuffixMatcher null) and never reads it.
+                                 The file is loaded only by CookieSpecSupport and HttpsSupport, that is, the HTTP
+                                 clients. -->
                             <filters>
                                 <filter>
                                     <artifact>org.apache.httpcomponents.client5:httpclient5</artifact>
@@ -122,9 +123,9 @@
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>org.daemoxcp.mail.Main</mainClass>
                                     <manifestEntries>
-                                        <!-- Java 22+: dichiariamo esplicitamente che il jar carica codice nativo
-                                             (libsqlite-jdbc.so via System.load). Senza questo, da Java 22 vedi un
-                                             WARNING e da una release futura il caricamento sara' BLOCCATO. -->
+                                        <!-- Java 22+: we declare explicitly that the jar loads native code
+                                             (libsqlite-jdbc.so via System.load). Without this, from Java 22 you see a
+                                             WARNING, and from a future release the loading will be BLOCKED. -->
                                         <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
                                     </manifestEntries>
                                 </transformer>

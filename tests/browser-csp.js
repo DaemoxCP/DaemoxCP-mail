@@ -1,4 +1,4 @@
-// The panel's Content-Security-Policy in the browser tests with the simulated server (reperto 178).
+// The panel's Content-Security-Policy in the browser tests with the simulated server (finding 178).
 // The pages' scripts and styles are files in assets/ (PageAssets), the policy is the one in csp.txt
 // (PageGenerator writes it from SecurityHeaders, the same as the server's), and a violation or a
 // panel-actions error ends up among the page errors, which every test wants empty.

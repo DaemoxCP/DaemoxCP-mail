@@ -19,34 +19,38 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * All'avvio: lo script di avvio che il pannello ha scritto il giorno dell'installazione
- * (/usr/local/etc/rc.d/mailpanel) cita ancora i file coi nomi di prima.
+ * At startup: the startup script that the panel wrote on the day of the installation
+ * (/usr/local/etc/rc.d/mailpanel) still cites the files by their previous names.
  *
- * <p>PathMigration rinomina /var/db/daemoxcp-mail/pannello.log in panel.log, ma lo script di un server
- * installato prima della rinomina fa scrivere a daemon(8) proprio quel nome (mailpanel_log). Al
- * riavvio successivo il log ripartirebbe col nome vecchio, accanto al nuovo: PathMigration vedrebbe
- * i due nomi e, giustamente, non sceglierebbe, e il pannello mostrerebbe un log fermo. Visto sul
- * server vero il 31/10/2026, dove lo script l'aveva scritto la versione dell'11/10. Sulla VM non si
- * vedeva: li' il pannello si avviava a mano, senza script.
+ * <p>PathMigration renames `/var/db/daemoxcp-mail/pannello.log` to panel.log, but the script of a server
+ * installed before the rename makes daemon(8) write exactly that name (mailpanel_log). At the next
+ * restart the log would start again under the old name, next to the new one: PathMigration would see
+ * the two names and, rightly, would not choose, and the panel would show a log that has stopped. Seen on
+ * the production server on 2026-10-31, where the script had been written by the version of 11 October.
+ * On the VM it did not show: there the panel was started by hand, without a script.
  *
- * <p>E i due messaggi dello script, che nascevano in italiano («Avvio mailpanel (solo web). Registro: ...» dopo
- * service mailpanel start): fuori dai file di lingua il pannello parla inglese, e la guida d'installazione e' in
- * inglese. Visto seguendo la guida sulla VM pulita il 16/11/2026 (MESSAGES).
+ * <p>And the two messages of the script, which were born in Italian (`Avvio mailpanel (solo web). Registro: ...`,
+ * "Starting mailpanel (web only). Log: ...", after service mailpanel start): outside the language files the
+ * panel speaks English, and the installation guide is in English. Seen following the guide on the clean VM
+ * on 2026-11-16 (MESSAGES).
  *
- * <p>Si tocca solo lo script scritto dal pannello (riconosciuto dalla riga MARKER), e dentro solo i
- * percorsi interi che il file di dati da' per rinominati (LegacyNames, sezione "files") e le righe intere dei
- * messaggi di prima. Lo script
- * nuovo si scrive accanto, si prova con sh -n, prende proprietario e permessi del vecchio e lo
- * sostituisce con un rename: rc(8) non vede mai uno script a meta'. Ripeterlo non cambia niente.
+ * <p>Only the script written by the panel is touched (recognized by the MARKER line), and inside it only the
+ * whole paths that the data file gives as renamed (LegacyNames, section "files") and the whole lines of the
+ * previous messages. The new script is written alongside, tested with sh -n, takes the owner and
+ * permissions of the old one and replaces it with a rename: rc(8) never sees a half-written script.
+ * Repeating it changes nothing.
  */
 public final class RcScriptRepair {
 
     private static final Logger LOGGER = Logger.getLogger(RcScriptRepair.class.getName());
 
-    /** La riga con cui il pannello firma lo script (UpdateManager la scrive da qui). */
+    /** The line with which the panel signs the script (UpdateManager writes it from here). */
     static final String MARKER = "Generato dal pannello il giorno dell'installazione";
 
-    /** Lo script di adesso e quelli coi nomi di prima (sezione "rcNames"), che PanelServiceRename non ha potuto spostare. */
+    /**
+     * The current script and those with the previous names (section "rcNames"), which PanelServiceRename could
+     * not move.
+     */
     static final List<Path> SCRIPTS = scripts();
 
     private static List<Path> scripts() {
@@ -58,16 +62,19 @@ public final class RcScriptRepair {
         return List.copyOf(out);
     }
 
-    /** Lo script l'ha scritto il pannello: la riga delle versioni di prima o la firma di adesso (PanelMarker). */
+    /** The script was written by the panel: the line of the previous versions or the current signature (PanelMarker). */
     static boolean writtenByPanel(String script) {
         return script.contains(MARKER) || PanelMarker.writtenByPanel(script);
     }
 
-    /** I due messaggi come li ripara negli script di prima (la loro variabile e' mailpanel_log); quello di adesso li scrive PanelRcScript. */
+    /**
+     * The two messages as it repairs them in the previous scripts (their variable is mailpanel_log); the current
+     * script has them written by PanelRcScript.
+     */
     static final String STARTING = "echo \"Starting ${name} (web only). Log: ${mailpanel_log}\"";
     static final String RUNNING = "echo \"${name}: already running (pid $(cat ${pidfile}))\"";
 
-    /** Le righe dei messaggi come le scrivevano le versioni di prima, e quelle di adesso. */
+    /** The message lines as the previous versions wrote them, and the current ones. */
     static final List<String[]> MESSAGES = List.of(
             new String[] {"echo \"Avvio ${name} (solo web). Registro: ${mailpanel_log}\"", STARTING},
             new String[] {"echo \"${name}: gia' in esecuzione (pid $(cat ${pidfile}))\"", RUNNING});
@@ -79,8 +86,8 @@ public final class RcScriptRepair {
     record Report(Outcome outcome, String detail) {}
 
     /**
-     * Lo script coi percorsi di adesso al posto di quelli di prima. Un percorso conta solo intero:
-     * seguito da virgolette, da uno spazio, da ";" o "/", o dalla fine della riga.
+     * The script with the current paths in place of the previous ones. A path counts only as a whole:
+     * followed by quotes, by a space, by ";" or "/", or by the end of the line.
      */
     static String current(String script, List<String[]> pairs) {
         String s = script;
@@ -90,7 +97,7 @@ public final class RcScriptRepair {
         return s;
     }
 
-    /** Lo script coi messaggi di adesso al posto di quelli di prima: solo righe intere. */
+    /** The script with the current messages in place of the previous ones: only whole lines. */
     static String currentMessages(String script) {
         String s = script;
         for (String[] m : MESSAGES)
@@ -99,7 +106,7 @@ public final class RcScriptRepair {
         return s;
     }
 
-    /** I percorsi di prima che lo script cita, nell'ordine del file di dati. */
+    /** The previous paths that the script cites, in the order of the data file. */
     static List<String> oldPathsIn(String script, List<String[]> pairs) {
         List<String> out = new ArrayList<>();
         for (String[] p : pairs)
@@ -107,7 +114,7 @@ public final class RcScriptRepair {
         return out;
     }
 
-    /** Ripara uno script. syntaxCheck prova il file scritto accanto (sh -n sul server). */
+    /** Repairs a script. syntaxCheck tests the file written alongside (sh -n on the server). */
     static Report repair(Path script, List<String[]> pairs, Function<Path, Shell.Result> syntaxCheck) throws IOException {
         if (!Files.isRegularFile(script, LinkOption.NOFOLLOW_LINKS)) return new Report(Outcome.NOTHING, "");
         String text = Files.readString(script, StandardCharsets.UTF_8);
@@ -118,7 +125,7 @@ public final class RcScriptRepair {
         if (!writtenByPanel(text))
             return new Report(Outcome.NOT_OURS, script + " cites " + (old.isEmpty() ? "the old messages" : old)
                     + " but was not written by the panel: left alone");
-        // Un file che comincia col punto: rc(8) prende gli script di rc.d con un glob, che non lo vede.
+        // A file that starts with a dot: rc(8) takes the rc.d scripts with a glob, which does not see it.
         Path temp = script.resolveSibling("." + script.getFileName() + ".panel-new");
         try {
             Files.writeString(temp, repaired, StandardCharsets.UTF_8);

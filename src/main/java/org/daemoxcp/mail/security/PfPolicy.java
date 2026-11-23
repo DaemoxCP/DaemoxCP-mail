@@ -17,33 +17,33 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * pf fa entrare solo quello che serve (deciso dal committente l'08/11/2026).
+ * pf lets in only what is needed (decided by the owner on 2026-11-08).
  *
- * <p>Il pf.conf che il pannello scriveva era «minimo»: un {@code pass} che faceva entrare tutto, e
- * bloccati solo gli indirizzi di fail2ban, della tabella permaban e delle regole del pannello (paesi,
- * liste). Ogni porta aperta per sbaglio, o da un servizio che nessuno usa, era raggiungibile da
- * chiunque: sul server vero ManageSieve (4190) e ntpd come server (123/udp), che nessuno usa da fuori.
+ * <p>The pf.conf the panel used to write was "minimal": a {@code pass} that let everything in, and
+ * blocked only the addresses of fail2ban, of the permaban table and of the panel's rules (countries,
+ * lists). Every port opened by mistake, or by a service nobody uses, was reachable by
+ * anyone: on the production server ManageSieve (4190) and ntpd as a server (123/udp), which nobody uses from outside.
  *
- * <p>Adesso in ingresso passa solo l'elenco qui sotto, il resto si scarta; in uscita passa tutto:
+ * <p>Now only the list below gets in, the rest is dropped; outgoing, everything passes:
  * <ul>
- *   <li>SSH: le porte su cui sshd ascolta adesso, e comunque la 22, aperte a tutti come prima. SSH non
- *       si tocca: la sua regola fa entrare quello che entrava, e i blocchi che lo riguardavano
- *       (fail2ban, permaban, le liste del pannello) restano quelli;</li>
- *   <li>la posta: 25, 465, 587, 143, 993. Per le porte dei client le regole dei paesi del pannello
- *       (anchor panel-fw) vengono prima e decidono loro, come prima;</li>
- *   <li>il web: 80 (la sfida HTTP dei certificati, AcmeUser) e 443 (MTA-STS, autoconfig), la webmail
- *       e il pannello sulle loro porte;</li>
- *   <li>quello senza cui la macchina perde la rete: ICMP essenziale, ICMPv6 (vicini e router di IPv6),
- *       le risposte DHCP (il server vero prende l'indirizzo IPv4 con DHCP).</li>
+ *   <li>SSH: the ports sshd listens on now, and port 22 in any case, open to everyone as before. SSH is not
+ *       touched: its rule lets in what used to get in, and the blocks that concerned it
+ *       (fail2ban, permaban, the panel's lists) stay the same;</li>
+ *   <li>mail: 25, 465, 587, 143, 993. For the client ports the panel's country rules
+ *       (anchor panel-fw) come first and they decide, as before;</li>
+ *   <li>the web: 80 (the HTTP challenge of the certificates, AcmeUser) and 443 (MTA-STS, autoconfig), the webmail
+ *       and the panel on their ports;</li>
+ *   <li>what the machine loses the network without: essential ICMP, ICMPv6 (IPv6 neighbours and routers),
+ *       the DHCP replies (the production server gets its IPv4 address with DHCP).</li>
  * </ul>
- * POP3 (110, 995) entra solo se l'amministratore l'ha acceso nelle Impostazioni (Pop3). Chiusi, fra
- * quelli che ascoltavano sul server vero: POP3 (spento finche' non si sceglie), ManageSieve da fuori
- * (Roundcube lo usa dalla macchina stessa, e il loopback non si filtra), ntpd come server.
+ * POP3 (110, 995) gets in only if the administrator has switched it on in the Settings (Pop3). Closed, among
+ * those that were listening on the production server: POP3 (off until chosen), ManageSieve from outside
+ * (Roundcube uses it from the machine itself, and the loopback is not filtered), ntpd as a server.
  *
- * <p>Si trasforma solo un pf.conf del pannello, riconosciuto dalla prima riga e fatto solo di righe
- * che il pannello scrive. Uno con regole d'altri resta com'e', e il registro lo dice. Prima di caricare:
- * una copia, la prova di sintassi; dopo: le regole nel kernel si controllano, e se SSH non risulta
- * aperto si torna alla copia.
+ * <p>Only a pf.conf of the panel is transformed, recognised by its first line and made only of lines
+ * the panel writes. One with someone else's rules stays as it is, and the log says so. Before loading:
+ * a copy, the syntax test; after: the rules in the kernel are checked, and if SSH does not turn out
+ * open it goes back to the copy.
  */
 public final class PfPolicy {
 
@@ -52,15 +52,15 @@ public final class PfPolicy {
     static final String PF_CONF = "/etc/pf.conf";
     static final String PFCTL = "/sbin/pfctl";
 
-    /** La prima riga del pf.conf scritto da qui. */
+    /** The first line of the pf.conf written from here. */
     static final String HEADER = "# /etc/pf.conf, written by " + org.daemoxcp.mail.system.Product.NAME
             + ": only what is needed gets in.";
     /**
-     * La stessa riga col nome di prima del prodotto (fino al 17/11/2026): il file e' gia' quello scritto da qui, e al
-     * primo avvio cambia solo la prima riga.
+     * The same line with the product's previous name (until 2026-11-17): the file is already the one written from here,
+     * and at the first startup only the first line changes.
      */
     static final String PREVIOUS_HEADER = "# /etc/pf.conf, scritto dal pannello mail: entra solo quello che serve.";
-    /** Le prime righe dei pf.conf che il pannello scriveva prima (l'installazione, il pulsante della pagina). */
+    /** The first lines of the pf.conf files the panel used to write (the installation, the page button). */
     static final List<String> OLD_HEADERS = List.of(
             "# /etc/pf.conf, written by the " + org.daemoxcp.mail.system.Product.NAME + " installation.",
             "# /etc/pf.conf, scritto dall'installazione di " + org.daemoxcp.mail.system.Product.NAME + ".",
@@ -68,10 +68,10 @@ public final class PfPolicy {
             "# /etc/pf.conf — generato automaticamente dal mail panel",
             "# /etc/pf.conf, generated by the mail panel");
 
-    /** Le regole che il pannello scriveva nel pf.conf (installazione, Fail2banAutoSetup, PfFirewallManager). */
+    /** The rules the panel used to write in pf.conf (installation, Fail2banAutoSetup, PfFirewallManager). */
     static final Set<String> PANEL_RULES = panelRules();
 
-    /** Le regole del pannello, con la lista dei ban permanenti dove sta adesso e dove stava prima ("dataFolders"). */
+    /** The panel's rules, with the list of permanent bans where it is now and where it used to be ("dataFolders"). */
     private static Set<String> panelRules() {
         java.util.Set<String> r = new java.util.LinkedHashSet<>(List.of("set skip on lo", "anchor \"f2b/*\"", "pass",
                 "block in quick from <permaban>", "anchor \"panel-fw\"",
@@ -82,20 +82,20 @@ public final class PfPolicy {
     }
     private static final Pattern TABLE_LIMIT = Pattern.compile("set\\s+limit\\s+table-entries\\s+(\\d{1,10})");
     /**
-     * Il servizio dei metadati del provider (169.254.169.254, Hetzner Cloud come gli altri grandi provider) solo per root.
-     * Dentro c'e' anche la configurazione con cui il server e' nato: sul server vero, il 18/11/2026, quella di Hetzner
-     * portava in chiaro una password di root, e la leggeva qualunque programma sulla macchina (www, la parte web del
-     * pannello, Roundcube...). A root serve (ServerAddresses legge da li' l'IPv6 assegnato), agli altri no.
+     * The provider's metadata service (169.254.169.254, Hetzner Cloud like the other big providers) for root only.
+     * It also holds the configuration the server was born with: on the production server, on 2026-11-18, Hetzner's
+     * carried a root password in clear text, and any program on the machine could read it (www, the web part of the
+     * panel, Roundcube...). Root needs it (ServerAddresses reads the assigned IPv6 from there), the others do not.
      *
-     * <p>pf.conf(5), FreeBSD 15: «user» vale per i socket TCP e UDP della macchina, per una connessione in uscita e' chi
-     * l'ha aperta; i pacchetti inoltrati («unknown») li prende solo una regola che nomina unknown. «return»: chi e'
-     * bloccato riceve subito un rifiuto invece di aspettare. In IPv6 lo stesso servizio (fe80::a9fe:a9fe) sul server
-     * vero non risponde: non serve una regola.
+     * <p>pf.conf(5), FreeBSD 15: "user" applies to the machine's TCP and UDP sockets, for an outgoing connection it is
+     * whoever opened it; forwarded packets ("unknown") are caught only by a rule that names unknown. "return": whoever
+     * is blocked gets a refusal at once instead of waiting. In IPv6 the same service (fe80::a9fe:a9fe) on the
+     * production server does not answer: no rule is needed.
      */
     static final String METADATA_RULE = "block return out quick proto { tcp, udp } to 169.254.169.254 user != 0";
 
-    /** Le regole che scrive questa classe: in un file col suo HEADER si riconoscono e si riscrivono. */
-    /** La posta che non esce in IPv6 (solo IPv4): Postfix sa spedire in tutte e due, la famiglia la decide pf. */
+    /** The rules this class writes: in a file with its HEADER they are recognised and rewritten. */
+    /** Mail that does not go out over IPv6 (IPv4 only): Postfix can send over both, pf decides the family. */
     static final String SMTP_OUT6_RULE = "block return out inet6 proto tcp to port 25";
 
     private static final List<String> POLICY_PREFIXES = List.of("block in all", "pass out all keep state", METADATA_RULE,
@@ -104,12 +104,12 @@ public final class PfPolicy {
             "block return in inet proto tcp to port {", "block return in inet6 proto tcp to port {", SMTP_OUT6_RULE);
 
 
-    /** La posta e il web: sempre. */
+    /** Mail and the web: always. */
     static final SortedSet<Integer> FIXED = new TreeSet<>(List.of(25, 80, 143, 443, 465, 587, 993));
 
     private PfPolicy() {}
 
-    /** Le porte TCP che entrano: quelle di sshd (con la 22) a parte, le altre insieme. */
+    /** The incoming TCP ports: those of sshd (with 22) separately, the others together. */
     record Ports(SortedSet<Integer> ssh, SortedSet<Integer> services) {
         Ports {
             ssh = new TreeSet<>(ssh);
@@ -126,24 +126,24 @@ public final class PfPolicy {
         return b.append(" }").toString();
     }
 
-    /** Il pf.conf del pannello. tableLimit: il valore di «set limit table-entries» da tenere, o null. */
+    /** The panel's pf.conf. tableLimit: the value of "set limit table-entries" to keep, or null. */
     static String render(Ports p, String tableLimit) {
         return render(p, tableLimit, "");
     }
 
-    /** Come sotto, con la posta libera di uscire in IPv6. */
+    /** As below, with mail free to go out over IPv6. */
     static String render(Ports p, String tableLimit, String family) {
         return render(p, tableLimit, family, false);
     }
 
     /**
-     * Come sopra, con la famiglia dei servizi: family e' "", "inet " o "inet6 " (IpFamily.pfKeyword). Vale per la posta,
-     * il web, la webmail e il pannello; SSH resta senza famiglia, sempre (la regola su SSH non la cambia il pannello).
+     * As above, with the services' family: family is "", "inet " or "inet6 " (IpFamily.pfKeyword). It applies to mail,
+     * the web, the webmail and the panel; SSH stays without a family, always (the rule on SSH is not changed by the panel).
      *
-     * I servizi ascoltano sempre in IPv4 e in IPv6 (configurazioni universali, IpFamily): la famiglia la decide solo pf.
-     * Sulla famiglia chiusa pf risponde subito «no» (block return) invece di tacere: chi prova a consegnare in IPv6 al
-     * nome della posta, che ha anche l'AAAA, passa all'IPv4 in un attimo, senza aspettare un timeout. smtpOut6Blocked:
-     * la posta non esce in IPv6 (solo IPv4).
+     * The services always listen on IPv4 and on IPv6 (universal configurations, IpFamily): only pf decides the family.
+     * On the closed family pf answers "no" at once (block return) instead of keeping silent: whoever tries to deliver
+     * over IPv6 to the mail name, which also has the AAAA, falls back to IPv4 in an instant, without waiting for a
+     * timeout. smtpOut6Blocked: mail does not go out over IPv6 (IPv4 only).
      */
     static String render(Ports p, String tableLimit, String family, boolean smtpOut6Blocked) {
         StringBuilder b = new StringBuilder();
@@ -185,18 +185,20 @@ public final class PfPolicy {
         return b.toString();
     }
 
-    /** La famiglia che la scelta chiude: «inet6 » con «inet » (solo IPv4, o la posta in IPv6 solo in uscita), «inet »
-     *  con «inet6 » (solo IPv6), null se entrano tutte e due. Puro. */
+    /**
+     * The family the choice closes: "inet6 " with "inet " (IPv4 only, or mail in IPv6 outgoing only), "inet "
+     *  with "inet6 " (IPv6 only), null if both get in. Pure.
+     */
     static String closedFamily(String family) {
         return "inet ".equals(family) ? "inet6 " : "inet6 ".equals(family) ? "inet " : null;
     }
 
     /**
-     * Il rifiuto subito della famiglia chiusa sulle porte dei servizi, o null se la scelta non ne chiude nessuna. quick
-     * per l'anchor panel-fw (PfFirewallManager): l'anchor si valuta prima di queste regole, e le sue regole quick (i
-     * consentiti, i paesi) decidevano da sole, senza guardare la famiglia. Visto sul server vero il 19/11, con la posta
-     * in IPv6 solo in uscita: sulle porte dei programmi di posta l'IPv6 finiva nel blocco dei paesi, in silenzio invece
-     * del «no»; e con gli elenchi dei paesi rinnovati (anche IPv6) sarebbe entrato. Puro.
+     * The immediate refusal of the closed family on the services' ports, or null if the choice closes none. quick for
+     * the panel-fw anchor (PfFirewallManager): the anchor is evaluated before these rules, and its quick rules (the
+     * allowed ones, the countries) decided on their own, without looking at the family. Seen on the production server
+     * on 19 November, with mail in IPv6 outgoing only: on the mail programs' ports IPv6 ended up in the country block,
+     * silently instead of the "no"; and with the country lists renewed (IPv6 too) it would have got in. Pure.
      */
     static String closedRefusal(Ports p, String family, boolean quick) {
         String closed = closedFamily(family);
@@ -204,29 +206,29 @@ public final class PfPolicy {
         return "block return in " + (quick ? "quick " : "") + closed + "proto tcp to port " + list(p.services());
     }
 
-    /** Lo stesso rifiuto, quick, per la scelta e le porte di adesso: la prima regola dell'anchor panel-fw. */
+    /** The same refusal, quick, for the current choice and ports: the first rule of the panel-fw anchor. */
     static String closedRefusalForAnchor() {
         return closedRefusal(currentPorts(), org.daemoxcp.mail.system.IpFamily.pfKeyword(), true);
     }
 
     /**
-     * Il pf.conf nuovo, o null se questo non e' un pf.conf del pannello: la prima riga e' un'altra, o
-     * c'e' una regola che il pannello non scrive. Gli altri commenti non contano (si riscrivono).
+     * The new pf.conf, or null if this is not a pf.conf of the panel: the first line is a different one, or
+     * there is a rule the panel does not write. The other comments do not count (they are rewritten).
      */
     static String transform(String current, Ports p) {
         return transform(current, p, "");
     }
 
-    /** Come sopra, con la famiglia dei servizi (IpFamily.pfKeyword). */
+    /** As above, with the services' family (IpFamily.pfKeyword). */
     static String transform(String current, Ports p, String family) {
         return transform(current, p, family, false);
     }
 
-    /** Come sopra, e con la posta che non esce in IPv6 (IpFamily.pfBlocksSmtpOut6). */
+    /** As above, and with mail not going out over IPv6 (IpFamily.pfBlocksSmtpOut6). */
     static String transform(String current, Ports p, String family, boolean smtpOut6Blocked) {
         if (current == null) return null;
         String first = current.lines().filter(l -> !l.isBlank()).findFirst().orElse("").trim();
-        // La prima riga scritta in italiano dalle versioni di prima vale come quella di adesso (EnglishComments).
+        // The first line written in Italian by the earlier versions counts as the current one (EnglishComments).
         String firstEnglish = org.daemoxcp.mail.system.EnglishComments.english(first);
         boolean ours = firstEnglish.equals(HEADER) || first.equals(PREVIOUS_HEADER);
         if (!ours && !OLD_HEADERS.contains(first) && !OLD_HEADERS.contains(firstEnglish)) return null;
@@ -246,12 +248,12 @@ public final class PfPolicy {
         return render(p, tableLimit, family, smtpOut6Blocked);
     }
 
-    /** Il pf.conf del pannello con le porte di adesso (il pulsante che crea un pf.conf che manca). */
+    /** The panel's pf.conf with the current ports (the button that creates a missing pf.conf). */
     public static String renderNow() {
         return render(currentPorts(), null, org.daemoxcp.mail.system.IpFamily.pfKeyword(), org.daemoxcp.mail.system.IpFamily.pfBlocksSmtpOut6());
     }
 
-    /** Le porte TCP su cui sshd ascolta adesso, dall'uscita di sockstat -46l -P tcp. */
+    /** The TCP ports sshd listens on now, from the output of sockstat -46l -P tcp. */
     static SortedSet<Integer> sshPorts(String sockstat) {
         SortedSet<Integer> out = new TreeSet<>();
         if (sockstat == null) return out;
@@ -265,13 +267,13 @@ public final class PfPolicy {
                 int port = Integer.parseInt(local.substring(colon + 1));
                 if (port > 0 && port < 65536) out.add(port);
             } catch (NumberFormatException ignored) {
-                // non e' una porta
+                // not a port
             }
         }
         return out;
     }
 
-    /** Le porte di adesso: sshd da sockstat, il pannello e la webmail dalla configurazione, POP3 se e' acceso. */
+    /** The current ports: sshd from sockstat, the panel and the webmail from the configuration, POP3 if it is on. */
     static Ports currentPorts() {
         SortedSet<Integer> ssh = sshPorts(Shell.run(Duration.ofSeconds(15), "sockstat", "-46l", "-P", "tcp").output());
         SortedSet<Integer> services = new TreeSet<>();
@@ -296,7 +298,7 @@ public final class PfPolicy {
         if (p > 0 && p < 65536) ports.add(p);
     }
 
-    /** Le porte TCP che le regole nel kernel fanno entrare, dall'uscita di pfctl -sr (numeri o nomi). */
+    /** The TCP ports the rules in the kernel let in, from the output of pfctl -sr (numbers or names). */
     static boolean letsIn(String rules, int port) {
         if (rules == null) return false;
         for (String line : rules.split("\n")) {
@@ -317,8 +319,8 @@ public final class PfPolicy {
     }
 
     /**
-     * All'avvio della parte root, e quando cambia una porta (la webmail): il pf.conf del pannello con
-     * le porte di adesso. Al secondo avvio, se niente e' cambiato, non fa niente.
+     * At root part startup, and when a port changes (the webmail): the panel's pf.conf with
+     * the current ports. On the second startup, if nothing has changed, it does nothing.
      */
     public static synchronized void ensureAtBoot() {
         try {

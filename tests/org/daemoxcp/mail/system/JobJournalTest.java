@@ -9,7 +9,7 @@ import org.json.JSONObject;
 import org.daemoxcp.mail.i18n.I18n;
 
 /**
- * The jobs' log on disk (JobJournal, reperto 196): a log per job that survives a restart of the panel or of the
+ * The jobs' log on disk (JobJournal, finding 196): a log per job that survives a restart of the panel or of the
  * server, read from Diagnostics.
  *
  * In a temporary folder (daemoxcp.mail.jobs.dir is set before the class loads): a job writes its start, its lines with

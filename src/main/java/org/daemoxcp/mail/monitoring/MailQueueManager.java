@@ -12,27 +12,27 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * La coda di Postfix: elenco, contenuto di un messaggio, eliminazione, nuovo tentativo,
- * messaggi trattenuti e rilasciati, statistiche.
+ * The Postfix queue: list, content of a message, deletion, new attempt,
+ * held and released messages, statistics.
  *
- * Comandi di Postfix:
- *  - postqueue -j        l'elenco, un oggetto JSON per messaggio (Postfix 3.1 e successivi)
- *  - postcat -h -b -q    intestazioni e testo di un messaggio
- *  - postsuper -d / -r   elimina un messaggio / lo rimette in coda
- *  - postsuper -h / -H   trattiene / rilascia
- *  - postqueue -f        riprova subito tutto
+ * Postfix commands:
+ *  - postqueue -j        the list, one JSON object per message (Postfix 3.1 and later)
+ *  - postcat -h -b -q    headers and body of a message
+ *  - postsuper -d / -r   deletes a message / puts it back in the queue
+ *  - postsuper -h / -H   holds / releases
+ *  - postqueue -f        retries everything right away
  *
- * I comandi partono con gli argomenti separati, mai attraverso sh -c, e l'identificativo di
- * coda si controlla PRIMA di usarlo (isQueueId). Prima l'identificativo arrivava dalla richiesta
- * dritto in una riga di shell: /api/queue?action=message&id=X;comando eseguiva il comando, e
- * bastava un link aperto da un amministratore collegato.
+ * The commands start with separate arguments, never through sh -c, and the queue identifier
+ * is checked BEFORE using it (isQueueId). Before, the identifier came from the request
+ * straight into a shell line: /api/queue?action=message&id=X;command ran the command, and
+ * a link opened by a logged-in administrator was enough.
  *
- * L'elenco si legge da postqueue -j e non dal testo di postqueue -p: il testo mette il motivo
- * del rinvio fra parentesi su una riga che il vecchio lettore scambiava per il destinatario,
- * cosi' la colonna Errore restava sempre vuota e "Elimina falliti" non trovava mai niente.
+ * The list is read from postqueue -j and not from the text of postqueue -p: the text puts the reason
+ * for the deferral in parentheses on a line that the old reader mistook for the recipient,
+ * so the "Error" column always stayed empty and "Delete failed" never found anything.
  *
- * I messaggi per chi usa il pannello passano da I18n.tr (chiavi server.queue.*), nella lingua
- * della richiesta; le eccezioni e i log restano in inglese.
+ * The messages for those who use the panel go through I18n.tr (keys server.queue.*), in the language
+ * of the request; the exceptions and the logs stay in English.
  */
 public class MailQueueManager {
 
@@ -41,15 +41,15 @@ public class MailQueueManager {
     private static final String POSTSUPER = "/usr/local/sbin/postsuper";
 
     /**
-     * Gli identificativi di coda di Postfix sono alfanumerici: corti in esadecimale (3A1F2B4C5D)
-     * o lunghi in base 52 (4Nq8Zk1yQPz9Lm2). Qualsiasi altra cosa si rifiuta senza lanciare nulla.
+     * Postfix queue identifiers are alphanumeric: short in hexadecimal (3A1F2B4C5D)
+     * or long in base 52 (4Nq8Zk1yQPz9Lm2). Anything else is refused without throwing anything.
      */
     private static final Pattern QUEUE_ID = Pattern.compile("[0-9A-Za-z]{5,32}");
 
-    /** Quanto testo del messaggio si mostra al massimo. */
+    /** How much of the message text is shown at most. */
     static final int BODY_PREVIEW = 2000;
 
-    /** Chi lancia i comandi: Shell.run, sostituibile nelle prove. */
+    /** Who runs the commands: Shell.run, replaceable in tests. */
     public interface Runner {
         Shell.Result run(String... cmd);
     }
@@ -65,25 +65,25 @@ public class MailQueueManager {
     }
 
     public enum QueueState {
-        ACTIVE,       // in consegna adesso
-        DEFERRED,     // rinviato: errore temporaneo, Postfix riprovera'
-        HOLD,         // trattenuto: non parte finche' non viene rilasciato
-        INCOMING,     // appena arrivato (incoming o maildrop)
-        CORRUPT,      // file di coda illeggibile
+        ACTIVE,       // being delivered now
+        DEFERRED,     // deferred: temporary error, Postfix will retry
+        HOLD,         // held: it does not leave until it is released
+        INCOMING,     // just arrived (incoming or maildrop)
+        CORRUPT,      // unreadable queue file
         UNKNOWN
     }
 
-    /** true se il testo e' un identificativo di coda ammissibile. */
+    /** true if the text is an acceptable queue identifier. */
     public static boolean isQueueId(String id) {
         return id != null && QUEUE_ID.matcher(id).matches();
     }
 
-    // ------------------------------------------------------------------ elenco
+    // ------------------------------------------------------------------ list
 
     /**
-     * Tutti i messaggi in coda.
+     * All the messages in the queue.
      *
-     * @throws IllegalStateException se postqueue non risponde come dovrebbe
+     * @throws IllegalStateException if postqueue does not answer as it should
      */
     public List<QueuedMessage> getQueue() {
         Shell.Result r = runner.run(POSTQUEUE, "-j");
@@ -94,8 +94,8 @@ public class MailQueueManager {
     }
 
     /**
-     * L'uscita di postqueue -j: un oggetto JSON per riga. Le righe che non sono JSON (un avviso
-     * di Postfix finito nello stesso flusso) si saltano.
+     * The output of postqueue -j: one JSON object per line. Lines that are not JSON (a Postfix warning
+     * that ended up in the same stream) are skipped.
      */
     public static List<QueuedMessage> parseJsonQueue(String output) {
         List<QueuedMessage> messages = new ArrayList<>();
@@ -141,9 +141,9 @@ public class MailQueueManager {
         };
     }
 
-    // ------------------------------------------------------------------ un messaggio
+    // ------------------------------------------------------------------ one message
 
-    /** Intestazioni e inizio del testo di un messaggio in coda. */
+    /** Headers and the start of the text of a queued message. */
     public MessageContent getMessage(String id) {
         MessageContent content = new MessageContent();
         content.id = id;
@@ -161,7 +161,7 @@ public class MailQueueManager {
         return content;
     }
 
-    /** Le intestazioni fino alla prima riga vuota, poi il testo; le righe "*** ... ***" di postcat no. */
+    /** The headers up to the first empty line, then the body; postcat's "*** ... ***" lines are left out. */
     static void parseMessage(String output, MessageContent content) {
         StringBuilder headers = new StringBuilder();
         StringBuilder body = new StringBuilder();
@@ -189,21 +189,21 @@ public class MailQueueManager {
         content.bodyPreview = content.bodyTruncated ? text.substring(0, BODY_PREVIEW) : text;
     }
 
-    // ------------------------------------------------------------------ azioni
+    // ------------------------------------------------------------------ actions
 
-    /** Elimina un messaggio dalla coda. */
+    /** Deletes a message from the queue. */
     public QueueAction removeMessage(String id) {
         if (!isQueueId(id)) return QueueAction.failed(I18n.tr("server.queue.badId"));
         Shell.Result r = runner.run(POSTSUPER, "-d", id);
         if (!r.success()) return QueueAction.failed(commandFailed(r));
-        // postsuper scrive "ID: removed" per ogni messaggio eliminato, e niente se non c'era
+        // postsuper writes "ID: removed" for every deleted message, and nothing if it was not there
         if (!r.output().contains(id + ": removed")) {
             return QueueAction.failed(I18n.tr("server.queue.notFound", Map.of("id", id)));
         }
         return QueueAction.done(I18n.tr("server.queue.removed", Map.of("id", id)));
     }
 
-    /** Rimette un messaggio in coda per un nuovo tentativo. */
+    /** Puts a message back in the queue for a new attempt. */
     public QueueAction scheduleMessage(String id) {
         if (!isQueueId(id)) return QueueAction.failed(I18n.tr("server.queue.badId"));
         Shell.Result r = runner.run(POSTSUPER, "-r", id);
@@ -214,28 +214,28 @@ public class MailQueueManager {
         return QueueAction.done(I18n.tr("server.queue.requeued", Map.of("id", id)));
     }
 
-    /** Chiede a Postfix di riprovare subito tutti i messaggi. */
+    /** Asks Postfix to retry all the messages right away. */
     public QueueAction flushQueue() {
         Shell.Result r = runner.run(POSTQUEUE, "-f");
         if (!r.success()) return QueueAction.failed(commandFailed(r));
         return QueueAction.done(I18n.tr("server.queue.flushed"));
     }
 
-    /** Trattiene tutti i messaggi in coda adesso (quelli che arrivano dopo partono normalmente). */
+    /** Holds all the messages in the queue now (those arriving later leave normally). */
     public QueueAction holdAll() {
         Shell.Result r = runner.run(POSTSUPER, "-h", "ALL");
         if (!r.success()) return QueueAction.failed(commandFailed(r));
         return QueueAction.done(I18n.trn("server.queue.held", countIn(r.output(), "Placed on hold"), Map.of()));
     }
 
-    /** Rilascia tutti i messaggi trattenuti. */
+    /** Releases all the held messages. */
     public QueueAction releaseAll() {
         Shell.Result r = runner.run(POSTSUPER, "-H", "ALL");
         if (!r.success()) return QueueAction.failed(commandFailed(r));
         return QueueAction.done(I18n.trn("server.queue.released", countIn(r.output(), "Released from hold"), Map.of()));
     }
 
-    /** Il numero nel riepilogo di postsuper ("Placed on hold: 3 messages"); 0 se non c'e'. */
+    /** The number in postsuper's summary ("Placed on hold: 3 messages"); 0 if it is not there. */
     static long countIn(String output, String label) {
         Matcher m = Pattern.compile(Pattern.quote(label) + ":\\s*(\\d{1,9})").matcher(output == null ? "" : output);
         return m.find() ? Long.parseLong(m.group(1)) : 0;
@@ -247,9 +247,9 @@ public class MailQueueManager {
         return I18n.tr("server.queue.commandFailed", Map.of("output", out));
     }
 
-    // ------------------------------------------------------------------ statistiche
+    // ------------------------------------------------------------------ statistics
 
-    /** Quanti messaggi per stato, il piu' vecchio, i mittenti e i domini di destinazione piu' presenti. */
+    /** How many messages per state, the oldest one, the most frequent senders and destination domains. */
     public QueueStats getStats() {
         return statsOf(getQueue());
     }
@@ -281,30 +281,30 @@ public class MailQueueManager {
         return stats;
     }
 
-    // ------------------------------------------------------------------ errori permanenti
+    // ------------------------------------------------------------------ permanent errors
 
     /**
-     * Un errore di consegna PERMANENTE.
+     * A PERMANENT delivery error.
      *
-     * Il criterio non e' "e' in coda da tanto": e' il codice di risposta. SMTP distingue il
-     * 4xx (riprova piu' tardi) dal 5xx (non riprovarci), e i secondi in coda non si
-     * risolveranno mai da soli. Si riconoscono dal codice di stato esteso 5.x.x (RFC 3463)
-     * oppure dal codice a tre cifre che comincia per 5 riportato nel messaggio d'errore.
+     * The criterion is not "it has been in the queue for a long time": it is the reply code. SMTP tells
+     * 4xx (try again later) apart from 5xx (do not try again), and the latter will never resolve
+     * by themselves in the queue. They are recognised by the extended status code 5.x.x (RFC 3463)
+     * or by the three-digit code starting with 5 reported in the error message.
      *
-     * Il confronto NON e' su sottostringa: cercare "5." dentro il testo troverebbe anche una
-     * dimensione "1.5.", un orario o un indirizzo IP, e si cancellerebbe posta buona.
+     * The comparison is NOT on a substring: looking for "5." inside the text would also find a
+     * size "1.5.", a time or an IP address, and good mail would be deleted.
      */
     public static boolean isPermanentFailure(String error) {
         if (error == null || error.isBlank()) return false;
-        // 1. codice di stato esteso 5.x.y (RFC 3463), isolato: "10.5.0.1" non deve contare
+        // 1. extended status code 5.x.y (RFC 3463), isolated: "10.5.0.1" must not count
         if (Pattern.compile("(?<![0-9.])5\\.[0-9]{1,3}\\.[0-9]{1,3}(?![0-9.])").matcher(error).find()) return true;
-        // 2. codice di risposta a tre cifre, ma SOLO dove un codice puo' stare davvero:
-        //    dopo "said:" o all'inizio della riga. Accettarlo ovunque farebbe scambiare
-        //    "size=550" per un rifiuto definitivo, e si cancellerebbe un messaggio buono.
+        // 2. three-digit reply code, but ONLY where a code can really be:
+        //    after "said:" or at the start of the line. Accepting it anywhere would mistake
+        //    "size=550" for a permanent refusal, and a good message would be deleted.
         return Pattern.compile("(?:said:\\s*|^\\s*)5[0-9]{2}(?![0-9])", Pattern.CASE_INSENSITIVE).matcher(error).find();
     }
 
-    /** I messaggi in coda che hanno fallito in modo permanente. Legge e basta. */
+    /** The messages in the queue that have failed permanently. Read only. */
     public List<QueuedMessage> permanentFailures() {
         List<QueuedMessage> out = new ArrayList<>();
         for (QueuedMessage m : getQueue()) if (m.isPermanentFailure()) out.add(m);
@@ -312,15 +312,15 @@ public class MailQueueManager {
     }
 
     /**
-     * Elimina, fra i messaggi che chi usa il pannello ha visto e confermato (ids), quelli che
-     * hanno ANCORA un errore permanente. Uno per uno.
+     * Deletes, among the messages that whoever uses the panel has seen and confirmed (ids), those that
+     * STILL have a permanent error. One by one.
      *
-     * Solo quelli confermati: fra l'anteprima e la conferma la coda cambia, e un messaggio
-     * arrivato nel frattempo non e' stato visto da nessuno. Solo quelli ancora permanenti: uno
-     * che nel frattempo e' stato consegnato o rimesso in coda non si tocca.
+     * Only the confirmed ones: between the preview and the confirmation the queue changes, and a message
+     * that arrived in the meantime has not been seen by anyone. Only those still permanent: one
+     * that has been delivered or requeued in the meantime is not touched.
      *
-     * Non si usa "postsuper -d ALL deferred": cancellerebbe TUTTA la coda rinviata, compresi i
-     * messaggi con errore temporaneo che sarebbero partiti al prossimo tentativo.
+     * "postsuper -d ALL deferred" is not used: it would delete the WHOLE deferred queue, including the
+     * messages with a temporary error that would have left at the next attempt.
      */
     public QueueAction purgePermanentFailures(Collection<String> ids) {
         Set<String> confirmed = new HashSet<>();
@@ -346,30 +346,30 @@ public class MailQueueManager {
         return action;
     }
 
-    // ------------------------------------------------------------------ dati
+    // ------------------------------------------------------------------ data
 
-    /** Un destinatario e, se Postfix ha gia' provato, il motivo del rinvio. */
+    /** A recipient and, if Postfix has already tried, the reason for the deferral. */
     public record Recipient(String address, String reason) {}
 
     public static class QueuedMessage {
         public String id;
         public QueueState state = QueueState.UNKNOWN;
-        /** Vuoto per gli avvisi di mancata consegna (mittente nullo). */
+        /** Empty for non-delivery notices (null sender). */
         public String sender;
         public final List<Recipient> recipients = new ArrayList<>();
         public long size;
-        /** Arrivo in coda, in UTC. */
+        /** Arrival in the queue, in UTC. */
         public Instant arrival;
 
-        /** Il primo motivo di rinvio fra i destinatari, o null. */
+        /** The first deferral reason among the recipients, or null. */
         public String errorReason() {
             for (Recipient r : recipients) if (r.reason() != null) return r.reason();
             return null;
         }
 
         /**
-         * Permanente solo se lo e' per OGNI destinatario: eliminare il messaggio lo toglie a
-         * tutti, e uno con un errore temporaneo (o non ancora provato) sarebbe partito.
+         * Permanent only if it is so for EVERY recipient: deleting the message removes it for
+         * everyone, and one with a temporary error (or not yet tried) would have left.
          */
         public boolean isPermanentFailure() {
             if (recipients.isEmpty()) return false;
@@ -419,7 +419,7 @@ public class MailQueueManager {
         public int hold;
         public int incoming;
         public int unknown;
-        /** Messaggi con un errore permanente per ogni destinatario. */
+        /** Messages with a permanent error for every recipient. */
         public int permanent;
         public Instant oldestMessage;
         public final Map<String, Integer> topSenders = new HashMap<>();

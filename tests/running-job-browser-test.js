@@ -1,4 +1,4 @@
-// A package job in progress, on the real panel of the TEST VM (reperto 206). On the real server two "Update the packages"
+// A package job in progress, on the real panel of the TEST VM (finding 206). On the real server two "Update the packages"
 // pressed during a search were refused, rightly, and the page did not say what was running; each refusal also left a
 // log with its start and no end.
 //

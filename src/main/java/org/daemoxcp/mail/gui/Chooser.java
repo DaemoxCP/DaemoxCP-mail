@@ -35,9 +35,10 @@ public class Chooser {
     public int option = -1;
 
     /**
-     * La voce scelta l'ultima volta. Il menu si ricrea da capo dopo ogni voce, e la selezione tornava sempre alla 1:
-     * dopo la 2 una persona scende di uno e riapre la 2, mentre dopo un Annulla restava dov'era (installazione dal
-     * README, 20/11/2026: cosi' si aprivano per sbaglio la 2 e la 4). Adesso resta sulla voce appena usata.
+     * The option chosen last time. The menu is rebuilt from scratch after every option, and the selection always went
+     * back to 1: after option 2 a person goes down by one and reopens 2, while after a "Cancel" it stayed where it was
+     * (install from the README, 2026-11-20: this is how options 2 and 4 got opened by mistake). Now it stays on the
+     * option just used.
      */
     private static int lastSelected = 0;
 
@@ -54,18 +55,18 @@ public class Chooser {
      * Confirm action with Cancel as default (safety first)
      */
     /**
-     * Cosa cancella una reinstallazione, detto prima. Prima diceva solo «la configurazione si azzera»,
-     * ma lo script ricrea vuote anche le tabelle della posta e quelle delle utenze del pannello
-     * (amministratori, passkey, sessioni): si cancellano, deciso dal committente il 07/11/2026.
+     * What a reinstall deletes, said beforehand. Before, it only said "the configuration is reset",
+     * but the script also recreates empty the mail tables and those of the panel's accounts
+     * (administrators, passkeys, sessions): they are deleted, as decided by the owner on 2026-11-07.
      */
     private static String reinstallWarning() {
-        return org.daemoxcp.mail.i18n.I18n.tr("server.reinstall.menuWarning");   // nella lingua della console
+        return org.daemoxcp.mail.i18n.I18n.tr("server.reinstall.menuWarning");   // in the console language
     }
 
     /**
-     * Il titolo del menu con la versione del jar che gira (build-info, come la dashboard). Fino alla 0.9.0 era
-     * scritto «v1.0» fisso: un server nuovo con la beta 0.9.0 si presentava come 1.0. Senza versione registrata (le
-     * classi delle prove, un jar fatto senza Maven) solo il nome.
+     * The menu title with the version of the running jar (build-info, like the dashboard). Up to 0.9.0 it was
+     * hard-coded `v1.0`: a new server with the 0.9.0 beta introduced itself as 1.0. Without a recorded version (the
+     * test classes, a jar built without Maven) only the name.
      */
     static String title() {
         String name = org.daemoxcp.mail.i18n.I18n.tr("brand.name");
@@ -121,8 +122,8 @@ public class Chooser {
         });
 
         // ============== ACCESS ==============
-        // Il codice di accesso di emergenza, per quando passkey ed email non bastano: si genera
-        // solo da qui (o con --access-code), cioe' da chi ha accesso al server.
+        // The emergency access code, for when passkeys and email are not enough: it is generated
+        // only from here (or with --access-code), that is by whoever has access to the server.
         actionListBox.addItem("5) " + org.daemoxcp.mail.i18n.I18n.tr("console.menu.code"), () -> setOptionAndClose(5));
         actionListBox.addItem("6) " + org.daemoxcp.mail.i18n.I18n.tr("console.menu.back"), () -> {
             if (confirmAction(org.daemoxcp.mail.i18n.I18n.tr("console.menu.backTitle"), org.daemoxcp.mail.i18n.I18n.tr("console.menu.backAsk"))) {

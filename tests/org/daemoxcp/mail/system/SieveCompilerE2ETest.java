@@ -20,9 +20,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The panel's Sieve rules compiled without root, with real deliveries (reperto 218).
+ * The panel's Sieve rules compiled without root, with real deliveries (finding 218).
  *
- * Until 10/11/2026 SieveGenerator ran Pigeonhole's sievec as root, on the panel's rules and on texts typed into the
+ * Until 2026-11-10 SieveGenerator ran Pigeonhole's sievec as root, on the panel's rules and on texts typed into the
  * filters. Here everything goes through the panel's own entry points (SieveGenerator.saveSieveScript, compileScript,
  * validateScript), with the kernel's process accounting on, and:
  *  1. a rule of the panel is saved and compiled: its binary is beside it with the script's owner, group and mode, newer
@@ -33,7 +33,7 @@ import java.util.regex.Pattern;
  *     complain (so the check can fail), and the next one, after the panel compiles again, is quiet;
  *  3. validateScript refuses a text with an error at its line, and accepts the panel's own;
  *  4. vmail, the user that delivers, can rewrite neither the panel's rules nor their binary, nor add a file beside them
- *     (the property of reperto 214, kept);
+ *     (the property of finding 214, kept);
  *  5. process accounting: every sievec that ran in the test ran as the user sievec, none as root.
  *
  * It creates a domain nobody can own (sieve-compile.test: .test is reserved) with two mailboxes in the mail database,
@@ -223,7 +223,7 @@ public class SieveCompilerE2ETest {
 
     // ---------------------------------------------------------------- setting up and taking down
 
-    /** The mode of /var/mail before setUp gave it the panel's boot state (reperto 221): put back at the end. */
+    /** The mode of /var/mail before setUp gave it the panel's boot state (finding 221): put back at the end. */
     private static int spoolMode = -1;
 
     static void setUp() throws Exception {

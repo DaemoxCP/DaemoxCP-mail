@@ -1,5 +1,5 @@
 // Every page of the panel in Chromium with the same Content-Security-Policy the server sends
-// (SecurityHeaders, without 'unsafe-inline': reperto 178), with the simulated server. For every page:
+// (SecurityHeaders, without 'unsafe-inline': finding 178), with the simulated server. For every page:
 //  - no policy violation (an inline <script> or <style>, a style="", a resource from outside: the
 //    browser refuses them and says so with securitypolicyviolation);
 //  - no on... attribute left (the browser refuses an inline handler only when the event arrives:

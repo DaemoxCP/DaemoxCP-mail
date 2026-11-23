@@ -15,19 +15,19 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Roundcube cifra con AES-256-CBC e una chiave di 32 caratteri, non piu' con DES-EDE3-CBC (reperto 239).
+ * Roundcube encrypts with AES-256-CBC and a 32-character key, no longer with DES-EDE3-CBC (finding 239).
  *
- * <p>Roundcube tiene nella sessione la password IMAP di chi e' entrato, cifrata con des_key e cipher_method. Il
- * predefinito di defaults.inc.php e' DES-EDE3-CBC «for backward compatibility», e lo stesso file dice «you can choose
- * e.g. AES-256-CBC which we consider a better choice». AES-256 vuole 32 byte: con i 24 caratteri di prima openssl
- * completerebbe la chiave con zeri, quindi chiave e metodo cambiano insieme. Cambiarli invalida le sessioni aperte:
- * chi e' dentro la webmail rientra una volta (le sessioni di Roundcube scadono comunque dopo dieci minuti senza far
- * niente). Nient'altro usa des_key: l'SSO del pannello ha una chiave sua.
+ * <p>Roundcube keeps in the session the IMAP password of whoever logged in, encrypted with des_key and
+ * cipher_method. The default in defaults.inc.php is DES-EDE3-CBC "for backward compatibility", and the same file
+ * says "you can choose e.g. AES-256-CBC which we consider a better choice". AES-256 needs 32 bytes: with the
+ * previous 24 characters openssl would pad the key with zeros, so key and method change together. Changing them
+ * invalidates the open sessions: whoever is inside the webmail logs in again once (Roundcube sessions expire
+ * anyway after ten minutes of inactivity). Nothing else uses des_key: the panel's SSO has its own key.
  *
- * <p>Si cambia solo la riga des_key che scrive l'installatore, e solo se cipher_method non c'e' (se l'amministratore ne
- * ha scelto uno, resta). Prima e dopo: la pagina d'accesso risponde, PHP cifra e decifra con quel metodo e quella
- * chiave (il file letto da PHP), e, se l'SSO del pannello c'e', un accesso vero apre la posta, cioe' Roundcube ha
- * decifrato la password dalla sessione. Un errore rimette il file com'era.
+ * <p>Only the des_key line written by the installer is changed, and only if cipher_method is absent (if the
+ * administrator chose one, it stays). Before and after: the login page responds, PHP encrypts and decrypts with
+ * that method and that key (the file as read by PHP), and, if the panel's SSO is there, a real login opens the
+ * mail, that is Roundcube decrypted the password from the session. An error puts the file back as it was.
  */
 public final class RoundcubeCipher {
 
@@ -40,7 +40,7 @@ public final class RoundcubeCipher {
     static final Pattern DES_KEY = Pattern.compile("(?m)^\\$config\\['des_key'\\] = '[A-Za-z0-9]{16,64}';\\n");
     static final Pattern CIPHER = Pattern.compile("(?m)^\\s*\\$config\\s*\\[\\s*['\"]cipher_method['\"]\\s*\\]");
 
-    /** Le righe che prendono il posto di quella di des_key. Pura. */
+    /** The lines that replace the des_key one. Pure. */
     static String lines(String key) {
         return "$config['des_key'] = '" + key + "';\n"
                 + "// AES-256-CBC with a 32-character key, as defaults.inc.php advises: DES-EDE3-CBC is there only for\n"
@@ -57,15 +57,15 @@ public final class RoundcubeCipher {
         return b.toString();
     }
 
-    /** Quello che serve, per provarlo senza Roundcube. */
+    /** What is needed, to test it without Roundcube. */
     interface Services {
         String read(Path file) throws IOException;
-        /** Al posto del file, con proprietario e permessi di prima. */
+        /** In place of the file, with the previous owner and permissions. */
         void write(Path file, String text) throws IOException;
-        /** PHP legge il file e cifra e decifra con il suo cipher_method (AES-256-CBC) e la sua des_key. */
+        /** PHP reads the file and encrypts and decrypts with its cipher_method (AES-256-CBC) and its des_key. */
         boolean cipherWorks(Path config);
         boolean webmailAnswers();
-        /** Un accesso vero con l'SSO del pannello: null se apre la posta, se no il perche'. */
+        /** A real login with the panel's SSO: null if it opens the mail, otherwise the reason. */
         String realLogin();
     }
 
@@ -73,7 +73,7 @@ public final class RoundcubeCipher {
 
     public record Result(Outcome outcome, String detail) {}
 
-    /** Il passaggio, puro rispetto a {@link Services}. */
+    /** The switchover, pure with respect to {@link Services}. */
     static Result run(Services sv, Path config) {
         String c;
         try {
@@ -120,9 +120,12 @@ public final class RoundcubeCipher {
         }
     }
 
-    // ===================== Il server vero =====================
+    // ===================== The production server =====================
 
-    /** Cifra e decifra una parola col metodo e la chiave del file; stampa ok solo se torna uguale e il metodo e' AES-256-CBC. */
+    /**
+     * Encrypts and decrypts a word with the file's method and key; prints ok only if it comes back equal and
+     * the method is AES-256-CBC.
+     */
     static final String PHP_PROBE = "include $argv[1]; $m = $config['cipher_method'] ?? ''; $k = $config['des_key'] ?? '';"
             + " $iv = random_bytes(openssl_cipher_iv_length($m) ?: 16);"
             + " $c = $m === '" + METHOD + "' && strlen($k) === 32 ? openssl_encrypt('daemoxcp-mail-probe', $m, $k, OPENSSL_RAW_DATA, $iv) : false;"
@@ -158,7 +161,7 @@ public final class RoundcubeCipher {
         };
     }
 
-    /** All'avvio della parte root, dopo RoundcubeDbUser e PhpHardening. */
+    /** At the start of the root part, after RoundcubeDbUser and PhpHardening. */
     public static void ensureAtBoot(RoundcubeSsoManager sso) {
         try {
             if (!Files.isDirectory(Path.of(RoundcubeUser.ROUNDCUBE_DIR))) return;

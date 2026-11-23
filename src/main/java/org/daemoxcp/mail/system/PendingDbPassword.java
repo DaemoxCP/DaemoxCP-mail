@@ -13,31 +13,32 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * La password MySQL del pannello cambia solo quando MySQL la conosce.
+ * The panel's MySQL password changes only when MySQL knows it.
  *
- * <p>Perche' esiste: misurato il 06/11/2026 sulla VM FreeBSD 15.1 (reperto 156). L'installazione
- * completa dal menu generava la password nuova dell'utente MySQL del pannello e la scriveva SUBITO
- * nel file dei segreti, poi lanciava install_mail_server.sh, che la imposta in MySQL solo alla
- * fase 3. Ogni uscita prima di li' (Roundcube non configurato, un parametro mancante, il turno dei
- * pacchetti preso, un pacchetto protetto, pkg che fallisce) lasciava il pannello con una password
- * che MySQL rifiutava, fino alla reinstallazione successiva.
+ * <p>Why it exists: measured on 2026-11-06 on the FreeBSD 15.1 VM (finding 156). The full
+ * installation from the menu generated the new password of the panel's MySQL user and wrote it
+ * RIGHT AWAY into the secrets file, then launched install_mail_server.sh, which sets it in MySQL only
+ * at phase 3. Every exit before that point (Roundcube not configured, a missing parameter, the
+ * package turn taken, a locked package, pkg failing) left the panel with a password that MySQL
+ * rejected, until the next reinstallation.
  *
- * <p>Adesso la password nuova nasce <em>in attesa</em> ({@link PanelSecrets#MYSQL_PASSWORD_PENDING}),
- * accanto a quella del pannello, che non si tocca. Finito lo script si chiede a MySQL: se accetta
- * quella in attesa, diventa quella del pannello; se rifiuta quella e accetta la vecchia, la nuova si
- * butta. Lo decide MySQL, non il codice d'uscita dello script: uno script che fallisce DOPO la fase 3
- * ha gia' cambiato la password, e Postfix e Dovecot l'hanno gia' scritta nei loro file.
+ * <p>Now the new password is born <em>pending</em> ({@link PanelSecrets#MYSQL_PASSWORD_PENDING}),
+ * next to the panel's one, which is not touched. When the script finishes, MySQL is asked: if it
+ * accepts the pending one, it becomes the panel's; if it rejects it and accepts the old one, the
+ * new one is thrown away. MySQL decides, not the script's exit code: a script that fails AFTER
+ * phase 3 has already changed the password, and Postfix and Dovecot have already written it into
+ * their files.
  *
- * <p>Se il pannello muore mentre lo script lavora, la password in attesa resta nel file, e il
- * prossimo avvio fa la stessa domanda ({@link #settleAtStartup}). Se MySQL non risponde non si
- * decide niente: la password in attesa resta, e l'installazione successiva da' a MySQL di nuovo
- * quella, invece di buttarla per una nuova che MySQL di sicuro non conosce.
+ * <p>If the panel dies while the script is working, the pending password stays in the file, and
+ * the next startup asks the same question ({@link #settleAtStartup}). If MySQL does not answer,
+ * nothing is decided: the pending password stays, and the next installation gives MySQL that one
+ * again, instead of throwing it away for a new one that MySQL certainly does not know.
  *
- * <p>All'avvio c'e' anche il rimedio per i server gia' rotti dalla versione di prima, che non aveva
- * la password in attesa: se MySQL rifiuta la password del pannello, si prova quella che usa Postfix
- * ({@link #postfixMap}, scritta dallo script alla fase 6 e cancellata solo alla fase 1, quindi
- * intatta dopo ogni uscita anticipata). Se MySQL la accetta, e' quella giusta e diventa del pannello.
- * Non si sceglie mai una password che MySQL non ha accettato davanti a noi.
+ * <p>At startup there is also the remedy for the servers already broken by the previous version,
+ * which had no pending password: if MySQL rejects the panel's password, the one Postfix uses is
+ * tried ({@link #postfixMap}, written by the script at phase 6 and deleted only at phase 1, so
+ * intact after every early exit). If MySQL accepts it, it is the right one and becomes the
+ * panel's. A password that MySQL has not accepted in front of us is never chosen.
  */
 public final class PendingDbPassword {
 
@@ -45,68 +46,68 @@ public final class PendingDbPassword {
 
     private PendingDbPassword() {}
 
-    /** Che cosa dice MySQL di una password. */
+    /** What MySQL says about a password. */
     public enum Answer { ACCEPTED, REJECTED, NO_ANSWER }
 
-    /** Come e' finita una decisione. */
+    /** How a decision ended. */
     public enum Outcome {
-        /** Niente in attesa, e la password del pannello va bene (o non c'e' niente da chiedere). */
+        /** Nothing pending, and the panel's password is fine (or there is nothing to ask). */
         NOTHING_TO_DO,
-        /** MySQL accetta la password in attesa: adesso e' quella del pannello. */
+        /** MySQL accepts the pending password: it is now the panel's. */
         NEW_ADOPTED,
-        /** MySQL non conosce la password in attesa e accetta quella di prima: si tiene quella. */
+        /** MySQL does not know the pending password and accepts the previous one: that one is kept. */
         OLD_KEPT,
-        /** MySQL rifiuta quella del pannello e accetta quella di Postfix: adesso e' quella del pannello. */
+        /** MySQL rejects the panel's password and accepts Postfix's: it is now the panel's. */
         COPY_ADOPTED,
-        /** MySQL non risponde: non si decide, la password in attesa resta. */
+        /** MySQL does not answer: nothing is decided, the pending password stays. */
         UNDECIDED,
-        /** MySQL rifiuta tutte le password che il pannello conosce: non cambia niente. */
+        /** MySQL rejects every password the panel knows: nothing changes. */
         NONE_ACCEPTED,
-        /** Un altro processo del pannello tiene il turno (forse un'installazione): decide lui. */
+        /** Another panel process holds the turn (perhaps an installation): that process decides. */
         NOT_NOW
     }
 
-    /** L'esito, con il messaggio da mostrare ("" se non c'e' niente da dire). */
+    /** The outcome, with the message to show ("" if there is nothing to say). */
     public record Result(Outcome outcome, String message) {}
 
-    /** La password per lo script, e che cosa e' successo a quella rimasta in attesa da prima. */
+    /** The password for the script, and what happened to the one left pending from before. */
     public record Prepared(String password, String note) {}
 
-    /** Dove stanno le password. In produzione il file dei segreti (e SQLite); nelle prove un finto. */
+    /** Where the passwords are kept. In production the secrets file (and SQLite); in tests a fake. */
     public interface Store {
-        /** La password che il pannello usa per entrare in MySQL ("" se non ce n'e' ancora una). */
+        /** The password the panel uses to log into MySQL ("" if there is none yet). */
         String current();
-        /** Da adesso e' questa la password del pannello. */
+        /** From now on this is the panel's password. */
         void adopt(String password);
-        /** La password in attesa ("" se non ce n'e'). */
+        /** The pending password ("" if there is none). */
         String pending();
-        /** Scrive la password in attesa; con "" la toglie. */
+        /** Writes the pending password; with "" it removes it. */
         void setPending(String password);
     }
 
-    /** La domanda a MySQL: entra l'utente del pannello con questa password? */
+    /** The question to MySQL: does the panel's user get in with this password? */
     public interface Probe {
         Answer ask(String password);
     }
 
     /**
-     * Il file di Postfix con la password dell'utente del pannello. E' una variabile solo perche' le
-     * prove non leggano quello vero.
+     * The Postfix file with the password of the panel's user. It is a variable only so that the
+     * tests do not read the real one.
      */
     static Path postfixMap = Path.of("/usr/local/etc/postfix/mysql-virtual-domains.cf");
 
-    // ---------------------------------------------------------------- la decisione
+    // ---------------------------------------------------------------- the decision
 
     /**
-     * Prima dello script: la password che lo script dara' a MySQL, scritta in attesa.
+     * Before the script: the password the script will give to MySQL, written as pending.
      *
-     * <p>Se una password in attesa c'e' gia' (un'installazione di prima non arrivata alla
-     * decisione), prima si decide quella. Se MySQL non sa rispondere, si riusa: MySQL potrebbe
-     * conoscerla, e buttarla per una nuova lascerebbe il pannello senza la sola password giusta se
-     * anche questo script si ferma prima di MySQL.
+     * <p>If a pending password already exists (an earlier installation that did not reach the
+     * decision), that one is decided first. If MySQL cannot answer, it is reused: MySQL might
+     * know it, and throwing it away for a new one would leave the panel without the only right
+     * password if this script too stops before reaching MySQL.
      *
-     * @throws IllegalStateException se la password non si puo' scrivere in attesa: lo script non
-     *         deve partire, perche' cambierebbe MySQL senza che il pannello sappia con che cosa.
+     * @throws IllegalStateException if the password cannot be written as pending: the script must
+     *         not start, because it would change MySQL without the panel knowing to what.
      */
     public static Prepared prepare(Store store, Probe probe, String user) {
         String note = "";
@@ -125,9 +126,9 @@ public final class PendingDbPassword {
     }
 
     /**
-     * Dopo lo script (o all'avvio): quale password conosce MySQL. Chi la chiama tiene il turno dei
-     * pacchetti, o e' una prova: un'installazione in corso in un altro processo cambierebbe MySQL
-     * mentre qui si decide.
+     * After the script (or at startup): which password MySQL knows. The caller holds the package
+     * turn, or is a test: an installation in progress in another process would change MySQL
+     * while the decision is being made here.
      */
     public static Result settle(Store store, Probe probe, String user) {
         String pending = store.pending();
@@ -136,8 +137,8 @@ public final class PendingDbPassword {
         if (!pending.isEmpty()) {
             Answer p = probe.ask(pending);
             if (p == Answer.ACCEPTED) {
-                // Prima la si adotta, poi si toglie l'attesa: un arresto in mezzo lascia le due
-                // uguali, e la prossima decisione le trova accettate tutte e due.
+                // First adopt it, then clear the pending one: a stop in between leaves the two
+                // equal, and the next decision finds both of them accepted.
                 store.adopt(pending);
                 store.setPending("");
                 return new Result(Outcome.NEW_ADOPTED, I18n.tr("server.dbPassword.newAdopted"));
@@ -149,7 +150,7 @@ public final class PendingDbPassword {
                 store.setPending("");
                 return new Result(Outcome.OLD_KEPT, I18n.tr("server.dbPassword.oldKept"));
             }
-            // MySQL ha detto di no a tutte e due: la nuova non serve piu' a niente.
+            // MySQL said no to both: the new one is of no use any more.
             Result copy = tryPostfixCopy(store, probe, user, pending, current);
             store.setPending("");
             if (copy != null) return copy;
@@ -157,7 +158,7 @@ public final class PendingDbPassword {
                     Map.of("user", String.valueOf(user), "file", String.valueOf(postfixMap))));
         }
 
-        if (current.isEmpty()) return new Result(Outcome.NOTHING_TO_DO, "");   // mai installato
+        if (current.isEmpty()) return new Result(Outcome.NOTHING_TO_DO, "");   // never installed
         Answer c = probe.ask(current);
         if (c != Answer.REJECTED) return new Result(Outcome.NOTHING_TO_DO, "");
         Result copy = tryPostfixCopy(store, probe, user, "", current);
@@ -170,7 +171,7 @@ public final class PendingDbPassword {
         return new Result(Outcome.UNDECIDED, I18n.tr("server.dbPassword.undecided"));
     }
 
-    /** La password di Postfix, se e' un'altra e MySQL la accetta. null altrimenti. */
+    /** Postfix's password, if it is a different one and MySQL accepts it. null otherwise. */
     private static Result tryPostfixCopy(Store store, Probe probe, String user, String pending, String current) {
         String copy = postfixCopy(user);
         if (copy.isEmpty() || copy.equals(pending) || copy.equals(current)) return null;
@@ -181,9 +182,9 @@ public final class PendingDbPassword {
     }
 
     /**
-     * La password nel file di Postfix, se il file e' dell'utente del pannello; "" altrimenti (file
-     * assente, illeggibile, di un altro utente). Il formato e' quello che scrive lo script:
-     * {@code chiave = valore}, una per riga.
+     * The password in the Postfix file, if the file belongs to the panel's user; "" otherwise (file
+     * missing, unreadable, owned by another user). The format is the one the script writes:
+     * {@code key = value}, one per line.
      */
     static String postfixCopy(String user) {
         try {
@@ -204,9 +205,9 @@ public final class PendingDbPassword {
         }
     }
 
-    // ---------------------------------------------------------------- il pannello vero
+    // ---------------------------------------------------------------- the real panel
 
-    /** Le password del pannello vero: il file dei segreti, e la colonna di SQLite se e' ancora piena. */
+    /** The real panel's passwords: the secrets file, and the SQLite column if it is still filled in. */
     public static Store panelStore(org.daemoxcp.mail.sqli.dataBaseManager db) {
         return new Store() {
             public String current() { return db.mysqlPassword(); }
@@ -217,9 +218,9 @@ public final class PendingDbPassword {
     }
 
     /**
-     * La domanda vera a MySQL, senza scegliere un database: conta solo se l'utente entra.
-     * «Access denied» (1045, SQLSTATE 28000) e' un no; qualunque altra cosa (connessione
-     * rifiutata, tempo scaduto, MySQL che si sta avviando) e' «non risponde», e non decide niente.
+     * The real question to MySQL, without choosing a database: all that counts is whether the user
+     * gets in. "Access denied" (1045, SQLSTATE 28000) is a no; anything else (connection refused,
+     * timeout, MySQL still starting up) is "does not answer", and decides nothing.
      */
     public static Probe mysqlProbe(String host, String port, String user) {
         return password -> {
@@ -235,7 +236,7 @@ public final class PendingDbPassword {
         };
     }
 
-    /** Host, porta e utente MySQL dalla configurazione del pannello, con i valori di sempre se manca. */
+    /** MySQL host, port and user from the panel's configuration, with the usual values if it is missing. */
     public static String[] mysqlTarget(org.daemoxcp.mail.sqli.dataBaseManager db) {
         String host = "127.0.0.1", port = "3306", user = Product.ID;
         try (ResultSet r = db.get_data_config()) {
@@ -245,7 +246,7 @@ public final class PendingDbPassword {
                 if (notBlank(r.getString("mysql_user"))) user = r.getString("mysql_user");
             }
         } catch (Exception e) {
-            // configurazione non ancora creata: i valori di sempre
+            // configuration not created yet: the usual values
         }
         return new String[]{host, port, user};
     }
@@ -255,12 +256,12 @@ public final class PendingDbPassword {
     }
 
     /**
-     * All'avvio di ogni processo del pannello, prima che qualcuno entri in MySQL.
+     * At the startup of every panel process, before anyone logs into MySQL.
      *
-     * <p>Il caso di sempre (niente in attesa, MySQL accetta la password del pannello) costa una
-     * connessione e non prende il turno. Il turno serve solo quando c'e' da decidere qualcosa: se lo
-     * tiene un altro processo, li' forse sta girando un'installazione, che decidera' da se' alla
-     * fine; qui non si tocca niente.
+     * <p>The usual case (nothing pending, MySQL accepts the panel's password) costs one connection
+     * and does not take the turn. The turn is needed only when there is something to decide: if
+     * another process holds it, an installation may be running there, which will decide by itself at
+     * the end; nothing is touched here.
      */
     public static Result settleAtStartup(org.daemoxcp.mail.sqli.dataBaseManager db) {
         Store store = panelStore(db);
@@ -271,13 +272,13 @@ public final class PendingDbPassword {
             pending = store.pending();
             current = store.current();
         } catch (RuntimeException e) {
-            return new Result(Outcome.NOTHING_TO_DO, "");    // file dei segreti illeggibile: lo dice gia' chi lo legge
+            return new Result(Outcome.NOTHING_TO_DO, "");    // secrets file unreadable: whoever reads it already reports it
         }
         if (pending.isEmpty()) {
             if (current.isEmpty()) return new Result(Outcome.NOTHING_TO_DO, "");
             if (probe.ask(current) != Answer.REJECTED) return new Result(Outcome.NOTHING_TO_DO, "");
         }
-        // takeForLocks e non take: un elenco di pacchetti rimasto aperto non c'entra con la password.
+        // takeForLocks and not take: a package list left open has nothing to do with the password.
         String refusal = PackageQueue.takeForLocks("db-password", I18n.tr("server.dbPassword.turn"));
         if (refusal != null) {
             String msg = pending.isEmpty() ? "" : I18n.tr("server.dbPassword.notNow", Map.of("why", refusal));

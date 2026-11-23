@@ -52,7 +52,7 @@ public class SeparatedPanelTest {
     static String base;
     static final String UA = "separated-panel-test";
 
-    /** The root's question from the web part (reperto 200): not a request of the user. */
+    /** The root's question from the web part (finding 200): not a request of the user. */
     static final String RESTART_STATE = "/op/restart-state";
 
     /** What the web part passed to the root, without its questions on the restart. */
@@ -268,7 +268,7 @@ public class SeparatedPanelTest {
                     + r.statusCode() + " " + r.body() + ")", r.statusCode() == 403
                     && "needed".equals(r.headers().firstValue("X-Panel-Confirmation").orElse("")) && r.body().contains("\"needs_reauth\":true"));
             check("  stopped in the web part: nothing reached the root", forwarded(seen) == beforeConfirm);
-            // Reperto 200: before the confirmation the web part asks the root whether a restart is scheduled (it cannot
+            // Finding 200: before the confirmation the web part asks the root whether a restart is scheduled (it cannot
             // see the root's processes). A question with no request in it: no route, no body, only who asks.
             check("  the web part only asked the root whether a restart is scheduled (no body)", seen.size() - forwarded(seen) == questionsBefore + 1
                     && seen.stream().filter(q -> RESTART_STATE.equals(q.route())).allMatch(q -> q.body().length == 0));

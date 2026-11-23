@@ -10,35 +10,38 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Il rapporto periodico come email: oggetto, testo e HTML, dai dati gia' raccolti.
+ * The periodic report as an email: subject, text and HTML, from the data already collected.
  *
- * Funzione pura: riceve i dati (UpdateManager.reportData piu' le voci che aggiunge il rapporto)
- * e restituisce il messaggio, senza toccare il sistema. Cosi' si prova sul Mac con dati scritti
- * a mano e sulla VM con quelli veri, e le due forme — testo e HTML — nascono dalle stesse
- * sezioni: non possono dire cose diverse.
+ * Pure function: it receives the data (UpdateManager.reportData plus the entries the report adds)
+ * and returns the message, without touching the system. So it is tested on the Mac with data written
+ * by hand and on the VM with the real ones, and the two forms, text and HTML, come from the same
+ * sections: they cannot say different things.
  *
- * Com'e' fatto, perche' chi lo riceve capisca in dieci secondi:
- *  - l'OGGETTO dice il server e la cosa piu' importante da fare ("[mail.example.org] Urgent:
- *    Apply 2 security fixes, and 1 more"), non "1 thing to do";
- *  - in cima, una riga di stato e le cose da fare, dalla piu' urgente, ognuna con l'urgenza
- *    SCRITTA (non solo un colore), cosa e' successo e dove si fa nel pannello;
- *  - sotto, lo stato completo per chi vuole controllare;
- *  - in fondo, perche' arriva e come si cambia o si ferma.
+ * How it is made, so that whoever receives it understands it in ten seconds:
+ *  - the SUBJECT names the server and the most important thing to do ("[mail.example.org] Urgent:
+ *    Apply 2 security fixes, and 1 more"), not "1 thing to do";
+ *  - at the top, a status line and the things to do, most urgent first, each with its urgency
+ *    WRITTEN (not only a color), what happened and where in the panel it is done;
+ *  - below, the full status for whoever wants to check;
+ *  - at the bottom, why it arrives and how to change or stop it.
  */
 public final class ReportMail {
 
     private ReportMail() {}
 
-    /** Chi riceve, in che lingua, e se il rapporto parte da solo o l'ha chiesto qualcuno dal pannello. */
+    /**
+     * Who receives it, in which language, and whether the report goes out on its own or someone asked for it
+     * from the panel.
+     */
     public record Context(String lang, String server, String recipient, boolean automatic,
                           String frequency, ZonedDateTime when) {}
 
-    // ===================== l'oggetto =====================
+    // ===================== the subject =====================
 
-    /** Urgente vuol dire "subito" o "urgente": le voci con urgenza 0 e 1. */
+    /** Urgent means "immediately" or "urgent": the items with urgency 0 and 1. */
     static boolean urgent(JSONObject item) { return item.optInt("urgency", 9) <= 1; }
 
-    /** Il titolo breve di una voce; per le voci senza titolo (vecchie o di altri), il testo intero. */
+    /** The short title of an entry; for entries without a title (old ones or from others), the whole text. */
     static String title(JSONObject item) {
         String t = item.optString("title", "");
         return t.isEmpty() ? item.optString("what", "") : t;
@@ -57,16 +60,16 @@ public final class ReportMail {
                 Map.of("server", server, "title", title(first), "more", more, "date", date));
     }
 
-    /** chiave.one o chiave.other secondo il numero, che entra come {n}. */
+    /** key.one or key.other depending on the number, which goes in as {n}. */
     static String plural(String lang, String key, long n, Map<String, ?> params) {
         Map<String, Object> values = new java.util.HashMap<>(params);
         values.put("n", n);
         return I18n.t(lang, key + (n == 1 ? ".one" : ".other"), values);
     }
 
-    // ===================== le sezioni =====================
+    // ===================== the sections =====================
 
-    /** Un pezzo di sezione: righe nome/valore, una frase, o un elenco con la sua etichetta. */
+    /** A piece of a section: name/value rows, a sentence, or a list with its label. */
     sealed interface Block permits Facts, Note, Bullets {}
     record Facts(List<String[]> rows) implements Block {}
     record Note(String text) implements Block {}
@@ -79,7 +82,7 @@ public final class ReportMail {
         return l;
     }
 
-    /** Lo stato completo, sezione per sezione: le stesse per il testo e per l'HTML. */
+    /** The full status, section by section: the same ones for the text and for the HTML. */
     static List<Section> sections(String lang, JSONObject d) {
         List<Section> out = new ArrayList<>();
 
@@ -92,7 +95,7 @@ public final class ReportMail {
                 rows.add(new String[]{I18n.t(lang, "mail.report.fact.installed"), os.optString("installedKernel", "?")});
                 rows.add(new String[]{I18n.t(lang, "mail.report.fact.running"), os.optString("runningKernel", "?")});
                 rows.add(new String[]{I18n.t(lang, "mail.report.fact.userland"), os.optString("userland", "?")});
-                // La chiave e' "arch" (operatingSystem): con "architecture" il rapporto ha sempre scritto "?".
+                // The key is "arch" (operatingSystem): with "architecture" the report always wrote "?".
                 rows.add(new String[]{I18n.t(lang, "mail.report.fact.architecture"), os.optString("arch", "?")});
                 long days = d.optLong("daysToEndOfSupport", -1);
                 rows.add(new String[]{I18n.t(lang, "mail.report.fact.endOfSupport"), os.optString("endOfSupport", "?")
@@ -115,10 +118,10 @@ public final class ReportMail {
             out.add(new Section(I18n.t(lang, "mail.report.section.packages"), b));
         }
 
-        // --- vulnerabilita' ---
-        // Prima l'eta' dei dati: i numeri escono dal database delle vulnerabilita' e dal catalogo
-        // dei pacchetti GIA' presenti sul server, e dire quanto sono vecchi e' l'unica cosa che
-        // distingue una misura da un numero che sembra una misura.
+        // --- vulnerabilities ---
+        // First the age of the data: the numbers come from the vulnerability database and from the catalog
+        // of the packages ALREADY on the server, and saying how old they are is the only thing that
+        // tells a measurement apart from a number that looks like a measurement.
         {
             List<Block> b = new ArrayList<>();
             long gv = d.optLong("vulnDbDays", -1), gc = d.optLong("catalogDays", -1);
@@ -127,14 +130,15 @@ public final class ReportMail {
                          : I18n.t(lang, "mail.report.fact.daysAgo", Map.of("n", gv)))
                     + " " + (d.optBoolean("vulnDbUpdatedNow", false)
                              ? I18n.t(lang, "mail.report.fact.downloadedNow") : I18n.t(lang, "mail.report.fact.notDownloadedNow"));
-            // Del catalogo si dice quando e' stato PUBBLICATO sul server di pkg (vedi PkgCatalog).
+            // For the catalog we say when it was PUBLISHED on the pkg server (see PkgCatalog).
             String catalog = (gc < 0 ? I18n.t(lang, "mail.report.fact.catalogUnknown")
                               : I18n.t(lang, "mail.report.fact.published",
                                        Map.of("howMuch", PkgCatalog.howMuch(gc), "date", d.optString("catalogDate"))))
                     + (d.optBoolean("refreshedCatalog", false) ? ", " + I18n.t(lang, "mail.report.fact.checkedNow") : "");
             b.add(new Facts(List.of(new String[]{I18n.t(lang, "mail.report.fact.vulnDb"), db},
                                     new String[]{I18n.t(lang, "mail.report.fact.catalog"), catalog})));
-            // Piu' repository, uno senza catalogo, o nessuna data: la frase intera, che dice quale e perche'.
+            // Several repositories, one without a catalog, or no date: the whole sentence, which says which one
+            // and why.
             JSONObject cat = d.optJSONObject("catalog");
             if (cat != null) {
                 int found = 0;
@@ -145,8 +149,8 @@ public final class ReportMail {
                 if ((gc < 0 || found > 1 || (missing != null && missing.length() > 0)) && !cat.optString("note").isEmpty())
                     b.add(new Note(cat.optString("note")));
             }
-            // Se il conto non torna lo si dice PRIMA dell'elenco: un elenco parziale letto come
-            // completo e' peggio di nessun elenco.
+            // If the count does not add up it is said BEFORE the list: a partial list read as
+            // complete is worse than no list.
             String mismatch = d.optString("vulnCountMismatch", "");
             if (!mismatch.isEmpty()) b.add(new Note(I18n.t(lang, "mail.report.warning", Map.of("text", mismatch))));
             List<String> unparsed = strings(d.optJSONArray("vulnNotUnderstood"));
@@ -159,7 +163,7 @@ public final class ReportMail {
             out.add(new Section(I18n.t(lang, "mail.report.section.vulns"), b));
         }
 
-        // --- certificato ---
+        // --- certificate ---
         JSONObject cert = d.optJSONObject("certificate");
         if (cert != null) {
             List<Block> b = new ArrayList<>();
@@ -178,7 +182,7 @@ public final class ReportMail {
             out.add(new Section(I18n.t(lang, "mail.report.section.cert"), b));
         }
 
-        // --- servizi ---
+        // --- services ---
         JSONArray sv = d.optJSONArray("services");
         if (sv != null) {
             int active = 0;
@@ -191,7 +195,7 @@ public final class ReportMail {
             out.add(new Section(I18n.t(lang, "mail.report.section.services"), b));
         }
 
-        // --- librerie ---
+        // --- libraries ---
         if (d.has("missingLibraries")) {
             JSONArray broken = d.optJSONArray("missingLibraries");
             out.add(new Section(I18n.t(lang, "mail.report.section.libraries"), List.of(new Note(
@@ -200,10 +204,10 @@ public final class ReportMail {
                             : I18n.t(lang, "mail.report.librariesMissing", Map.of("n", broken.length()))))));
         }
 
-        // --- spazio ---
+        // --- space ---
         if (d.has("space")) {
             String df = d.optString("space", "").trim();
-            // "zroot/ROOT/default  29G  5.1G  24G  18%  /": la riga di df(1) detta in parole.
+            // "zroot/ROOT/default  29G  5.1G  24G  18%  /": the df(1) line put into words.
             String[] f = df.split("\\s+");
             Block b = f.length == 6 && f[4].endsWith("%")
                     ? new Facts(List.<String[]>of(new String[]{I18n.t(lang, "mail.report.fact.disk", Map.of("mount", f[5])),
@@ -212,7 +216,7 @@ public final class ReportMail {
             out.add(new Section(I18n.t(lang, "mail.report.section.space"), List.of(b)));
         }
 
-        // --- ambienti di avvio ---
+        // --- boot environments ---
         JSONObject be = d.optJSONObject("environments");
         if (be != null && be.optBoolean("success")) {
             List<String[]> rows = new ArrayList<>();
@@ -228,7 +232,7 @@ public final class ReportMail {
         return out;
     }
 
-    // ===================== il messaggio =====================
+    // ===================== the message =====================
 
     public static PanelMail.Message message(Context c, JSONObject d) {
         String lang = I18n.normalize(c.lang());
@@ -254,7 +258,7 @@ public final class ReportMail {
         String footerHow = I18n.t(lang, "mail.report.footer.how");
         String whereLabel = I18n.t(lang, "mail.report.where");
 
-        // --- testo ---
+        // --- text ---
         StringBuilder t = new StringBuilder();
         t.append(I18n.t(lang, "mail.common.product")).append(" - ").append(server).append('\n')
          .append(I18n.t(lang, "mail.report.title")).append('\n')
@@ -310,7 +314,7 @@ public final class ReportMail {
         return new PanelMail.Message(subject, t.toString(), html, lang);
     }
 
-    /** I primi titoli, separati da punto e virgola, per la riga di anteprima dell'elenco. */
+    /** The first titles, separated by semicolons, for the preview line of the list. */
     private static String titles(JSONArray toDo, int max, String lang) {
         List<String> l = new ArrayList<>();
         for (int i = 0; i < toDo.length() && i < max; i++) l.add(title(toDo.getJSONObject(i)));

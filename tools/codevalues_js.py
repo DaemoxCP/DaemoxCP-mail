@@ -1,4 +1,4 @@
-"""I codici di stato nel JavaScript (pagine, JavaScript dentro le stringhe Java, finti delle prove)."""
+"""The status codes in the JavaScript (pages, JavaScript inside the Java strings, fakes of the tests)."""
 import re, sys, glob, collections
 root, mapfile = sys.argv[1], sys.argv[2]
 dry = "--dry" in sys.argv
@@ -60,8 +60,8 @@ for f in sorted(glob.glob(f"{root}/src/main/java/**/*.java", recursive=True)):
     parts, last = [], 0
     for a, b in string_ranges(t):
         seg = t[a:b]
-        # solo le stringhe Java che contengono JavaScript (una stringa che e' solo un codice e'
-        # gia' passata da ValueRename)
+        # only the Java strings that contain JavaScript (a string that is only a code has
+        # already gone through ValueRename)
         if len(seg) > 12 and re.search(r"===|!==|\breturn\b|=>|function|\bcase\b|value=", seg):
             seg = apply(seg, PATS_ALL + PATS_PAGE, "javascript nel java")
         parts.append(t[last:a]); parts.append(seg); last = b

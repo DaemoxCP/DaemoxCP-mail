@@ -14,32 +14,33 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Rspamd impara dagli utenti: un messaggio spostato (o copiato) nella Junk e' spam, uno tolto dalla Junk e' posta buona,
- * tranne quando va nel Cestino.
+ * Rspamd learns from the users: a message moved (or copied) into Junk is spam, one taken out of Junk is good mail,
+ * except when it goes to the Trash.
  *
- * Prima Rspamd imparava solo da chi lanciava rspamc a mano: il filtro bayesiano (Redis, almeno 200 messaggi per parte
- * prima di dire la sua) restava vuoto. Adesso, con IMAPSieve di Pigeonhole (Dovecot 2.4: il plugin imap_sieve, i blocchi
- * mailbox e imapsieve_from della sua documentazione), quando un programma di posta o il pulsante «Spam» della webmail
- * (markasjunk) sposta un messaggio, Dovecot lo passa con vnd.dovecot.pipe a un programma del pannello, che lo deposita
- * in /var/spool/daemoxcp-learn/spam o /ham. Il programma gira come vmail, come IMAP; non conosce nessuna password.
- * Rspamd impara solo dal controller con la password «enable» (learnspam e learnham sono comandi privilegiati), che
- * resta nei segreti di root: la consegna a Rspamd la fa la parte root del pannello (SpamLearner), ogni minuto, e
- * cancella il messaggio appena Rspamd risponde. Dare quella password a vmail gli avrebbe dato anche tutto il resto del
- * controller (pesi, mappe, statistiche).
+ * Before, Rspamd learned only from whoever ran rspamc by hand: the Bayesian filter (Redis, at least 200 messages per
+ * side before it has its say) stayed empty. Now, with the IMAPSieve of Pigeonhole (Dovecot 2.4: the imap_sieve
+ * plugin, the mailbox and imapsieve_from blocks of its documentation), when a mail program or the "Spam" button of
+ * the webmail (markasjunk) moves a message, Dovecot passes it with vnd.dovecot.pipe to a program of the panel, which
+ * deposits it in /var/spool/daemoxcp-learn/spam or /ham. The program runs as vmail, like IMAP; it knows no password.
+ * Rspamd learns only from the controller with the "enable" password (learnspam and learnham are privileged
+ * commands), which stays in root's secrets: the handover to Rspamd is done by the root part of the panel
+ * (SpamLearner), every minute, and it deletes the message as soon as Rspamd answers. Giving that password to vmail
+ * would also have given it all the rest of the controller (weights, maps, statistics).
  *
- * Misurato sulla VM il 20/11/2026 (Dovecot 2.4.5, Rspamd 4.1): MOVE e COPY nella Junk fanno partire lo script (cause
- * = copy vale anche per MOVE); Junk -> INBOX da' ham; Junk -> Trash niente; la regola dello spam alla consegna
- * (SpecialFolders) non interviene sugli spostamenti, e un messaggio segnato X-Spam tolto dalla Junk resta dove l'utente
- * l'ha messo; nessun errore di Sieve nel registro. Rspamd risponde 204 quando impara, 401 senza password, 400 a un corpo
- * vuoto. sievec non conosce vnd.dovecot.pipe e imapsieve senza -P sieve_imapsieve -P sieve_extprograms -x: con quelle
- * opzioni il compilato dell'utente sievec e' identico a quello di root.
+ * Measured on the VM on 2026-11-20 (Dovecot 2.4.5, Rspamd 4.1): MOVE and COPY into Junk start the script
+ * (cause = copy also covers MOVE); Junk -> INBOX gives ham; Junk -> Trash nothing; the rule for spam at delivery
+ * (SpecialFolders) does not act on moves, and a message marked X-Spam taken out of Junk stays where the user put it;
+ * no Sieve error in the log. Rspamd answers 204 when it learns, 401 without a password, 400 to an empty body. sievec
+ * does not know vnd.dovecot.pipe and imapsieve without -P sieve_imapsieve -P sieve_extprograms -x: with those
+ * options the script compiled by the sievec user is identical to the one compiled by root.
  *
- * Solo Dovecot 2.4 (sulla 2.3 la configurazione e' un'altra: il pannello lo dice e non tocca niente), e solo dove c'e'
- * la Junk del pannello (SpecialFolders). Prima di toccare qualcosa controlla che Dovecot giri e che l'autenticazione
- * funzioni; dopo il reload, che Dovecot giri, che l'autenticazione funzioni, che il plugin sia attivo per IMAP, che IMAP
- * si apra per una casella e che il programma, come vmail, possa scrivere nella cartella. Se qualcosa non torna toglie il
- * file di configurazione e ricarica: Dovecot torna com'era (gli script e il programma da soli non fanno niente). Un file
- * di configurazione con lo stesso nome scritto a mano resta com'e'. Al secondo avvio non fa niente.
+ * Only Dovecot 2.4 (on 2.3 the configuration is a different one: the panel says so and touches nothing), and only
+ * where the panel's Junk exists (SpecialFolders). Before touching anything it checks that Dovecot runs and that
+ * authentication works; after the reload, that Dovecot runs, that authentication works, that the plugin is active for
+ * IMAP, that IMAP opens for a mailbox and that the program, as vmail, can write into the folder. If something does
+ * not add up it removes the configuration file and reloads: Dovecot goes back to how it was (the scripts and the
+ * program do nothing on their own). A configuration file with the same name written by hand stays as it is. On the
+ * second start it does nothing.
  */
 public final class SpamLearning {
 
@@ -54,14 +55,14 @@ public final class SpamLearning {
     public static final String SPOOL = "/var/spool/daemoxcp-learn";
     public static final List<String> KINDS = List.of("spam", "ham");
     static final String VMAIL = "vmail";
-    /** Oltre questa misura un messaggio non si deposita: Rspamd non impara da allegati enormi, e la cartella non si gonfia. */
+    /** Past this size no message is deposited: Rspamd does not learn from huge attachments, nor does the folder swell. */
     public static final long MAX_BYTES = 10L << 20;
-    /** sievec senza queste opzioni non conosce le estensioni degli script (misurato). */
+    /** Without these options sievec does not know the extensions used by the scripts (measured). */
     static final List<String> SIEVEC_OPTIONS = List.of("-P", "sieve_imapsieve", "-P", "sieve_extprograms", "-x", "+vnd.dovecot.pipe +imapsieve");
 
     private SpamLearning() {}
 
-    /** La configurazione di Dovecot 2.4. Pura. */
+    /** The Dovecot 2.4 configuration. Pure. */
     public static String confContent() {
         return "# " + PanelMarker.WRITTEN + ".\n"
              + "# Rspamd learns from the users (SpamLearning): a message moved or copied into " + SpecialFolders.JUNK + " is spam,\n"
@@ -114,9 +115,9 @@ public final class SpamLearning {
     }
 
     /**
-     * Il programma: legge tutto il messaggio (Pigeonhole lo vuole), ne tiene al massimo MAX_BYTES, lo scrive con un nome
-     * che comincia col punto e poi lo rinomina, cosi' la parte root vede solo messaggi interi. Con «check» prova solo a
-     * scrivere (la verifica dopo il reload). Esce sempre 0: un errore qui non deve fermare lo spostamento. Pura.
+     * The program: it reads the whole message (Pigeonhole wants that), keeps at most MAX_BYTES of it, writes it with a
+     * name that starts with a dot and then renames it, so the root part sees only complete messages. With "check" it
+     * only tries to write (the check after the reload). It always exits 0: an error here must not stop the move. Pure.
      */
     public static String programContent() {
         return "#!/bin/sh\n"
@@ -141,8 +142,8 @@ public final class SpamLearning {
     enum Action { NOTHING, APPLY, LEFT_ALONE }
 
     /**
-     * Che cosa fare. is24: Dovecot 2.4; junk: c'e' la Junk del pannello (il file di SpecialFolders); conf: il file di
-     * adesso (null se non c'e'); partsCurrent: script, programma e cartella sono gia' quelli giusti. Pura.
+     * What to do. is24: Dovecot 2.4; junk: the panel's Junk exists (the SpecialFolders file); conf: the current file
+     * (null if there is none); partsCurrent: script, program and folder are already the right ones. Pure.
      */
     static Action decide(boolean is24, boolean junk, String conf, boolean partsCurrent) {
         if (!is24 || !junk) return Action.NOTHING;
@@ -155,7 +156,7 @@ public final class SpamLearning {
     static Path spamScriptPath() { return ETC.resolve(SPAM_SCRIPT_IN_ETC); }
     static Path hamScriptPath() { return ETC.resolve(HAM_SCRIPT_IN_ETC); }
     static Path program() { return Path.of(PIPE_DIR, PROGRAM); }
-    /** La cartella del programma e quella sopra, che il pannello crea. */
+    /** The folder of the program and the one above it, which the panel creates. */
     static List<Path> pipeDirs() { return List.of(Path.of(PIPE_DIR).getParent(), Path.of(PIPE_DIR)); }
 
     public static void ensureAtBoot() {
@@ -184,7 +185,7 @@ public final class SpamLearning {
         }
     }
 
-    /** Script, programma e cartella di raccolta come li vuole il pannello. */
+    /** Script, program and collection folder as the panel wants them. */
     static boolean partsCurrent() {
         try {
             if (!same(spamScriptPath(), spamScript()) || !same(hamScriptPath(), hamScript()) || !same(program(), programContent())) return false;
@@ -205,7 +206,7 @@ public final class SpamLearning {
         return Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) && content.equals(Files.readString(file, StandardCharsets.UTF_8));
     }
 
-    /** Una cartella vera, di vmail, 0700. */
+    /** A real folder, owned by vmail, 0700. */
     static boolean spoolDirRight(Path dir) throws Exception {
         if (!Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS)) return false;
         PosixFileAttributes a = Files.readAttributes(dir, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
@@ -213,7 +214,7 @@ public final class SpamLearning {
                 && PosixFilePermissions.toString(a.permissions()).equals("rwx------");
     }
 
-    /** Se Pigeonhole e' cambiato, i compilati si rifanno (come SpecialFolders); altrimenti niente. */
+    /** If Pigeonhole has changed, the compiled scripts are redone (like SpecialFolders); otherwise nothing. */
     static void refreshBinaries() {
         for (Path s : List.of(spamScriptPath(), hamScriptPath())) {
             SieveCompiler.Outcome o = SieveCompiler.refresh(s, SIEVEC_OPTIONS);
@@ -232,14 +233,15 @@ public final class SpamLearning {
                     + "): learning from the users not set up");
             return false;
         }
-        // Le parti che da sole non fanno niente: la cartella di raccolta, il programma, gli script compilati.
+        // The parts that do nothing on their own: the collection folder, the program, the compiled scripts.
         String spool = makeSpool();
         if (spool != null) {
             LOGGER.warning("[SpamLearning] " + spool + ": learning from the users not set up");
             return false;
         }
-        // Le due cartelle del programma, di root e 0755: Dovecot lo lancia come vmail. Nascono con la umask della parte
-        // root (0700: misurato sulla VM, vmail non lo poteva lanciare), quindi i permessi si mettono dopo, espliciti.
+        // The two folders of the program, owned by root and 0755: Dovecot launches it as vmail. They are created with
+        // the umask of the root part (0700: measured on the VM, vmail could not launch it), so the permissions are set
+        // afterwards, explicitly.
         for (Path d : pipeDirs()) {
             if (Files.isSymbolicLink(d)) {
                 LOGGER.warning("[SpamLearning] " + d + " is a link: learning from the users not set up");
@@ -275,7 +277,7 @@ public final class SpamLearning {
         return true;
     }
 
-    /** /var/spool/daemoxcp-learn e le sue due cartelle: di vmail, 0700. null se va bene, altrimenti il problema. */
+    /** /var/spool/daemoxcp-learn and its two folders: owned by vmail, 0700. null if fine, otherwise the problem. */
     static String makeSpool() throws Exception {
         for (Path d : List.of(Path.of(SPOOL), Path.of(SPOOL, "spam"), Path.of(SPOOL, "ham"))) {
             if (Files.isSymbolicLink(d)) return d + " is a link";
@@ -288,7 +290,7 @@ public final class SpamLearning {
         return null;
     }
 
-    /** Dopo il reload: Dovecot gira, l'autenticazione passa, il plugin e' attivo per IMAP, IMAP si apre, vmail scrive. */
+    /** After the reload: Dovecot runs, authentication passes, the plugin is active for IMAP, IMAP opens, vmail writes. */
     static String verify() throws InterruptedException {
         String last = "Dovecot did not come back";
         for (int i = 0; i < 20; i++) {
@@ -307,7 +309,7 @@ public final class SpamLearning {
         return last;
     }
 
-    /** Una sessione IMAP vera per la prima casella (CAPABILITY e LOGOUT, niente altro): null se si apre senza errori. */
+    /** A real IMAP session for the first mailbox (CAPABILITY and LOGOUT, nothing else): null if it opens with no errors. */
     static String imapOpens() {
         String user = null;
         for (String u : Shell.run(Duration.ofSeconds(15), "doveadm", "user", "*").output().trim().split("\\s+"))

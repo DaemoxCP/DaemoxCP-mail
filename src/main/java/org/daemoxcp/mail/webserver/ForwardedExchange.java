@@ -21,17 +21,18 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Una richiesta arrivata dalla parte web sul socket della root (RootChannel), vista dai gestori di
- * SSLMailServer come una richiesta HTTP qualunque: cosi' la parte root usa gli stessi gestori di oggi,
- * senza riscriverli.
+ * A request that arrived from the web part on the root socket (RootChannel), seen by the
+ * SSLMailServer handlers as any HTTP request: that way the root part uses the same handlers as today,
+ * without rewriting them.
  *
- * <p>Le intestazioni sono solo quelle che RootChannel lascia passare, piu' Content-Length del corpo.
- * L'indirizzo remoto e' l'IP del client che ha visto la web. La risposta parte sul socket quando il
- * gestore chiama sendResponseHeaders; se il gestore finisce senza averla mandata, finish() manda un 500.
+ * <p>The headers are only those that RootChannel lets through, plus the Content-Length of the body.
+ * The remote address is the IP of the client that the web part saw. The response goes out on the socket
+ * when the handler calls sendResponseHeaders; if the handler finishes without having sent it, finish()
+ * sends a 500.
  */
 public final class ForwardedExchange extends HttpExchange {
 
-    /** Le intestazioni di risposta che non si rimandano: le scrive il server HTTP della parte web. */
+    /** The response headers that are not sent back: the HTTP server of the web part writes them. */
     static final Set<String> HOP_BY_HOP = Set.of("content-length", "transfer-encoding", "connection", "date", "keep-alive");
 
     private final RootChannel.Request request;
@@ -44,7 +45,7 @@ public final class ForwardedExchange extends HttpExchange {
     private InputStream requestBody;
     private OutputStream filter;
     private int responseCode = -1;
-    /** La lunghezza detta in sendResponseHeaders: -1 nessun corpo, 0 qualunque, n esattamente n byte. */
+    /** The length given in sendResponseHeaders: -1 no body, 0 any, n exactly n bytes. */
     private long declared;
     private long written;
     private boolean bodyClosed;
@@ -55,7 +56,7 @@ public final class ForwardedExchange extends HttpExchange {
         request.headers().forEach(requestHeaders::set);
         requestHeaders.set("Content-Length", String.valueOf(request.body().length));
         this.uri = URI.create(request.path() + (request.query() == null ? "" : "?" + request.query()));
-        // L'IP e' gia' controllato (InputValidator.isValidIp): un indirizzo letterale non chiede al DNS.
+        // The IP has already been checked (InputValidator.isValidIp): a literal address does not query DNS.
         this.remote = new InetSocketAddress(InetAddress.getByName(request.clientIp()), 0);
         this.requestBody = new ByteArrayInputStream(request.body());
     }
@@ -70,7 +71,7 @@ public final class ForwardedExchange extends HttpExchange {
 
     @Override public String getRequestMethod() { return request.method(); }
 
-    /** Nessun context: la rotta l'ha gia' scelta la web, e la root l'ha controllata (SSLMailServer.serveForwarded). */
+    /** No context: the web part already chose the route, and root checked it (SSLMailServer.serveForwarded). */
     @Override public HttpContext getHttpContext() { return null; }
 
     @Override public InputStream getRequestBody() { return requestBody; }
@@ -80,7 +81,7 @@ public final class ForwardedExchange extends HttpExchange {
         return filter != null ? filter : body;
     }
 
-    /** Il corpo della risposta: va sul socket solo dopo sendResponseHeaders, e mai oltre la lunghezza detta. */
+    /** The response body: it goes on the socket only after sendResponseHeaders, and never beyond the declared length. */
     private final OutputStream body = new OutputStream() {
         @Override public void write(int b) throws IOException { write(new byte[]{(byte) b}, 0, 1); }
 
@@ -115,7 +116,7 @@ public final class ForwardedExchange extends HttpExchange {
             if (HOP_BY_HOP.contains(e.getKey().toLowerCase(Locale.ROOT))) continue;
             for (String v : e.getValue()) out.add(new String[]{e.getKey(), v});
         }
-        // Come HttpServer: per HEAD e per 204/304 niente corpo, qualunque lunghezza dica il gestore.
+        // Like HttpServer: for HEAD and for 204/304 no body, whatever length the handler declares.
         long length = "HEAD".equals(request.method()) || rCode == 204 || rCode == 304 ? -1 : responseLength;
         RootChannel.writeResponseHead(socket, rCode, length, out);
         responseCode = rCode;
@@ -149,11 +150,11 @@ public final class ForwardedExchange extends HttpExchange {
         try {
             getResponseBody().close();
         } catch (IOException ignored) {
-            // la web ha chiuso la connessione: niente da fare
+            // the web part closed the connection: nothing to do
         }
     }
 
-    /** A fine gestore: se la risposta non e' partita, un 500; poi tutto quello che c'e' va sul socket. */
+    /** At the end of the handler: if the response did not go out, a 500; then everything left goes on the socket. */
     void finish() {
         try {
             if (responseCode < 0) {
@@ -165,7 +166,7 @@ public final class ForwardedExchange extends HttpExchange {
             }
             body.close();
         } catch (IOException ignored) {
-            // la web ha chiuso la connessione
+            // the web part closed the connection
         }
     }
 }

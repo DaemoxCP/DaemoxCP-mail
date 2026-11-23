@@ -1,5 +1,5 @@
         // ===== Cloudflare multi-account integration =====
-        // Cache locale per usare i dati in giro (rotateDkim, dkim card info)
+        // Local cache to use the data elsewhere (rotateDkim, dkim card info)
         let cfAccounts = [];     // [{id,label,email,token_masked,...}]
         let cfDomainsCf = [];    // [{id,domain,cloudflare_account_id}]
 
@@ -26,7 +26,7 @@
                     ? '<span class="badge bg-secondary">' + escHtml(tn('dns.cfCount', 0)) + '</span>'
                     : '<span class="badge bg-success">' + escHtml(tn('dns.cfCount', cfAccounts.length)) + '</span>';
 
-                // Lista account
+                // Account list
                 if (cfAccounts.length === 0) {
                     list.innerHTML = '<div class="alert alert-secondary py-2 mb-0 small"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.cfNone')) + '</div>';
                 } else {
@@ -35,7 +35,7 @@
                     cfAccounts.forEach(a => {
                         const linkedDomains = cfDomainsCf.filter(d => d.cloudflare_account_id === a.id).map(d => d.domain);
                         const safeLabel = escapeHtmlCf(a.label).replace(/'/g, "\\'");
-                        // Riga di visualizzazione
+                        // Display row
                         html += '<tr id="cfRowView-' + a.id + '">';
                         html += '<td><strong>' + escapeHtmlCf(a.label) + '</strong></td>';
                         html += '<td>' + (a.email ? escapeHtmlCf(a.email) : '<span class="text-muted">—</span>') + '</td>';
@@ -48,7 +48,7 @@
                         html += '<button class="btn btn-sm btn-outline-danger" title="' + escHtml(t('dns.remove')) + '" aria-label="' + escHtml(t('dns.remove')) + ' ' + escapeHtmlCf(a.label) + '" data-on-click="cfDeleteAccount(' + a.id + ', \'' + safeLabel + '\')"><i class="fas fa-trash" aria-hidden="true"></i></button>';
                         html += '</td>';
                         html += '</tr>';
-                        // Riga di edit (nascosta finché non clicchi la matita)
+                        // Edit row (hidden until you click the pencil)
                         html += '<tr id="cfRowEdit-' + a.id + '" class="d-none table-warning"><td colspan="5">';
                         html += '<div class="row g-2 align-items-end">';
                         html += '  <div class="col-md-3"><label class="form-label small mb-1" for="cfEditLabel-' + a.id + '">' + escHtml(t('dns.cfLabel')) + '</label><input type="text" class="form-control form-control-sm" id="cfEditLabel-' + a.id + '" value="' + escapeHtmlCf(a.label) + '"></div>';
@@ -65,7 +65,7 @@
                     list.innerHTML = html;
                 }
 
-                // Tabella assegnazione domini -> account
+                // Domain -> account assignment table
                 if (cfDomainsCf.length === 0) {
                     assign.innerHTML = '<div class="text-muted small">' + escHtml(t('dns.cfAddDomainFirst')) + '</div>';
                 } else {
@@ -88,7 +88,7 @@
                     assign.innerHTML = html;
                 }
 
-                // Aggiorna eventuale stato visibile della rotazione (se l'utente ha già selezionato un dominio)
+                // Update any visible rotation state (if the user has already selected a domain)
                 if (currentDomainId) loadDkimRotationStatus(currentDomainId);
             }).catch(e => {
                 console.error('cf', e);
@@ -133,7 +133,7 @@
         }
 
         function cfEditOpen(id) {
-            // Chiudi eventuali altre righe di edit aperte
+            // Close any other open edit rows
             cfAccounts.forEach(a => {
                 if (a.id !== id) cfEditClose(a.id);
             });
@@ -148,7 +148,7 @@
             const edit = document.getElementById('cfRowEdit-' + id);
             if (view) view.classList.remove('d-none');
             if (edit) edit.classList.add('d-none');
-            // Pulisci il campo token così non resta in memoria nel DOM
+            // Clear the token field so it does not stay in memory in the DOM
             const tok = document.getElementById('cfEditToken-' + id);
             if (tok) tok.value = '';
         }
@@ -159,7 +159,7 @@
             const token = document.getElementById('cfEditToken-' + id).value.trim();
             if (!label) { panelSay('info', t('dns.cfLabelRequired')); return; }
             const payload = { action: 'update', account_id: id, label: label, email: email };
-            // Includi il token SOLO se l'utente l'ha effettivamente compilato
+            // Include the token ONLY if the user actually filled it in
             if (token) payload.token = token;
             fetch('/api/cloudflare', {
                 method: 'POST',
@@ -214,10 +214,10 @@
 
                 let html = '<div class="alert alert-info mb-4">';
                 html += '<h5><i class="fas fa-info-circle me-2" aria-hidden="true"></i>' + escHtml(t('dns.zonesSummary')) + '</h5>';
-                // Le due zone sono diverse solo quando l'hostname di posta sta in un altro
-                // dominio. Quando coincidono — il caso normale — annunciare "2 zone DNS
-                // diverse" ed elencare due volte lo stesso nome manda a cercare una zona che
-                // non esiste.
+                // The two zones differ only when the mail hostname is in another
+                // domain. When they coincide (the normal case), announcing "2 different
+                // DNS zones" and listing the same name twice sends people looking for a
+                // zone that does not exist.
                 const dueZone = mailServerParentDomain !== domain;
                 html += dueZone
                     ? '<p class="mb-2">' + escHtml(t('dns.twoZones')) + '</p>'
@@ -241,12 +241,12 @@
 
                     const reqClass = r.required ? 'required' : 'optional';
                     const badge = r.required ? '<span class="badge bg-danger">' + escHtml(t('dns.required')) + '</span>' : '<span class="badge bg-secondary">' + escHtml(t('dns.optionalBadge')) + '</span>';
-                    // ID univoco basato su name+type per il matching con la verifica
+                    // Unique ID based on name+type for matching with the check
                     const recordKey = (r.name + '|' + r.type).replace(/[^a-zA-Z0-9_|.\-]/g, '_');
                     html += '<div class="dns-record ' + reqClass + '" data-record-key="' + recordKey + '" data-record-name="' + escHtml(r.name) + '" data-record-type="' + escHtml(r.type) + '" data-check-type="' + escHtml(r.checkType || '') + '" data-record-zone="' + escHtml(r.dnsZone || '') + '">';
                     html += '<div class="d-flex justify-content-between align-items-start">';
                     html += '<div><span class="record-type">' + escHtml(r.type) + '</span> ' + badge;
-                    // Status badge — placeholder finché non parte la verifica automatica
+                    // Status badge: placeholder until the automatic check starts
                     html += ' <span class="record-status-badge" data-status-key="' + recordKey + '"><span class="badge bg-light text-dark border"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('dns.checkingRecord')) + '</span></span>';
                     if (r.dnsZone) {
                         html += ' <small class="text-muted">' + escHtml(t('dns.onZone', { zone: r.dnsZone })) + '</small>';
@@ -255,12 +255,12 @@
                     html += '<button type="button" class="btn btn-link p-0 copy-btn" data-on-click="copyToClipboard(this.parentElement.parentElement)" title="' + escHtml(t('common.copy')) + '" aria-label="' + escHtml(t('common.copy')) + '"><i class="fas fa-copy" aria-hidden="true"></i></button>';
                     html += '</div>';
                     html += '<div class="mt-2"><strong>' + escHtml(t('dns.recName')) + '</strong> <code class="record-name">' + escHtml(r.name) + '</code></div>';
-                    // Si mostra il valore COMPLETO quando esiste: per MX e SRV "value" contiene
-                    // la sola destinazione, e sotto un'etichetta che dice "consigliato" quello
-                    // sarebbe un record da copiare a cui mancano dei campi.
+                    // The FULL value is shown when it exists: for MX and SRV "value" contains
+                    // only the target, and under a label that says "recommended" that
+                    // would be a record to copy with some fields missing.
                     html += '<div class="mt-1"><strong>' + escHtml(t('dns.recValue')) + '</strong> <code class="record-value" data-style="word-break:break-all">' + escHtml(r.fullValue || r.value) + '</code></div>';
                     html += '<small class="text-muted">' + r.description + '</small>';
-                    // Area dettagli verifica (popolata dopo verifyDnsAuto)
+                    // Check details area (filled after verifyDnsAuto)
                     html += '<div class="record-verify-detail mt-2" data-detail-key="' + recordKey + '"></div>';
                     if (r.explanation) {
                         html += '<details class="mt-2"><summary><i class="fas fa-cog me-1" aria-hidden="true"></i>' + escHtml(t('dns.cfInstructions')) + '</summary><div class="mt-2 p-3 bg-white border rounded" data-style="font-size:0.9rem">' + r.explanation + '</div></details>';
@@ -270,30 +270,30 @@
 
                 document.getElementById('dnsRecordsContainer').innerHTML = html;
 
-                // Load DKIM status (parallelo alla verifica DNS)
+                // Load DKIM status (in parallel with the DNS check)
                 loadDkimStatus(currentDomainId);
-                // Verifica automatica e silenziosa di tutti i record DNS
+                // Automatic, silent check of all DNS records
                 verifyDnsAuto();
             });
         }
 
         /**
-         * Verifica DNS in background: per ogni record, mostra un badge inline
-         * "Configurato ✓" / "Da configurare ⚠" / "Verifica web" etc., così l'utente
-         * sa al volo cosa serve fare senza dover scendere al pannello "Verifica" in fondo.
+         * Background DNS check: for each record, shows an inline badge
+         * "Configured" (tick) / "To configure" (warning sign) / "Web check" etc., so the user
+         * knows at a glance what needs doing without scrolling down to the "Check" panel at the bottom.
          */
         /**
-         * Calcola l'FQDN di un record dato il suo nome relativo (può essere "@", una
-         * sottoparte, o già un FQDN) e la zona DNS di appartenenza.
-         * Necessario perché i record generati usano nomi relativi ("@", "mail._domainkey"),
-         * mentre i check del verifier usano FQDN ("example.org", "mail._domainkey.example.org").
+         * Computes the FQDN of a record given its relative name (it can be "@", a
+         * sub-part, or already an FQDN) and the DNS zone it belongs to.
+         * Needed because the generated records use relative names ("@", "mail._domainkey"),
+         * while the verifier's checks use FQDNs ("example.org", "mail._domainkey.example.org").
          */
         function recordFqdn(name, zone) {
             if (!name || name === '@' || name === '') return zone || '';
-            // Se è già FQDN (contiene la zona alla fine) lasciamo invariato
+            // If it is already an FQDN (it contains the zone at the end) we leave it unchanged
             if (zone && name.toLowerCase().endsWith('.' + zone.toLowerCase())) return name;
             if (zone && name.toLowerCase() === zone.toLowerCase()) return name;
-            // Altrimenti concatena con la zona
+            // Otherwise concatenate it with the zone
             return zone ? (name + '.' + zone) : name;
         }
 
@@ -311,13 +311,13 @@
                     });
                     return;
                 }
-                // Mappa fqdn → check (i check del verifier usano sempre FQDN come name)
+                // Map fqdn -> check (the verifier's checks always use the FQDN as name)
                 const checkByFqdn = new Map();
-                // E mappa TIPO → check, che e' quella giusta: all'apice del dominio MX e SPF
-                // hanno lo STESSO nome, quindi appaiare per nome faceva sovrascrivere l'uno
-                // con l'altro e la scheda MX mostrava il verdetto dell'SPF. Il tipo lo dichiara
-                // il record stesso (checkType), cosi' l'accoppiamento e' un dato e non
-                // un'ipotesi ricavata dal nome.
+                // And a TYPE -> check map, which is the right one: at the domain apex MX and SPF
+                // have the SAME name, so pairing by name made one overwrite
+                // the other and the MX card showed the SPF verdict. The type is declared by
+                // the record itself (checkType), so the pairing is a fact and not
+                // a guess derived from the name.
                 const checkByKind = new Map();
                 (data.checks || []).forEach(c => {
                     if (c.name) checkByFqdn.set(c.name.toLowerCase(), c);
@@ -334,18 +334,18 @@
                     const detailWrap = card.querySelector('[data-detail-key="' + key + '"]');
                     if (!badgeWrap) return;
 
-                    // Prima per tipo dichiarato: e' l'unico appaiamento che non puo' confondere
-                    // due record diversi con lo stesso nome.
+                    // First by declared type: it is the only pairing that cannot confuse
+                    // two different records with the same name.
                     const ctype = card.getAttribute('data-check-type') || '';
                     let check = ctype ? checkByKind.get(ctype) : null;
-                    // Solo se il record non dichiara un tipo si ripiega sul nome, com'era prima.
+                    // Only if the record does not declare a type does it fall back to the name, as before.
                     if (!check) {
                         const fqdn = recordFqdn(rname, rzone).toLowerCase();
                         check = checkByFqdn.get(fqdn);
                         if (!check && rname) check = checkByFqdn.get(rname.toLowerCase());
                     }
                     if (!check) {
-                        // Nessun check per questo record (es. SRV autodiscover, MTA-STS policy, alcuni TXT secondari)
+                        // No check for this record (e.g. SRV autodiscover, MTA-STS policy, some secondary TXTs)
                         badgeWrap.innerHTML = '<span class="badge bg-light text-dark border"><i class="fas fa-minus-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.notChecked')) + '</span>';
                         if (detailWrap) detailWrap.innerHTML = '';
                         unkCount++;
@@ -356,16 +356,16 @@
                         badgeWrap.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.configuredOk')) + '</span>';
                         if (detailWrap) {
                             let ok = '<div class="alert alert-success py-1 px-2 mb-0 small mt-2"><i class="fas fa-check me-1" aria-hidden="true"></i><strong>' + escHtml(t('dns.noAction')) + '</strong> ' + (check.message ? escapeHtmlBl(check.message) : '');
-                            // Il valore vero si mostra anche quando il record PASSA, non solo
-                            // quando fallisce: senza, a schermo resta la sola proposta e sembra
-                            // che sia quello pubblicato.
+                            // The real value is shown also when the record PASSES, not only
+                            // when it fails: without it, only the proposal stays on screen and it
+                            // looks as if that is what is published.
                             //
-                            // E si mostra SENZA confrontarlo con la proposta. Il confronto che
-                            // avevo scritto dichiarava "diverso" per un punto finale, per le
-                            // virgolette di un TXT, o perche' per un SRV la proposta e' il solo
-                            // host e il valore vero contiene anche priorita' e peso — e in piu'
-                            // aggiungeva "e va bene cosi'", che e' un giudizio che questa riga
-                            // non e' in grado di dare. Il giudizio lo da' gia' check.message.
+                            // And it is shown WITHOUT comparing it with the proposal. The comparison
+                            // I had written declared "different" for a trailing dot, for the
+                            // quotes of a TXT, or because for an SRV the proposal is only the
+                            // host and the real value also contains priority and weight, and on
+                            // top of that it added "and that is fine", which is a judgement this
+                            // line is not able to give. The judgement is already given by check.message.
                             const real = check.current_value;
                             if (real) {
                                 const brief = real.length > 140 ? real.substring(0, 140) + '…' : real;
@@ -374,7 +374,7 @@
                             }
                             detailWrap.innerHTML = ok + '</div>';
                         }
-                        // Stile leggero: bordo verde
+                        // Light style: green border
                         card.style.borderLeft = '4px solid #198754';
                         okCount++;
                     } else {
@@ -393,7 +393,7 @@
                     }
                 });
 
-                // Banner riassuntivo in cima al contenitore
+                // Summary banner at the top of the container
                 const container = document.getElementById('dnsRecordsContainer');
                 if (container && (okCount + koCount + unkCount) > 0) {
                     const summary = document.createElement('div');
@@ -410,7 +410,7 @@
                     }
                     summary.className = 'alert ' + cls + ' mb-3';
                     summary.innerHTML = '<i class="fas fa-' + icon + ' me-2" aria-hidden="true"></i>' + msg + ' <span class="ms-2 small text-muted">' + escHtml(t('dns.sumCounts', { ok: okCount, todo: koCount, unk: unkCount })) + '</span>';
-                    // Inserisci prima del primo .dns-record (o all'inizio se non c'è)
+                    // Insert before the first .dns-record (or at the start if there is none)
                     const firstRecord = container.querySelector('.dns-record');
                     if (firstRecord) container.insertBefore(summary, firstRecord);
                     else container.insertBefore(summary, container.firstChild);
@@ -437,9 +437,9 @@
                         + '<div class="small text-muted mt-1">' + escHtml(t('dns.dkimNotYetVerified')) + '</div></div>';
                     if (rotateBtn) rotateBtn.disabled = false;
                     if (verifyBtn) verifyBtn.disabled = false;
-                    // DKIM già configurato: il bottone "Genera Chiavi DKIM" deve essere NASCOSTO/disabilitato
-                    // perché sovrascriverebbe la chiave attiva senza il workflow di rotazione (no grace period).
-                    // Per cambiare chiave su un dominio già configurato, USARE "Avvia rotazione chiave".
+                    // DKIM already configured: the "Generate DKIM keys" button must be HIDDEN/disabled
+                    // because it would overwrite the active key without the rotation workflow (no grace period).
+                    // To change the key on an already configured domain, USE "Start key rotation".
                     if (generateBtn) {
                         generateBtn.style.display = 'none';
                         generateBtn.disabled = true;
@@ -448,12 +448,12 @@
                     status.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2" aria-hidden="true"></i>' + escHtml(t('dns.dkimMissing')) + '<br><small class="text-muted">' + escHtml(t('dns.dkimMissingHint')) + '</small></div>';
                     if (rotateBtn) rotateBtn.disabled = true;
                     if (verifyBtn) verifyBtn.disabled = true;
-                    // DKIM mai configurato: SOLO ora il "Genera Chiavi DKIM" ha senso (setup iniziale)
+                    // DKIM never configured: ONLY now does "Generate DKIM keys" make sense (initial setup)
                     if (generateBtn) {
                         generateBtn.style.display = '';
                         generateBtn.disabled = false;
                     }
-                    // Nascondi anche i box timeline se non c'è DKIM
+                    // Also hide the timeline boxes if there is no DKIM
                     const tl = document.getElementById('dkimRotationTimeline');
                     if (tl) tl.classList.add('d-none');
                 }
@@ -464,16 +464,16 @@
             });
         }
 
-        // ===== Rotazione programmata =====
+        // ===== Scheduled rotation =====
         let dkimSchedulePresets = [];
 
-        // Parsing tollerante per timestamp del server.
-        // Numero (epoch ms) → unambiguo, preferito quando disponibile.
-        // ISO 8601 con Z o offset → parsato come UTC.
-        // Fallback legacy "yyyy-MM-dd HH:mm:ss" senza TZ → assunto ora locale.
+        // Tolerant parsing of the server's timestamps.
+        // Number (epoch ms) -> unambiguous, preferred when available.
+        // ISO 8601 with Z or offset -> parsed as UTC.
+        // Legacy fallback "yyyy-MM-dd HH:mm:ss" without TZ -> assumed to be local time.
         function parseTs(s) {
             if (s == null || s === '') return null;
-            // Numero o stringa numerica = epoch milliseconds
+            // Number or numeric string = epoch milliseconds
             if (typeof s === 'number') {
                 const d = new Date(s);
                 return isNaN(d.getTime()) ? null : d;
@@ -492,8 +492,8 @@
             return isNaN(d.getTime()) ? null : d;
         }
 
-        // Wrapper: preferisce data._ms (epoch) se presente, altrimenti data[key].
-        // Uso: pickTs(data, 'last_rotation_at') → cerca data.last_rotation_at_ms, poi data.last_rotation_at.
+        // Wrapper: prefers data._ms (epoch) if present, otherwise data[key].
+        // Usage: pickTs(data, 'last_rotation_at') -> looks for data.last_rotation_at_ms, then data.last_rotation_at.
         function pickTs(obj, key) {
             if (!obj) return null;
             const ms = obj[key + '_ms'];
@@ -501,7 +501,7 @@
             return parseTs(obj[key]);
         }
 
-        // Tempo relativo nella lingua della pagina: "3 ore fa", "tra 27 giorni", "3 hours ago"
+        // Relative time in the page's language: `3 ore fa`, `tra 27 giorni`, "3 hours ago"
         function formatRelativeTime(date) {
             if (!date) return '';
             const sec = Math.round((date.getTime() - Date.now()) / 1000);
@@ -515,34 +515,34 @@
             return rtf.format(Math.round(sec / (86400 * 365)), 'year');
         }
 
-        // Data e ora nella lingua della pagina, nel fuso di chi guarda: "15 mag 2026, 16:08"
+        // Date and time in the page's language, in the viewer's time zone: `15 mag 2026, 16:08`
         function formatPanelDate(date) {
             if (!date) return '';
             return date.toLocaleString(window.I18N_LANG, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
         }
 
-        // Aggiorna i due box prominenti "Ultima/Prossima rotazione"
-        // Lo scheduler vive dentro il server web del pannello. Dire "gira mentre il pannello
-        // e' acceso" e' un avvertimento generico che scarica su chi legge il compito di andare
-        // a controllare da un'altra parte; il pannello quel dato ce l'ha e puo' dirlo.
+        // Updates the two prominent boxes "Last/Next rotation"
+        // The scheduler lives inside the panel's web server. Saying "it runs while the panel
+        // is on" is a generic warning that hands the reader the task of going to check
+        // somewhere else; the panel has that information and can say it.
         function autoStartSentence(data) {
             if (data.auto_start === true)
                 return escHtml(t('dns.autostartYes'));
             if (data.auto_start === false)
                 return '<span class="text-warning">' + escHtml(t('dns.autostartNo')) + '</span>';
-            // Il campo non e' arrivato: si dice quel che si sa, senza inventare un verdetto.
+            // The field did not arrive: say what is known, without inventing a verdict.
             return escHtml(t('dns.autostartUnknown'));
         }
 
-        // Com'e' messa la prossima rotazione, decisa in un posto solo.
+        // How the next rotation stands, decided in a single place.
         //
-        // Esiste perche' la stessa domanda veniva risposta due volte nella stessa scheda: il
-        // riquadro in alto e la riga di riepilogo qui sotto. Corretto il primo, il secondo ha
-        // continuato ad annunciare "prossima rotazione prevista" una data del 13 agosto mentre
-        // una rotazione era gia' in corso. Due risposte alla stessa domanda divergono sempre:
-        // quella che si guarda meno resta indietro.
+        // It exists because the same question was answered twice in the same card: the
+        // box at the top and the summary line below. Once the first was fixed, the second
+        // kept announcing "next rotation due" with a date of 13 August while
+        // a rotation was already in progress. Two answers to the same question always diverge:
+        // the one that is looked at less falls behind.
         //
-        // Ritorna: 'in_progress' | 'dovuta' | 'programmata' | 'disattivata' | 'mai'
+        // Returns: 'in_progress' | 'due' | 'scheduled' | 'disabled' | 'never'
         function nextRotationStatus(data) {
             if (data.rotation_state) return 'in_progress';
             if (!(data.interval_days > 0)) return 'disabled';
@@ -561,7 +561,7 @@
             }
             wrap.classList.remove('d-none');
 
-            // DIAGNOSTICA: confronta clock server vs browser. Skew > 5 min = problema reale.
+            // DIAGNOSTICS: compare server vs browser clock. Skew > 5 min = real problem.
             if (data.server_now_ms) {
                 const skewMs = data.server_now_ms - Date.now();
                 if (Math.abs(skewMs) > 5 * 60 * 1000) {
@@ -570,9 +570,9 @@
                 }
             }
 
-            // Ultima rotazione: il "now" di riferimento è il SERVER (server_now_ms se disponibile),
-            // non il browser. Questo evita che skew di clock tra server e browser facciano
-            // sembrare la rotazione "nel futuro".
+            // Last rotation: the reference "now" is the SERVER's (server_now_ms if available),
+            // not the browser's. This keeps clock skew between server and browser from making
+            // the rotation look "in the future".
             const referenceNowMs = data.server_now_ms || Date.now();
             const lastTs = pickTs(data, 'last_rotation_at');
             if (lastTs) {
@@ -603,14 +603,14 @@
                     '<div class="small text-muted">' + escHtml(t('dns.noRotation')) + '</div>';
             }
 
-            // Prossima rotazione (calcolata se schedule attivo)
+            // Next rotation (computed if the schedule is active)
             const nextTs = pickTs(data, 'next_rotation_at');
             const interval = data.interval_days || 0;
-            // Una rotazione GIA' in corso ha la precedenza su qualunque data calcolata: dire
-            // "dovuta, parte al prossimo controllo" mentre la chiave nuova e' gia' pubblicata
-            // e' promettere al futuro una cosa gia' accaduta — ed e' esattamente cio' che
-            // questo riquadro faceva. La data prossima tornera' ad avere senso a rotazione
-            // conclusa, quando "ultima rotazione" sara' quella nuova.
+            // A rotation ALREADY in progress takes precedence over any computed date: saying
+            // "due, starts at the next check" while the new key is already published
+            // is promising for the future something that has already happened, and that is
+            // exactly what this box did. The next date will make sense again once the rotation
+            // has finished, when "last rotation" is the new one.
             const when = nextRotationStatus(data);
             if (when === 'in_progress') {
                 const steps = {
@@ -630,11 +630,11 @@
                     '<div class="small text-muted">' + escHtml(t('dns.autoOff')) + '</div>';
             } else if (nextTs) {
                 if (when === 'due') {
-                    // Una data passata sotto l'etichetta "Prossima rotazione", con un bollino
-                    // rosso e nient'altro, si legge come "il pannello sa di essere in ritardo e
-                    // non fa niente". Non e' cosi': lo scheduler confronta (adesso - ultima)
-                    // con l'intervallo, quindi una scadenza passata e' gia' "dovuta" e parte al
-                    // primo controllo. Quello che mancava non era il meccanismo, era dirlo.
+                    // A past date under the label "Next rotation", with a red
+                    // badge and nothing else, reads as "the panel knows it is late and
+                    // does nothing". That is not so: the scheduler compares (now - last)
+                    // with the interval, so a past due date is already "due" and starts at
+                    // the first check. What was missing was not the mechanism, it was saying so.
                     nextEl.innerHTML = '<strong>' + escHtml(t('dns.due')) + '</strong> '
                         + '<span class="badge bg-warning text-dark ms-1">' + escHtml(t('dns.nextCheck')) + '</span>'
                         + '<div class="small text-muted">' + escHtml(t('dns.dueWas', { date: formatPanelDate(nextTs), rel: formatRelativeTime(nextTs), days: interval })) + ' '
@@ -663,11 +663,11 @@
                     info.innerHTML = '<span class="text-danger">' + escapeHtmlBl(data.error || t('common.errorShort')) + '</span>';
                     return;
                 }
-                // Aggiorna i due box prominenti
+                // Update the two prominent boxes
                 renderRotationTimeline(data, true);
                 dkimSchedulePresets = data.presets || [];
                 const cur = data.interval_days || 0;
-                // Popola la dropdown con i preset + l'opzione "Custom"
+                // Fill the dropdown with the presets + the "Custom" option
                 const sel = document.getElementById('dkimSchedulePreset');
                 let optionsHtml = '';
                 let matched = false;
@@ -676,10 +676,10 @@
                     if (isSel) matched = true;
                     optionsHtml += '<option value="' + escHtml(p.days) + '"' + (isSel ? ' selected' : '') + '>' + escapeHtmlBl(p.label) + (p.days > 0 ? ' ' + escHtml(tn('dns.daysParen', p.days)) : '') + '</option>';
                 });
-                // Custom: se cur > 0 ma non corrisponde a nessun preset, selezioniamo custom
+                // Custom: if cur > 0 but matches no preset, we select custom
                 optionsHtml += '<option value="custom"' + (!matched && cur > 0 ? ' selected' : '') + '>' + escHtml(t('dns.customOption')) + '</option>';
                 sel.innerHTML = optionsHtml;
-                // Mostra/nascondi campo custom
+                // Show/hide the custom field
                 if (!matched && cur > 0) {
                     document.getElementById('dkimScheduleCustomWrap').style.display = '';
                     document.getElementById('dkimScheduleCustomDays').value = cur;
@@ -687,20 +687,20 @@
                     document.getElementById('dkimScheduleCustomWrap').style.display = 'none';
                     document.getElementById('dkimScheduleCustomDays').value = '';
                 }
-                // Riepilogo testuale
+                // Text summary
                 let html = '';
                 if (cur === 0) {
                     html = '<span class="text-muted"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.autoOffLong')) + '</span>';
                 } else {
                     html = '<i class="fas fa-clock text-primary me-1" aria-hidden="true"></i>' + escHtml(tn('dns.autoEvery', cur)) + ' ';
-                    // Le date qui si formattano come nei due riquadri sopra.
+                    // The dates here are formatted as in the two boxes above.
                     //
-                    // Prima questa riga stampava il timestamp grezzo in UTC mentre i riquadri
-                    // mostravano l'ora locale: lo STESSO istante appariva come "14 ago 2026
-                    // 00:13" sopra e "2026-08-13T22:13:41Z" sotto. Non e' un errore di calcolo,
-                    // ma chi legge vede due date diverse a due righe di distanza e comincia a
-                    // non fidarsi — e ha ragione a non fidarsi, perche' non ha modo di sapere
-                    // che una delle due e' UTC.
+                    // Before, this line printed the raw timestamp in UTC while the boxes
+                    // showed local time: the SAME instant appeared as `14 ago 2026 00:13`
+                    // above and "2026-08-13T22:13:41Z" below. It is not a calculation error,
+                    // but whoever reads sees two different dates two lines apart and starts
+                    // not to trust them, and is right not to, because there is no way to
+                    // know that one of the two is UTC.
                     const lastHere = pickTs(data, 'last_rotation_at');
                     const nextHere = pickTs(data, 'next_rotation_at');
                     if (lastHere) {
@@ -710,7 +710,7 @@
                     } else {
                         html += '<span class="text-warning">' + escHtml(t('dns.noRotationYet')) + '</span> ';
                     }
-                    // Stessa domanda, stessa risposta del riquadro qui sopra.
+                    // Same question, same answer as the box above.
                     const whenHere = nextRotationStatus(data);
                     if (whenHere === 'in_progress') {
                         html += escHtml(t('dns.alreadyRunning'))
@@ -722,8 +722,8 @@
                     } else if (data.next_rotation_at) {
                         html += escHtml(t('dns.nextAt', { date: nextHere ? formatPanelDate(nextHere) : data.next_rotation_at }));
                     }
-                    // Il flag arriva con la risposta; la globale resta solo come ripiego per
-                    // non cambiare comportamento se il campo mancasse.
+                    // The flag arrives with the response; the global remains only as a fallback so as
+                    // not to change behavior if the field were missing.
                     const cfHere = (data.cloudflare_configured !== undefined)
                         ? !!data.cloudflare_configured : cloudflareConfigured;
                     if (!cfHere) {
@@ -802,11 +802,11 @@
         }
 
 
-        // ---------- DKIM: come stanno tutti i domini ----------
-        // Esiste perche' la scheda per singolo dominio non risponde alla domanda "come
-        // stanno messi tutti?": per saperlo si dovevano selezionare i domini uno per uno e
-        // tenere a mente i numeri. Le cose che contano — un dominio senza chiave, uno fermo
-        // da mesi mentre gli altri ruotano — si vedono solo mettendoli in fila.
+        // ---------- DKIM: how all the domains stand ----------
+        // It exists because the card for a single domain does not answer the question "how
+        // do they all stand?": to know, one had to select the domains one by one and
+        // keep the numbers in mind. The things that matter (a domain without a key, one stuck
+        // for months while the others rotate) can be seen only by putting them in a row.
         async function dkSummary() {
             const el = document.getElementById('dkSummaryBody');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('dns.sumAsking'));
@@ -829,8 +829,8 @@
             }
 
             const lines = r.domains || [];
-            // Il titolo dice la cosa peggiore per prima: un dominio senza chiave non deve
-            // finire in fondo a un elenco che comincia con "tutto bene".
+            // The title says the worst thing first: a domain without a key must not
+            // end up at the bottom of a list that starts with "all good".
             let cls = 'success', textValue = t('dns.sumAllMatch');
             if (r.withoutKey > 0) {
                 cls = 'danger';
@@ -856,14 +856,14 @@
                 else if (d.state === 'not_matching')
                     state = '<span class="badge bg-danger">' + escHtml(t('dns.otherKey')) + '</span>';
                 else
-                    // "Non ho potuto controllare" non e' "va bene", e non e' nemmeno "e' rotto".
+                    // "I could not check" is not "all good", and it is not "broken" either.
                     state = '<span class="badge bg-secondary">' + escHtml(t('dns.unverifiable')) + '</span>';
 
                 let ageText = '<span class="text-muted">&mdash;</span>';
                 if (d.daysSinceLast !== undefined && d.daysSinceLast !== null) {
                     const g = d.daysSinceLast;
-                    // Oltre l'intervallo scelto la chiave e' in ritardo; senza intervallo il
-                    // riferimento e' 90 giorni, la cadenza che il pannello consiglia.
+                    // Beyond the chosen interval the key is late; without an interval the
+                    // reference is 90 days, the cadence the panel recommends.
                     const limit = (d.intervalDays && d.intervalDays > 0) ? d.intervalDays : 90;
                     ageText = escHtml(tn('dns.days', g))
                         + (g > limit ? ' <span class="badge bg-warning text-dark">' + escHtml(t('dns.overLimit', { limit: limit })) + '</span>' : '');

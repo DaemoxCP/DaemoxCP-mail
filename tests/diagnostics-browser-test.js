@@ -1,4 +1,4 @@
-// Diagnostics, "Check everything", on the real panel of the TEST VM (reperto 199): one button runs every read-only
+// Diagnostics, "Check everything", on the real panel of the TEST VM (finding 199): one button runs every read-only
 // check, the list puts first what needs a look, each item has its state in words and at most one button; what is fine
 // is closed below. Read only: no item's button is pressed here except "Open the details", which only reads too.
 //

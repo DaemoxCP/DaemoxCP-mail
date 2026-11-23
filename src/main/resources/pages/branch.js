@@ -1,7 +1,7 @@
 
-        // ---------- ramo dei pacchetti: quarterly o latest (RamoPkg sul server) ----------
-        // La scheda si legge da sola all'apertura: pkg -vv non va in rete e risponde subito.
-        // Cambiare ramo invece scarica il catalogo nuovo, quindi e' un lavoro con il suo registro.
+        // ---------- package branch: quarterly or latest (RamoPkg on the server) ----------
+        // The card reads itself on opening: pkg -vv does not go to the network and answers at once.
+        // Changing branch instead downloads the new catalog, so it is a job with its own log.
         let branchData = null, branchTarget = '';
 
         function branchEl(tag, cssClass, textValue) {
@@ -13,7 +13,7 @@
 
         async function branchStatus() {
             const box = document.getElementById('branch-body');
-            if (!box) return;   // la pagina della diagnostica usa lo stesso script, senza il ramo
+            if (!box) return;   // the diagnostics page uses the same script, without the branch
             box.textContent = t('up.readingPkg');
             document.getElementById('branch-preview').textContent = '';
             const r = await updApi('branch_status');
@@ -135,8 +135,9 @@
             line.append(inp, via, cancel);
             card.appendChild(line);
             box.appendChild(card);
-            // Il fuoco all'inizio dell'anteprima, senza scorrere: si legge dall'alto, e il campo per confermare si
-            // raggiunge col Tab. Prima andava al campo in fondo, e la pagina saltava giu' di un migliaio di pixel.
+            // Focus at the start of the preview, without scrolling: it is read from the top, and the field to
+            // confirm is reached with Tab. Before, it went to the field at the bottom, and the page jumped down
+            // about a thousand pixels.
             card.setAttribute('tabindex', '-1');
             card.focus({ preventScroll: true });
         }
@@ -173,8 +174,8 @@
                     const ok = s.job.status === 'completed';
                     const done = branchEl('div', 'alert ' + (ok ? 'alert-success' : 'alert-danger') + ' py-2 small mb-0',
                         ok ? (s.job.result || t('up.branchChanged')) : (s.job.errorMessage || t('up.branchChangeFailed')));
-                    // Il passo dopo (reperto 187): il catalogo nuovo cambia cosa c'e' da aggiornare, e la scheda
-                    // in cima lo rilegge e lo dice, coi suoi pulsanti.
+                    // The next step (finding 187): the new catalog changes what there is to update, and the card
+                    // at the top reads it again and says so, with its buttons.
                     if (ok && typeof ucShow === 'function') {
                         const next = branchEl('button', 'btn btn-sm btn-outline-primary ms-2 touch-target', t('uc.afterBranch'));
                         next.type = 'button';

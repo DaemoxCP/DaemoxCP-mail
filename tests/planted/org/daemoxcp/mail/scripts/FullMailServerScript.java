@@ -4,7 +4,7 @@ package org.daemoxcp.mail.scripts;
  * The shadow class of FullMailServerScript for ReinstallJobTest: same interface, planted script
  * (phase 1, twelve one-second steps, then a mark). Put BEFORE the jar in the classpath, the real
  * panel uses it, the detached reinstallation included (Main --reinstall), which always rewrites the
- * script from "its jar" just before running it (InstallScripts, reperto 169). It is not in tests/:
+ * script from "its jar" just before running it (InstallScripts, finding 169). It is not in tests/:
  * it is compiled apart (tests/planted), only for the tests that want it.
  */
 public class FullMailServerScript {

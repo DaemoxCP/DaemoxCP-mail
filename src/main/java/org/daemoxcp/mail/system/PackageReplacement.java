@@ -15,52 +15,52 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Un aggiornamento che toglie un pacchetto: e' una sostituzione innocua, o no?
+ * An upgrade that removes a package: is it a harmless replacement, or not?
  *
- * <p>Il pannello rifiuta i piani che tolgono pacchetti: un aggiornamento che toglie qualcosa da
- * un server di posta va deciso da chi sa chi lo usa. Ma i port a volte sostituiscono una
- * libreria con un'altra che installa gli stessi file (a fine ottobre 2026 lmdb con lmdb0, per
- * Postfix), e allora aggiornare vuol dire togliere la vecchia: il rifiuto teneva Postfix fermo
- * finche' qualcuno non faceva lo scambio a mano. Il committente (31/10/2026): il pannello toglie
- * da solo il pacchetto vecchio quando dimostra che e' innocuo, e altrimenti non lo toglie.
+ * <p>The panel refuses plans that remove packages: an upgrade that removes something from a
+ * mail server must be decided by someone who knows who uses it. But ports sometimes replace a
+ * library with another one that installs the same files (at the end of October 2026 lmdb with
+ * lmdb0, for Postfix), and then upgrading means removing the old one: the refusal kept Postfix
+ * stuck until someone did the swap by hand. The owner (2026-10-31): the panel removes the old
+ * package by itself when it proves that it is harmless, and otherwise does not remove it.
  *
- * <p>Innocuo vuol dire tutte e quattro:
+ * <p>Harmless means all four:
  * <ol>
- *   <li>un pacchetto del piano prende il suo posto: pkg stesso lo dice, con la riga
- *       «X conflicts with Y on /percorso» (installano lo stesso file);</li>
- *   <li>nessun pacchetto installato che dipende da lui resta: o il piano lo aggiorna a una
- *       versione che non ne ha piu' bisogno (lo dice il catalogo), o non c'e';</li>
- *   <li>lo stesso per chi usa le sue librerie (pkg shlib);</li>
- *   <li>se legge un tipo di mappa di Postfix (lmdb, cdb, e Berkeley DB se fosse di pacchetto),
- *       ogni mappa di quel tipo si puo' rigenerare uguale a prima: dopo l'aggiornamento
- *       PostfixMaps la rigenera, perche' la libreria nuova potrebbe non leggere i file della
- *       vecchia.</li>
+ *   <li>a package of the plan takes its place: pkg itself says so, with the line
+ *       "X conflicts with Y on /path" (they install the same file);</li>
+ *   <li>no installed package that depends on it remains: either the plan upgrades it to a
+ *       version that no longer needs it (the catalogue says so), or there is none;</li>
+ *   <li>the same for whoever uses its libraries (pkg shlib);</li>
+ *   <li>if it reads a Postfix map type (lmdb, cdb, and Berkeley DB if it came from a package),
+ *       every map of that type can be regenerated identical to before: after the upgrade
+ *       PostfixMaps regenerates it, because the new library might not read the files of the
+ *       old one.</li>
  * </ol>
  *
- * <p>Misurato sulla VM il 31/10/2026 con pacchetti finti e librerie ELF vere: nel caso innocuo
- * pkg toglie la libreria vecchia e il programma gira; se un altro programma la usa ancora e la
- * dichiara come dipendenza, pkg toglie IN SILENZIO anche quel programma; se la usa senza
- * dichiararla, pkg toglie la libreria e lascia il programma ROTTO («Shared object not found»).
+ * <p>Measured on the VM on 2026-10-31 with fake packages and real ELF libraries: in the harmless
+ * case pkg removes the old library and the program runs; if another program still uses it and
+ * declares it as a dependency, pkg SILENTLY removes that program too; if it uses it without
+ * declaring it, pkg removes the library and leaves the program BROKEN ("Shared object not found").
  *
- * <p>Se qualcosa che resta installato sparirebbe o smetterebbe di funzionare, se una mappa di
- * Postfix non si potrebbe rigenerare uguale a prima, o se non si e' potuto misurare, il pannello
- * non la esegue (il committente, 31/10/2026: «questa cosa e' molto pericolosa»). Non c'e' modo di
- * confermarla: l'unico caso che si confermava, scrivendo il nome del pacchetto, era il formato dei
- * dati in uso, e adesso lo sistema il pannello da solo rigenerando le mappe (PostfixMaps).
+ * <p>If something that stays installed would disappear or stop working, if a Postfix map could
+ * not be regenerated identical to before, or if it could not be measured, the panel does not
+ * execute it (the owner, 2026-10-31: "this thing is very dangerous"). There is no way to confirm
+ * it: the only case that could be confirmed, by typing the package name, was the format of the
+ * data in use, and now the panel fixes that by itself by regenerating the maps (PostfixMaps).
  */
 final class PackageReplacement {
 
     private PackageReplacement() {}
 
-    /** Che fine fa, secondo il piano, un pacchetto che usa quello che si toglie. */
+    /** What happens, according to the plan, to a package that uses the one being removed. */
     enum Use { UPGRADED_AWAY, REMOVED_TOO, STAYS }
 
-    /** I fatti su una rimozione: raccolti dal sistema da {@link #facts}, scritti a mano nelle prove. */
+    /** The facts about a removal: gathered from the system by {@link #facts}, written by hand in the tests. */
     record Facts(String name, String version, String replacedBy, String sharedFile,
                  Map<String, Use> dependents, Map<String, Map<String, Use>> libraryUsers,
                  String dataFormat, List<String> dataUses, String error) {}
 
-    /** Il giudizio su una rimozione: innocua (safe) o no, con le prove dell'una e dell'altra cosa. */
+    /** The judgement on a removal: harmless (safe) or not, with the evidence for the one and the other. */
     record Verdict(String name, String version, boolean safe, String replacedBy,
                    List<String> evidence, List<String> problems) {
         JSONObject toJson() {
@@ -70,19 +70,19 @@ final class PackageReplacement {
         }
     }
 
-    /** Il giudizio, dai soli fatti: nessun comando qui dentro. */
+    /** The judgement, from the facts alone: no command in here. */
     static Verdict judge(Facts f) {
         List<String> ok = new ArrayList<>(), no = new ArrayList<>();
         if (f.error() != null && !f.error().isEmpty()) {
             no.add(I18n.tr("server.replace.notMeasured", Map.of("err", f.error())));
             return new Verdict(f.name(), f.version(), false, "", ok, no);
         }
-        // 1. qualcuno prende il suo posto
+        // 1. something takes its place
         if (f.replacedBy() == null || f.replacedBy().isEmpty())
             no.add(I18n.tr("server.replace.notReplaced"));
         else
             ok.add(I18n.tr("server.replace.replacedBy", Map.of("by", f.replacedBy(), "file", f.sharedFile())));
-        // 2. chi dipende da lui
+        // 2. what depends on it
         if (f.dependents().isEmpty()) ok.add(I18n.tr("server.replace.noDependents"));
         f.dependents().forEach((p, use) -> (use == Use.UPGRADED_AWAY ? ok : no).add(I18n.tr(
                 switch (use) {
@@ -90,7 +90,7 @@ final class PackageReplacement {
                     case REMOVED_TOO -> "server.replace.dependentRemoved";
                     case STAYS -> "server.replace.dependentStays";
                 }, Map.of("p", p))));
-        // 3. chi usa le sue librerie
+        // 3. what uses its libraries
         if (f.libraryUsers().isEmpty()) ok.add(I18n.tr("server.replace.noLibraries"));
         f.libraryUsers().forEach((lib, users) -> users.forEach((p, use) -> (use == Use.UPGRADED_AWAY ? ok : no).add(I18n.tr(
                 switch (use) {
@@ -98,27 +98,29 @@ final class PackageReplacement {
                     case REMOVED_TOO -> "server.replace.libraryRemoved";
                     case STAYS -> "server.replace.libraryStays";
                 }, Map.of("p", p, "lib", lib)))));
-        // 4. le mappe di Postfix che legge: si rigenerano uguali a prima, o si perderebbero
+        // 4. the Postfix maps it reads: they are regenerated identical to before, or they would be lost
         if (f.dataFormat() != null && !f.dataFormat().isEmpty()) {
             if (f.dataUses().isEmpty())
                 ok.add(I18n.tr("server.replace.dataUnused", Map.of("fmt", f.dataFormat())));
             else
                 no.add(I18n.tr("server.replace.dataUsed", Map.of("fmt", f.dataFormat(), "uses", String.join(", ", f.dataUses()))));
         }
-        // Ogni problema qui vuol dire che qualcosa sparisce, si rompe o si perde: non si toglie.
+        // Every problem here means that something disappears, breaks or is lost: it is not removed.
         return new Verdict(f.name(), f.version(), no.isEmpty(),
                 f.replacedBy() == null ? "" : f.replacedBy(), ok, no);
     }
 
-    /* ===================================================================
-     * I fatti, dal sistema
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The facts, from the system
+     * ===================================================================
+     */
 
     /**
-     * «X-v [repo] conflicts with Y-w [installed] on /percorso», come lo scrive pkg dopo aver
-     * scaricato. Il nome del repository fra parentesi c'e' coi repository veri e non con quelli
-     * locali: la riga di lmdb del 24/10/2026 e' «lmdb0-0.9.35 [FreeBSD-ports] conflicts with
-     * lmdb-1.0.2,1 [installed] on /usr/local/bin/mdb_copy».
+     * "X-v [repo] conflicts with Y-w [installed] on /path", as pkg writes it after downloading.
+     * The repository name in brackets is there with real repositories and not with local ones:
+     * the lmdb line of 2026-10-24 is "lmdb0-0.9.35 [FreeBSD-ports] conflicts with
+     * lmdb-1.0.2,1 [installed] on /usr/local/bin/mdb_copy".
      */
     private static final Pattern CONFLICT = Pattern.compile(
             "^\\s*-\\s+(\\S+)(?:\\s+\\[[^\\]]*\\])?\\s+conflicts with\\s+(\\S+)(?:\\s+\\[[^\\]]*\\])?\\s+on\\s+(\\S+)\\s*$");
@@ -134,7 +136,7 @@ final class PackageReplacement {
         return out;
     }
 
-    /** Il nome da "nome-versione": la versione e' dopo l'ultimo trattino (postfix-mysql-3.11.7_3,1). */
+    /** The name from "name-version": the version is after the last hyphen (postfix-mysql-3.11.7_3,1). */
     static String nameOf(String nameVersion) {
         int i = nameVersion.lastIndexOf('-');
         return i > 0 ? nameVersion.substring(0, i) : nameVersion;
@@ -142,7 +144,7 @@ final class PackageReplacement {
 
     private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9._+-]{1,100}");
 
-    /** I giudizi su tutte le rimozioni di un piano, nell'ordine del piano. */
+    /** The judgements on all the removals of a plan, in the plan's order. */
     static JSONArray judgePlan(JSONObject plan) {
         JSONArray out = new JSONArray();
         JSONArray changes = plan == null ? null : plan.optJSONArray("changes");
@@ -190,14 +192,14 @@ final class PackageReplacement {
             libraryUsers.put(lib, users);
         }
 
-        // Le mappe di Postfix che le sue librerie leggono e che dopo non si rigenererebbero uguali.
+        // The Postfix maps that its libraries read and that afterwards would not be regenerated identical.
         Set<String> types = PostfixMaps.typesReadBy(name);
         List<String> lost = new ArrayList<>();
         PostfixMaps.unrebuildable(types).forEach((table, why) -> lost.add(table + ": " + why));
         return new Facts(name, version, by, file, dependents, libraryUsers, String.join("/", types), lost, "");
     }
 
-    /** Il pacchetto p, che usava quello da togliere: lo aggiorna il piano a una versione che non ne ha bisogno? */
+    /** The package p, which used the one to be removed: does the plan upgrade it to a version that does not need it? */
     private static Use use(String p, Map<String, String> planned, java.util.function.BooleanSupplier newStillNeeds) {
         String t = planned.get(p);
         if ("remove".equals(t)) return Use.REMOVED_TOO;

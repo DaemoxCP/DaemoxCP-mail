@@ -103,7 +103,7 @@ public class LockMarksTest {
             System.out.println("  --   real pkg: pkg is not on this machine, skipped");
         } else {
             onRealPkg();
-            // --- 5. No locked package (reperto 173): it unlocks everything, only on a clone ---
+            // --- 5. No locked package (finding 173): it unlocks everything, only on a clone ---
             if ("yes".equals(System.getProperty("e2e.vm"))) withNothingLocked();
             else System.out.println("  --   no locked package: it needs -De2e.vm=yes (it unlocks everything, on a clone)");
         }

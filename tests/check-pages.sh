@@ -21,7 +21,7 @@ set -e
 # the Java programs run: run.sh of the series writes them in pages-panel), without building anything:
 #   sh tests/check-pages.sh <folder with the pages, assets/ and i18n/>
 # Only the temporary folder made here is removed at the end: a folder given as argument is someone else's, and until
-# 08/11/2026 it was deleted too (reperto 196).
+# 08/11/2026 it was deleted too (finding 196).
 OWN_DIR=
 if [ -n "${1:-}" ]; then
     DIR=$1
@@ -52,7 +52,7 @@ for f in "$DIR"/*.js; do
 done
 # The script files. Since the strict CSP (no inline script) the JavaScript of every page is in the files the page
 # loads, /assets/*.js and /i18n/*.js: what the loop above extracts from the pages is empty, and it answered "valid"
-# on every page while /account and /settings did not load their script at all (reperto 191). A file that does not
+# on every page while /account and /settings did not load their script at all (finding 191). A file that does not
 # parse is named with the pages that load it.
 assets=0
 for f in $(find "$DIR/assets" "$DIR/i18n" -name '*.js' 2>/dev/null | sort); do
@@ -68,7 +68,7 @@ done
 if [ "$assets" -eq 0 ]; then echo "  ERROR    no script file under $DIR/assets: the pages load nothing I can check"; ko=$((ko+1)); fi
 tot=$((tot+assets))
 # No browser dialog: confirmations are the panel's window (panelAsk, panelConfirm) and messages its notices (panelSay),
-# reperto 198. A call to alert(), confirm() or prompt() in a page's script is a fault, named with the file and the
+# finding 198. A call to alert(), confirm() or prompt() in a page's script is a fault, named with the file and the
 # line; window.confirm inside panelAsk (its fallback when a page has no window) is not a call of this kind.
 dialogs=$(python3 - "$DIR" <<'PY'
 import glob, re, sys

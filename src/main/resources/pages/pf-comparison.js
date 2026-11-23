@@ -1,8 +1,8 @@
-        // Confronto fra i ban che Fail2ban dichiara e le tabelle pf che li dovrebbero applicare.
+        // Comparison between the bans that Fail2ban declares and the pf tables that should enforce them.
         //
-        // Le due differenze non sono simmetriche e non vanno mescolate: un indirizzo che sta
-        // solo in Fail2ban e' un ban che non morde, uno che sta solo in pf e' un blocco rimasto
-        // dopo lo sban. Il primo e' un buco, il secondo una scoria.
+        // The two differences are not symmetric and must not be mixed: an address that is
+        // only in Fail2ban is a ban that does not bite, one that is only in pf is a block left
+        // over after the unban. The first is a hole, the second is debris.
         function loadPfComparison() {
             const bodyText = document.getElementById('cpfBody');
             const badge = document.getElementById('cpfBadge');
@@ -28,8 +28,8 @@
 
                 const blindBans = d.unverified_bans || 0;
                 const withoutRule = d.without_rule || 0;
-                // Un ban dichiarato e non verificato pesa piu' di una jail ferma non verificata:
-                // c'e' un indirizzo che qualcuno crede bloccato e nessuno ha controllato.
+                // A declared, unverified ban weighs more than a stopped, unverified jail:
+                // there is an address that someone believes blocked and nobody has checked.
                 if (holes > 0) badge.innerHTML = '<span class="badge bg-danger">' + escHtml(tn('cpf.notApplied', holes)) + '</span>';
                 else if (blindBans > 0) badge.innerHTML = '<span class="badge bg-danger">' + escHtml(tn('cpf.notVerified', blindBans)) + '</span>';
                 else if (withoutRule > 0) badge.innerHTML = '<span class="badge bg-danger">' + escHtml(tn('cpf.noRule', withoutRule)) + '</span>';
@@ -56,25 +56,25 @@
                     const leftovers = j.only_in_pf || [];
                     let outcome;
                     if (!j.read) {
-                        // Non verificata con ban attivi: rosso. Non verificata e ferma: grigio.
+                        // Unverified with active bans: red. Unverified and stopped: grey.
                         const severe = f2b > 0;
                         outcome = '<span class="' + (severe ? 'text-danger' : 'text-muted') + ' small">'
                               + (severe ? '<i class="fas fa-circle-question me-1" aria-hidden="true"></i><strong>' + escHtml(tn('cpf.notVerified', f2b)) + '.</strong> ' : '')
                               + escapeHtml(j.note || t('cpf.notMeasuredOne')) + '</span>';
                         if ((j.ban_commands || []).length > 0)
                             outcome += '<div class="small text-muted mt-1"><code>' + j.ban_commands.map(escapeHtml).join('</code><br><code>') + '</code></div>';
-                        // L'evidenza grezza, aperta a richiesta: cosa risponde fail2ban, cosa ha
-                        // scritto nel log, e quali file definiscono questa jail. Serve a poterla
-                        // leggere e a poterla incollare a qualcun altro senza passare da ssh.
+                        // The raw evidence, opened on request: what fail2ban answers, what it has
+                        // written in the log, and which files define this jail. It is there so that it
+                        // can be read and pasted to someone else without going through ssh.
                         const pieces = [];
                         if (j.actions_output) pieces.push('$ fail2ban-client get ' + j.jail + ' actions\n' + j.actions_output);
                         if (j.log) pieces.push('/var/log/fail2ban.log\n' + j.log);
                         if (j.sections) pieces.push(t('cpf.sections', { jail: j.jail }) + '\n' + j.sections);
                         if (j.dump) pieces.push('$ fail2ban-client --dp   (' + t('cpf.dumpHint') + ')\n' + j.dump);
                         if (pieces.length)
-                            // Aperto, non richiuso dietro un click: questa riga esiste perche' la
-                            // misura NON e' riuscita, e l'evidenza che serve a capire perche' e'
-                            // esattamente cio' che chi guarda deve avere sotto gli occhi.
+                            // Open, not collapsed behind a click: this line exists because the
+                            // measurement did NOT succeed, and the evidence needed to understand why
+                            // is exactly what whoever looks must have in front of their eyes.
                             outcome += '<details class="small mt-2" open><summary>' + escHtml(t('cpf.whatSees')) + '</summary>' +
                                      '<pre class="mt-1 mb-0" data-style="white-space:pre-wrap;max-height:400px;overflow:auto">' +
                                      escapeHtml(pieces.join('\n\n')) + '</pre></details>';

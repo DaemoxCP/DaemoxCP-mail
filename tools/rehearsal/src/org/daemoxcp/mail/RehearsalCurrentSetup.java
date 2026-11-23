@@ -4,14 +4,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Il banco col jar di adesso, dopo InstallFromScratch: quello che un server vero ha in piu',
- * fatto con le funzioni della versione installata. Certificato del pannello, primo
- * amministratore, un dominio con due caselle e lo script di avvio. Come RehearsalOldSetup, ma coi
- * nomi inglesi: quello si compila solo contro il jar dell'11/10. La superficie sulla 443 non c'e':
- * le prove che la usano partono dal banco dell'11/10.
+ * The test bench with the current jar, after InstallFromScratch: what a real server has in addition,
+ * made with the functions of the installed version. Certificate of the panel, first
+ * administrator, a domain with two mailboxes and the start script. Like RehearsalOldSetup, but with
+ * the English names: that one compiles only against the jar of 11 October. The surface on 443 is not
+ * there: the tests that use it start from the test bench of 11 October.
  *
- * Si compila contro il jar installato e si lancia dalla sua cartella (jarPath() e la cartella
- * corrente finiscono nello script di avvio):
+ * It is compiled against the installed jar and launched from its folder (jarPath() and the current
+ * folder end up in the start script):
  *   javac --release 25 -cp daemoxcp-mail.jar -d classes RehearsalCurrentSetup.java
  *   java -cp classes:daemoxcp-mail.jar org.daemoxcp.mail.RehearsalCurrentSetup rehearsal.test
  */
@@ -26,8 +26,8 @@ public class RehearsalCurrentSetup {
         System.out.println("MySQL: " + (err == null ? "connesso" : err));
         System.out.println("amministratore: " + Main.createFirstAdmin("rehearsal-admin", "admin@" + domain, System.out, System.err));
         org.daemoxcp.mail.database.MailDatabase db = Main.mailDatabase;
-        // Le colonne che il pannello web aggiunge all'avvio (SSLMailServer.ensureSchemaUpgrades):
-        // senza, una casella non si crea.
+        // The columns that the web panel adds at startup (SSLMailServer.ensureSchemaUpgrades):
+        // without them, a mailbox cannot be created.
         db.ensureMailboxReceiveEnabledColumn();
         db.ensureMailboxPasswordVaultColumns();
         db.ensureThemeColumn();
@@ -40,7 +40,7 @@ public class RehearsalCurrentSetup {
             q.setString(1, domain);
             try (java.sql.ResultSet rs = q.executeQuery()) { id = rs.next() ? rs.getInt("id") : db.addDomain(domain, "rehearsal"); }
         }
-        // Le credenziali di prova stanno solo qui e in /root/rehearsal/mailboxes, leggibile da root.
+        // The test credentials are only here and in /root/rehearsal/mailboxes, readable by root.
         String[][] boxes = {{"alice@" + domain, "Rehearsal-Alice-2026x", "Alice"}, {"bob@" + domain, "Rehearsal-Bob-2026x", "Bob"}};
         StringBuilder list = new StringBuilder();
         for (String[] b : boxes) {

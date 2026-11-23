@@ -14,26 +14,26 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * POP3 acceso o spento, come sceglie l'amministratore nelle Impostazioni; spento finche' non sceglie
- * (deciso dal committente l'08/11/2026).
+ * POP3 on or off, as the administrator chooses in the Settings; off until they choose
+ * (decided by the owner on 2026-11-08).
  *
- * <p>Misurato sul server vero: negli 8 giorni di registro della posta, 0 accessi POP3 riusciti e da 28 a
- * 149 connessioni al giorno sulle porte 110 e 995 senza nessun login (scansioni e tentativi), mentre IMAP
- * ha centinaia di accessi al giorno. Una porta che nessuno usa e' solo una porta da attaccare: per questo
- * il predefinito e' spento. Chi ha un programma di posta che vuole POP3 lo accende dal pannello.
+ * <p>Measured on the production server: in the 8 days of mail log, 0 successful POP3 logins and from 28 to
+ * 149 connections a day on ports 110 and 995 without any login (scans and attempts), while IMAP
+ * has hundreds of logins a day. A port that nobody uses is just a port to attack: that is why
+ * the default is off. Whoever has a mail program that wants POP3 turns it on from the panel.
  *
- * <p>La scelta sta in panel_settings ({@link #SETTING}, "1" o "0"). Il pannello la applica a Dovecot con
- * la sola riga {@code protocols} di dovecot.conf, quella che scriveva lui: aggiunge o toglie {@code pop3}
- * e nient'altro (i servizi pop3-login, predefiniti o in conf.d, senza il protocollo non partono). Prima
- * prova con doveconf, poi ricarica Dovecot e controlla le porte: spento, 110 e 995 non ascoltano; acceso,
- * ascoltano; IMAP (993) sempre. Se qualcosa non torna rimette il file com'era. Le porte di pf
- * (PfPolicy) e delle regole dei paesi (PfFirewallManager) seguono la stessa scelta.
+ * <p>The choice lives in panel_settings ({@link #SETTING}, "1" or "0"). The panel applies it to Dovecot
+ * through the {@code protocols} line of dovecot.conf alone, the one it used to write: it adds or removes
+ * {@code pop3} and nothing else (the pop3-login services, default or in conf.d, do not start without the
+ * protocol). First it tests with doveconf, then reloads Dovecot and checks the ports: off, 110 and 995 do
+ * not listen; on, they listen; IMAP (993) always. If something does not add up it puts the file back as it
+ * was. The pf ports (PfPolicy) and those of the country rules (PfFirewallManager) follow the same choice.
  */
 public final class Pop3 {
 
     private static final Logger LOGGER = Logger.getLogger(Pop3.class.getName());
 
-    /** La scelta, in panel_settings: "1" acceso, altrimenti spento. */
+    /** The choice, in panel_settings: "1" on, otherwise off. */
     public static final String SETTING = "pop3_enabled";
     static final String DOVECOT_CONF = "/usr/local/etc/dovecot/dovecot.conf";
     static final String DOVECONF = "/usr/local/bin/doveconf";
@@ -41,16 +41,16 @@ public final class Pop3 {
 
     private Pop3() {}
 
-    /** Quello che ha scelto l'amministratore; spento se non ha scelto o il database non risponde. */
+    /** What the administrator chose; off if they have not chosen or the database does not answer. */
     public static boolean wanted() {
         org.daemoxcp.mail.database.MailDatabase db = org.daemoxcp.mail.Main.mailDatabase;
         return db != null && "1".equals(db.getSetting(SETTING, "0"));
     }
 
     /**
-     * dovecot.conf con pop3 acceso o spento nella riga protocols, o null se non c'e' niente da cambiare
-     * (o la riga protocols non c'e', o ce n'e' piu' d'una: allora non e' il file che scriveva il pannello,
-     * o spegnerlo lascerebbe Dovecot senza protocolli).
+     * dovecot.conf with pop3 on or off in the protocols line, or null if there is nothing to change
+     * (either the protocols line is missing, or there is more than one: then it is not the file the
+     * panel used to write, or turning pop3 off would leave Dovecot without protocols).
      */
     static String withPop3(String conf, boolean on) {
         if (conf == null) return null;
@@ -69,7 +69,7 @@ public final class Pop3 {
         return conf.substring(0, start) + prefix + String.join(" ", protocols) + conf.substring(end);
     }
 
-    /** Vero se la porta TCP ascolta, dall'uscita di sockstat -46l -P tcp. */
+    /** True if the TCP port is listening, from the output of sockstat -46l -P tcp. */
     static boolean listens(String sockstat, int port) {
         if (sockstat == null) return false;
         for (String line : sockstat.split("\n")) {
@@ -79,15 +79,15 @@ public final class Pop3 {
         return false;
     }
 
-    /** All'avvio della parte root: Dovecot come la scelta (spento se non c'e'). Al secondo avvio non fa niente. */
+    /** At root part startup: Dovecot as per the choice (off if there is none). On the second startup it does nothing. */
     public static void ensureAtBoot() {
         String problem = align(wanted());
         if (problem != null) LOGGER.warning("[Pop3] " + problem);
     }
 
     /**
-     * La scelta dell'amministratore dalle Impostazioni: la salva, la applica a Dovecot e alle porte di pf.
-     * Null se e' fatto; altrimenti il motivo, e la scelta di prima resta (salvata e applicata).
+     * The administrator's choice from the Settings: saves it, applies it to Dovecot and to the pf ports.
+     * Null if done; otherwise the reason, and the previous choice stays (saved and applied).
      */
     public static synchronized String choose(boolean on) {
         org.daemoxcp.mail.database.MailDatabase db = org.daemoxcp.mail.Main.mailDatabase;
@@ -103,7 +103,7 @@ public final class Pop3 {
         return null;
     }
 
-    /** Dovecot acceso o spento come richiesto. Null se e' gia' cosi', o se e' fatto. */
+    /** Dovecot on or off as requested. Null if it already is, or if it is done. */
     private static synchronized String align(boolean on) {
         try {
             Path conf = Path.of(DOVECOT_CONF);
@@ -143,10 +143,11 @@ public final class Pop3 {
     }
 
     /**
-     * Ricarica, poi 110 e 995 come richiesto e 993 aperta, e acceso il saluto vero di POP3 sulla 110; un restart se il
-     * reload non basta. Sulla 2.4 il reload che accende POP3 non basta mai: le porte si aprono, ma pop3-login muore a
-     * ogni connessione perche' manca la cartella del servizio nuovo (/var/run/dovecot/srv.pop3-login), che Dovecot crea
-     * solo all'avvio (reperto 213). Prima si guardavano solo le porte, e la scheda diceva «aperte» su un POP3 rotto.
+     * Reloads, then 110 and 995 as requested and 993 open, and, when on, the real POP3 greeting on 110; a restart
+     * if the reload is not enough. On 2.4 the reload that turns POP3 on is never enough: the ports open, but
+     * pop3-login dies at every connection because the folder of the new service (/var/run/dovecot/srv.pop3-login)
+     * is missing, and Dovecot creates it only at startup (finding 213). Before, only the ports were checked, and the
+     * tab said "open" on a broken POP3.
      */
     private static boolean reloadAndCheck(boolean on) throws InterruptedException {
         for (String how : new String[]{"reload", "restart"}) {
@@ -159,8 +160,9 @@ public final class Pop3 {
             }
             if (!ports) continue;
             if (!on) return true;
-            // Poche prove brevi: un pop3-login che muore non si riprende da solo, e il restart e' il passo dopo. Con
-            // venti prove da cinque secondi la scheda restava su «Applying» per quasi due minuti.
+            // A few short attempts: a pop3-login that dies does not recover by itself, and the restart
+            // is the next step. With twenty five-second attempts the tab stayed on "Applying" for
+            // almost two minutes.
             for (int i = 0; i < 3; i++) {
                 if (MailProbes.pop3Greeting("127.0.0.1", 110, 2000) == null) return true;
                 Thread.sleep(1000);

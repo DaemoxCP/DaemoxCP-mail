@@ -1,4 +1,4 @@
-// The Sieve dialogs of the Mailboxes page work from the browser (reperto 224), in Chromium against the REAL server
+// The Sieve dialogs of the Mailboxes page work from the browser (finding 224), in Chromium against the REAL server
 // (SieveDialogsE2EServer on the test VM: the Java handlers, the generated pages, the test MySQL and the real
 // SieveGenerator, which writes as root under /var/mail/sieve).
 //
@@ -7,14 +7,14 @@
 // forward sent id where the server reads rule_id. And there was no way to delete a filter at all.
 //
 // PHASE=written (the default), with /var/mail at 1775 as the panel leaves it at start:
-//  1. "Filters" of alice: a new filter (subject contains fattura-224 -> move to INBOX.Fatture). No notice; the filter
-//     is in the list, as a button; alice's rules file on the VM has it, and the seeded forward.
+//  1. "Filters" of alice: a new filter (subject contains `fattura-224` -> move to `INBOX.Fatture`). No notice;
+//     the filter is in the list, as a button; alice's rules file on the VM has it, and the seeded forward.
 //  2. The filter opened from the keyboard (Tab to it, Enter): the dialog shows its name and condition; the condition
-//     changed to bolletta-224 and saved. The rules file has the new one, not the old one.
+//     changed to `bolletta-224` and saved. The rules file has the new one, not the old one.
 //  3. The filter opened again and deleted ("Delete filter", confirmed). Gone from the list and from the rules file.
 //  4. "Forwarding" of alice: the seeded forward deleted. Gone from the list and from the rules file. No notice.
-// PHASE=refused, with /var/mail at FreeBSD's 0775, so root refuses to write any rule (reperto 221): a filter created
-// and a forward deleted each show server.sieve.notWritten on top of the dialog (reperto 223), and the list shows the
+// PHASE=refused, with /var/mail at FreeBSD's 0775, so root refuses to write any rule (finding 221): a filter created
+// and a forward deleted each show server.sieve.notWritten on top of the dialog (finding 223), and the list shows the
 // panel as it is (the filter there, the forward gone).
 // Always: the texts of the language files (it.json, or en.json when the page is in English), no page error, no policy
 // violation. Each phase on a freshly started server (it seeds the forward and clears the filters).

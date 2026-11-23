@@ -3,8 +3,8 @@
 
 An r26 rename made on the text (bloccati -> lockedPackages, sbloccati -> unlockedPackages,
 eseguibile -> runnable, misurato -> measured, haConflitti -> hasConflicts) also hit
-src/main/resources/lang/it.json, and nobody noticed: the panel wrote on the page "Verranno
-unlockedPackages postfix-mysql" and "Il piano non e' runnable". The compiler does not see inside
+src/main/resources/lang/it.json, and nobody noticed: the panel wrote on the page
+`Verranno unlockedPackages postfix-mysql` and `Il piano non e' runnable`. The compiler does not see inside
 a JSON, and no test read those texts. Thirty-eight occurrences, found by chance looking at the
 output of a guided update.
 
@@ -19,13 +19,12 @@ Four checks, three general and one explicit:
      whitelist. It is the general part: the code's names are almost always camelCase, so this
      catches the future ones too.
   4. in it.json, no word from an explicit list of English code names that really ended up
-     there. This is NOT a general net — it is a list, and its limit must be said: there is no
+     there. This is NOT a general net; it is a list, and its limit must be said: there is no
      dictionary here, so a new lowercase English word is caught by nobody. The list grows when
      one is found.
 
 Run from the project root:  python3 tests/check_lang.py
-It runs on the Mac: it reads two files of the repository and does not touch the system.
-"""
+It runs on the Mac: it reads two files of the repository and does not touch the system."""
 import json
 import re
 import sys
@@ -152,11 +151,11 @@ for word, files in sorted(test_sources.items()):
 
 # --- 6. the placeholders the TEXT asks for must be those the CODE passes ---
 #
-# A third side again: `I18n.tr("key", Map.of("reason", ...))` against a text saying {motivo}.
-# The interpolation replaces nothing and the user reads the brace. Measured on 23/10/2026 running
-# the full maintenance on the VM: the log showed "dovecot -> TRATTENUTO: {motivo}". Seven keys,
-# all from the same half-done rename (motivo -> reason, uscita -> output) with the language files
-# left behind. Check 2 did not see them: it.json and en.json BOTH said {motivo}, so they matched
+# A third side again: `I18n.tr("key", Map.of("reason", ...))` against a text saying `{motivo}`.
+# The interpolation replaces nothing and the user reads the brace. Measured on 2026-10-23 running
+# the full maintenance on the VM: the log showed `dovecot -> TRATTENUTO: {motivo}` (HELD). Seven keys,
+# all from the same half-done rename (`motivo` -> reason, `uscita` -> output) with the language files
+# left behind. Check 2 did not see them: it.json and en.json BOTH said `{motivo}`, so they matched
 # each other.
 #
 # The call-site parser takes the strings near the key, so the set of names passed is wider than
@@ -197,7 +196,7 @@ print(f"  texts asking for a placeholder the code does not pass: {without}")
 #
 # Check 6 looks at the Java Map.of. The page passes the placeholders with an object, and a rename
 # of the JSON keys made on the text would change them as if they were keys of the response:
-# t('ad.reportsToFwd', { address: ... }) with the text asking for {indirizzo}. The object's
+# t('ad.reportsToFwd', { address: ... }) with the text asking for `{indirizzo}`. The object's
 # top-level keys are looked at, and they must be among the text's placeholders (tn also has n).
 JS_CALL = re.compile(r"""\b(t|tn|tNodes)\(\s*\\?['"]([A-Za-z0-9_.\-]+)\\?['"]\s*,\s*(?:[^,{}()'"]+,\s*)?\{""")
 js_sources = glob.glob(os.path.join(root, "src/main/resources/pages/*.js")) + \
@@ -263,9 +262,9 @@ for k in absent[:20]:
 #
 # The page translates a server code with a table: ({ consistent: t('up.eConsistent'),
 # absent: t('up.eMissing') })[v] || v. If the code changes in the server and not in the table, the
-# page shows the raw code instead of the text, without errors. Measured on 24/10/2026: the rename
-# of the codes had changed "coerente" -> "consistent" in the server and left the table with
-# coerente, so an Italian read "consistent". A table is an object literal with at least two
+# page shows the raw code instead of the text, without errors. Measured on 2026-10-24: the rename
+# of the codes had changed `coerente` -> `consistent` in the server and left the table with
+# `coerente`, so an Italian read "consistent". A table is an object literal with at least two
 # entries, all of the kind  key: t('...'). Every key must appear as a string literal elsewhere in
 # the code (Java or JavaScript, outside the tables themselves), or as an enum constant (name()
 # sends it out with its name).

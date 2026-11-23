@@ -145,35 +145,35 @@ public class Fail2banManager {
             jail.exists = true;
             jail.enabled = true;
 
-            // Quale porta protegge.
+            // Which port it protects.
             //
-            // Non e' una proprieta' della jail ma dell'AZIONE: fail2ban-client(1) espone
-            // "get <JAIL> actions" e poi "get <JAIL> action <ACT> <proprieta'>". Una jail puo'
-            // avere piu' azioni, ognuna con la sua porta.
+            // It is not a property of the jail but of the ACTION: fail2ban-client(1) exposes
+            // "get <JAIL> actions" and then "get <JAIL> action <ACT> <property>". A jail can
+            // have several actions, each with its own port.
             //
-            // Quando nessuna la dichiara, la casella NON resta vuota: vuoto si legge come
-            // "non protegge niente", mentre con l'azione predefinita il ban vale per
-            // l'indirizzo e non per una porta sola. Si scrive che non e' dichiarata.
+            // When none declares it, the field does NOT stay empty: empty reads as
+            // "protects nothing", while with the default action the ban applies to
+            // the address and not to a single port. It says that it is not declared.
             try {
                 String actions = executeCommand(FAIL2BAN_CLIENT + " get " + jailName + " actions");
                 String queue = actions.contains(":") ? actions.substring(actions.lastIndexOf(':') + 1) : actions;
 
-                // La porta si legge dalla configurazione, non la si chiede a fail2ban.
+                // The port is read from the configuration, it is not asked of fail2ban.
                 //
-                // Il comando "get <jail> action <a> port" NON e' innocuo: l'azione pf non
-                // definisce un'opzione "port" (il suo [Init] ha tablename, block, protocol,
-                // actiontype, allports, multiport e basta), quindi fail2ban solleva
-                // AttributeError e SCRIVE UN ERRORE nel proprio log. Ogni apertura della pagina
-                // ne produceva diversi, e finivano in /var/log/fail2ban.log — che e' il file
-                // sorvegliato dalla jail recidive. Un pannello che per mostrare un dato sporca
-                // il log che un'altra sua parte deve leggere sta creando il problema che poi
-                // dovrebbe diagnosticare.
+                // The command "get <jail> action <a> port" is NOT harmless: the pf action does not
+                // define a "port" option (its [Init] has tablename, block, protocol,
+                // actiontype, allports, multiport and nothing else), so fail2ban raises
+                // AttributeError and WRITES AN ERROR in its own log. Every opening of the page
+                // produced several, and they ended up in /var/log/fail2ban.log -- which is the file
+                // watched by the recidive jail. A panel that, to show a piece of data, dirties
+                // the log that another part of it must read is creating the problem it would then
+                // have to diagnose.
                 String port = portFromConfiguration(jailName);
                 jail.ports = port;
                 jail.declaredPort = !port.isEmpty();
 
-                // Il comando di ban nomina la porta? E' l'unica cosa che dice se quell'elenco
-                // conti qualcosa. Si guarda il comando vero, non il nome dell'azione.
+                // Does the ban command name the port? It is the only thing that tells whether that list
+                // counts for anything. The real command is looked at, not the name of the action.
                 for (String az : queue.split(",")) {
                     String a = az.trim();
                     if (a.isEmpty() || !isValidJailName(a)) continue;
@@ -228,8 +228,8 @@ public class Fail2banManager {
                 }
             }
 
-            // Il log sorvegliato: stessa funzione che usa la verifica del filtro, cosi' le
-            // due non possono contraddirsi come e' successo con roundcube-auth.
+            // The watched log: the same function the filter check uses, so the
+            // two cannot contradict each other as happened with roundcube-auth.
             java.util.List<String> lp = logPathOf(jailName);
             if (!lp.isEmpty()) jail.logFile = String.join(", ", lp);
 
@@ -323,7 +323,7 @@ public class Fail2banManager {
                 return action;
             }
 
-            // SECURITY: validate jail name (concatenato in shell)
+            // SECURITY: validate jail name (concatenated into a shell command)
             if (!isValidJailName(jail)) {
                 action.success = false;
                 action.message = "Invalid jail name";
@@ -511,8 +511,8 @@ public class Fail2banManager {
             // Create jail.d directory if not exists
             Files.createDirectories(Paths.get(JAIL_D));
 
-            // Prereq: abilita logging in Roundcube e crea il file userlogins se manca,
-            // altrimenti Fail2ban si rifiuta di caricare la jail roundcube-auth.
+            // Prereq: enable logging in Roundcube and create the userlogins file if missing,
+            // otherwise Fail2ban refuses to load the roundcube-auth jail.
             ensureRoundcubeLoggingEnabled();
 
             // Create mail jails configuration
@@ -526,18 +526,18 @@ public class Fail2banManager {
             // Reload fail2ban
             reload();
 
-            // Scrivere la configurazione e ricaricare non e' finire il lavoro: si guarda l'esito.
+            // Writing the configuration and reloading is not finishing the job: the outcome is checked.
             //
-            // Il reload rilegge i file ma NON riavvia le jail — fail2ban-client(1): "reloads the
+            // The reload rereads the files but does NOT restart the jails -- fail2ban-client(1): "reloads the
             // configuration without restarting of the server, the option '--restart' activates
-            // completely restarting of affected jails". Una jail la cui azione era FALLITA
-            // all'avvio, come recidive con la regola pf rifiutata da pfctl, non la riprova: resta
-            // con la sua tabella e senza regola, e il rapporto direbbe "installate correttamente"
-            // mentre nulla e' cambiato. E' successo esattamente cosi'.
+            // completely restarting of affected jails". A jail whose action had FAILED
+            // at startup, like recidive with the pf rule rejected by pfctl, does not retry it: it stays
+            // with its table and without a rule, and the report would say "installed correctly"
+            // while nothing has changed. That is exactly what happened.
             //
-            // Quindi si misura la cosa che conta — ogni jail ha in pf una regola che legge la sua
-            // tabella? — e solo se manca si sale di un gradino. Senza "--unban", che il manuale
-            // indica come l'opzione che invece toglierebbe i ban attivi.
+            // So the thing that matters is measured -- does each jail have a rule in pf that reads its
+            // table? -- and only if it is missing do we go up one step. Without "--unban", which the
+            // manual indicates as the option that would instead remove the active bans.
             String restartOutcome = "";
             try {
                 int withoutRule = compareBansWithPf().totalWithoutRule();
@@ -567,19 +567,19 @@ public class Fail2banManager {
     }
 
     /**
-     * Roundcube ha 'log_logins = false' di default — nessun login viene loggato,
-     * quindi /usr/local/www/roundcube/logs/userlogins non esiste e Fail2ban si
-     * rifiuta di caricare la jail "roundcube-auth".
+     * Roundcube has 'log_logins = false' by default -- no login is logged,
+     * so /usr/local/www/roundcube/logs/userlogins does not exist and Fail2ban
+     * refuses to load the "roundcube-auth" jail.
      *
-     * Questo metodo:
-     *  1. Aggiunge le direttive di logging mancanti a config.inc.php (idempotente)
-     *  2. Crea il file userlogins vuoto se non esiste, dell'utente della webmail, 640
+     * This method:
+     *  1. Adds the missing logging directives to config.inc.php (idempotent)
+     *  2. Creates the empty userlogins file if it does not exist, owned by the webmail user, 640
      *
-     * Best-effort: se Roundcube non è installato o il file di config non è scrivibile,
-     * il metodo non blocca l'install della jail (fail2ban segnalerà comunque l'errore).
+     * Best-effort: if Roundcube is not installed or the config file is not writable,
+     * the method does not block the install of the jail (fail2ban will report the error anyway).
      */
     /**
-     * Path comuni di Roundcube su FreeBSD. Il primo trovato vince.
+     * Common Roundcube paths on FreeBSD. The first one found wins.
      */
     private static final String[] ROUNDCUBE_CANDIDATE_PATHS = {
         "/usr/local/www/roundcube",
@@ -591,13 +591,13 @@ public class Fail2banManager {
     };
 
     /**
-     * Auto-detect del path di installazione di Roundcube.
-     * Ritorna null se non viene trovato un'installazione plausibile.
+     * Auto-detect of the Roundcube installation path.
+     * Returns null if no plausible installation is found.
      */
     public String detectRoundcubeInstallPath() {
         for (String p : ROUNDCUBE_CANDIDATE_PATHS) {
             Path candidate = Paths.get(p);
-            // Plausibile install: ha una directory config/ + un index.php (o similar)
+            // Plausible install: has a config/ directory + an index.php (or similar)
             if (Files.isDirectory(candidate)
                 && Files.exists(candidate.resolve("config"))
                 && (Files.exists(candidate.resolve("index.php"))
@@ -609,20 +609,20 @@ public class Fail2banManager {
     }
 
     /**
-     * Il file su cui Roundcube scrive DAVVERO i login. null se Roundcube non c'e'.
+     * The file Roundcube REALLY writes logins to. null if Roundcube is not there.
      *
-     * Qui c'era scritto "userlogins", senza estensione, e la jail roundcube-auth sorvegliava
-     * quello. Ma rcube::write_log() costruisce il nome cosi':
+     * Here it said "userlogins", without an extension, and the roundcube-auth jail watched
+     * that. But rcube::write_log() builds the name like this:
      *
      *     $name .= $config->get('log_file_ext', '.log');
      *
-     * cioe' aggiunge SEMPRE un'estensione, ".log" quando non e' configurata altrimenti. Il
-     * pannello creava e sorvegliava un file che Roundcube non scrive mai: la jail si caricava
-     * senza errori, restava a zero tentativi per sempre, e ogni schermata la dava per attiva.
-     * Un attacco alla webmail non sarebbe mai stato rilevato.
+     * i.e. it ALWAYS adds an extension, ".log" when not configured otherwise. The
+     * panel created and watched a file Roundcube never writes: the jail loaded
+     * without errors, stayed at zero attempts forever, and every screen showed it as active.
+     * An attack on the webmail would never have been detected.
      *
-     * Adesso: si legge l'estensione dalla configurazione, e se uno dei due file esiste ed e'
-     * gia' scritto vince quello — la prova batte la deduzione.
+     * Now: the extension is read from the configuration, and if one of the two files exists and
+     * is already written, that one wins -- evidence beats deduction.
      */
     public String getRoundcubeUserloginsPath() {
         String base = detectRoundcubeInstallPath();
@@ -634,11 +634,11 @@ public class Fail2banManager {
             if (Files.exists(withExtension) && Files.size(withExtension) > 0) return withExtension.toString();
             if (Files.exists(withoutExtension) && Files.size(withoutExtension) > 0) return withoutExtension.toString();
         } catch (Exception ignore) { }
-        // Nessuno dei due e' scritto: si usa il nome che Roundcube userebbe.
+        // Neither of the two is written: use the name Roundcube would use.
         return withExtension.toString();
     }
 
-    /** L'estensione dei log di Roundcube: "log_file_ext" se impostata, altrimenti ".log". */
+    /** The extension of Roundcube's logs: "log_file_ext" if set, otherwise ".log". */
     public String roundcubeLogExtension(String installPath) {
         try {
             Path cfg = Paths.get(installPath + "/config/config.inc.php");
@@ -667,15 +667,15 @@ public class Fail2banManager {
             String config = Files.readString(configPath, java.nio.charset.StandardCharsets.UTF_8);
             StringBuilder additions = new StringBuilder();
 
-            // log_logins = true (richiesto per loggare i tentativi)
+            // log_logins = true (required to log the attempts)
             if (!config.matches("(?s).*\\$config\\[['\"]log_logins['\"]\\]\\s*=.*")) {
                 additions.append("\n$config['log_logins'] = true;\n");
             }
-            // log_driver = file (assicurati che scriva su file, non su syslog)
+            // log_driver = file (make sure it writes to a file, not to syslog)
             if (!config.matches("(?s).*\\$config\\[['\"]log_driver['\"]\\]\\s*=.*")) {
                 additions.append("$config['log_driver'] = 'file';\n");
             }
-            // log_dir esplicito basato sull'install detect-ato
+            // explicit log_dir based on the detected install
             if (!config.matches("(?s).*\\$config\\[['\"]log_dir['\"]\\]\\s*=.*")) {
                 additions.append("$config['log_dir'] = '" + installPath + "/logs/';\n");
             }
@@ -692,21 +692,21 @@ public class Fail2banManager {
                 System.out.println("[Fail2banManager] Roundcube config updated (log_logins/log_driver/log_dir)");
             }
 
-            // Crea il file userlogins vuoto se non esiste, dell'utente della webmail, 640
+            // Create the empty userlogins file if it does not exist, owned by the webmail user, 640
             Path logsDir = Paths.get(installPath + "/logs");
             if (!Files.isDirectory(logsDir)) Files.createDirectories(logsDir);
-            // Lo stesso nome che usa la jail e che Roundcube scrivera': una funzione sola.
+            // The same name the jail uses and Roundcube will write: a single function.
             Path userlogins = Paths.get(getRoundcubeUserloginsPath());
             if (!Files.exists(userlogins)) {
                 Files.createFile(userlogins);
                 System.out.println("[Fail2banManager] Created " + userlogins);
             }
-            // Lo scrive il PHP di Roundcube: roundcube dopo la migrazione (RoundcubeUser), www prima.
+            // Roundcube's PHP writes it: roundcube after the migration (RoundcubeUser), www before.
             String rcUser = org.daemoxcp.mail.system.RoundcubeUser.runtimeUser();
             try { executeCommand("chown " + rcUser + ":" + org.daemoxcp.mail.system.RoundcubeUser.runtimeGroup() + " " + userlogins); } catch (Exception ignored) {}
             try { executeCommand("chmod 640 " + userlogins); } catch (Exception ignored) {}
 
-            // Verifica post-operazione
+            // Post-operation check
             if (!Files.exists(userlogins)) {
                 System.err.println("[Fail2banManager] WARNING: " + userlogins + " still missing after the setup!");
             } else {
@@ -720,9 +720,9 @@ public class Fail2banManager {
 
     /**
      * Generate mail jails configuration.
-     * Il logpath di Roundcube viene determinato dall'install path effettivo
-     * (auto-detect). Se Roundcube non è trovato, la sezione roundcube-auth
-     * viene comunque scritta con un commento esplicativo.
+     * The Roundcube logpath is determined from the actual install path
+     * (auto-detect). If Roundcube is not found, the roundcube-auth section
+     * is written anyway with an explanatory comment.
      */
     private String generateMailJailsConfig() {
         String roundcubeLogpath = getRoundcubeUserloginsPath();
@@ -835,10 +835,10 @@ public class Fail2banManager {
             """;
         Files.writeString(Paths.get(FILTER_D, "rspamd.conf"), rspamdFilter);
 
-        // Roundcube auth filter — formato del file 'userlogins' di Roundcube su FreeBSD:
+        // Roundcube auth filter -- format of Roundcube's 'userlogins' file on FreeBSD:
         //   [DD-Mon-YYYY HH:MM:SS +ZZZZ]: <token> Failed login for user@dom from 1.2.3.4 in session ...
         //   [DD-Mon-YYYY HH:MM:SS +ZZZZ]: <token> Successful login for user@dom (ID: 1) from 1.2.3.4 ...
-        // SOVRASCRIVIAMO sempre il filter (anche se esiste con pattern obsoleto)
+        // We ALWAYS OVERWRITE the filter (even if it exists with an obsolete pattern)
         Path rcFilter = Paths.get(FILTER_D, "roundcube-auth.conf");
         String roundcubeFilter = """
             # DaemoxCP Mail - Roundcube sign-in filter
@@ -865,11 +865,11 @@ public class Fail2banManager {
         config.name = jailName;
 
         try {
-            // Cerca la sezione [jailName] in TUTTI i possibili file:
-            //   1. /usr/local/etc/fail2ban/jail.local                     (jail principale)
-            //   2. /usr/local/etc/fail2ban/jail.d/*.local                 (jail aggiuntive in jail.d)
-            //   3. /usr/local/etc/fail2ban/jail.d/*.conf                  (idem ma .conf)
-            // Si ferma al primo file dove trova [jailName].
+            // Look for the [jailName] section in ALL the possible files:
+            //   1. /usr/local/etc/fail2ban/jail.local                     (main jail file)
+            //   2. /usr/local/etc/fail2ban/jail.d/*.local                 (additional jails in jail.d)
+            //   3. /usr/local/etc/fail2ban/jail.d/*.conf                  (same, but .conf)
+            // Stop at the first file where [jailName] is found.
             java.util.List<Path> candidates = new java.util.ArrayList<>();
             candidates.add(Paths.get(JAIL_LOCAL));
             try {
@@ -932,13 +932,13 @@ public class Fail2banManager {
                 action.message = "Invalid jail name";
                 return action;
             }
-            // 1. Runtime: applica subito via fail2ban-client (gli int sono safe)
+            // 1. Runtime: apply right away via fail2ban-client (ints are safe)
             executeCommand(FAIL2BAN_CLIENT + " set " + jailName + " maxretry " + maxRetry);
             executeCommand(FAIL2BAN_CLIENT + " set " + jailName + " findtime " + findTime);
             executeCommand(FAIL2BAN_CLIENT + " set " + jailName + " bantime " + banTime);
 
-            // 2. Persistenza: aggiorna anche jail.local così i valori sopravvivono
-            //    al restart di fail2ban
+            // 2. Persistence: also update jail.local so the values survive
+            //    a restart of fail2ban
             boolean persisted = persistJailConfig(jailName, maxRetry, findTime, banTime);
 
             action.success = true;
@@ -955,9 +955,9 @@ public class Fail2banManager {
     }
 
     /**
-     * Applica gli stessi maxRetry/findTime/banTime a TUTTE le jail attualmente
-     * attive (cosi' l'utente non deve impostarle una per una).
-     * Restituisce un report per-jail.
+     * Applies the same maxRetry/findTime/banTime to ALL currently
+     * active jails (so the user does not have to set them one by one).
+     * Returns a per-jail report.
      */
     public BulkJailConfigResult updateAllJailsConfig(int maxRetry, int findTime, int banTime) {
         BulkJailConfigResult res = new BulkJailConfigResult();
@@ -981,25 +981,25 @@ public class Fail2banManager {
         public List<JailConfigOutcome> results = new ArrayList<>();
     }
     /**
-     * Esito della modifica di una singola jail nel ciclo updateAllJailsConfig.
-     * Record immutabile (Java 14+).
+     * Outcome of changing a single jail in the updateAllJailsConfig loop.
+     * Immutable record (Java 14+).
      */
     public record JailConfigOutcome(String jail, boolean success, String message) {}
 
-    /** Path standard di jail.local su FreeBSD pkg installation. */
+    /** Standard path of jail.local on a FreeBSD pkg installation. */
     private static final String JAIL_LOCAL_PATH = "/usr/local/etc/fail2ban/jail.local";
 
     /**
-     * Aggiorna in jail.local i valori maxretry/findtime/bantime per la sezione
-     * [jailName]. Crea le righe se mancano. Lascia tutto il resto del file
-     * intatto (compresi commenti e altre sezioni).
+     * Updates the maxretry/findtime/bantime values in jail.local for the
+     * [jailName] section. Creates the lines if missing. Leaves all the rest of the file
+     * intact (including comments and other sections).
      *
-     * Ritorna true se il file è stato scritto con successo.
+     * Returns true if the file was written successfully.
      */
     private boolean persistJailConfig(String jailName, int maxRetry, int findTime, int banTime) {
         try {
-            // Cerca la sezione [jailName] in tutti i file di config possibili e modifica
-            // quello dove la trova. Se non la trova, ritorna false (caller deciderà).
+            // Look for the [jailName] section in all possible config files and modify
+            // the one where it is found. If not found, return false (the caller will decide).
             java.util.List<java.nio.file.Path> candidates = new java.util.ArrayList<>();
             candidates.add(java.nio.file.Paths.get(JAIL_LOCAL_PATH));
             try {
@@ -1037,11 +1037,11 @@ public class Fail2banManager {
                 return true;
             }
 
-            // Fallback: la sezione [jailName] non esiste in NESSUN file modificabile
-            // (succede per jail tipo dovecot/postfix-auth definite solo in /usr/local/etc/fail2ban/jail.conf,
-            // file del pacchetto che non andrebbe toccato).
-            // → Creiamo/appendiamo la sezione in jail.local: e' il pattern raccomandato da fail2ban per
-            //   overridare i default di jail.conf senza modificarlo.
+            // Fallback: the [jailName] section does not exist in ANY editable file
+            // (this happens for jails like dovecot/postfix-auth defined only in /usr/local/etc/fail2ban/jail.conf,
+            // the package's file, which should not be touched).
+            // -> We create/append the section in jail.local: it is the pattern fail2ban recommends to
+            //   override the jail.conf defaults without modifying it.
             java.nio.file.Path jailLocal = java.nio.file.Paths.get(JAIL_LOCAL_PATH);
             StringBuilder appended = new StringBuilder();
             if (java.nio.file.Files.exists(jailLocal)) {
@@ -1050,7 +1050,7 @@ public class Fail2banManager {
                 if (!existing.endsWith("\n")) appended.append("\n");
                 appended.append("\n");
             } else {
-                // Crea anche le directory parent se necessario
+                // Also create the parent directories if necessary
                 try { java.nio.file.Files.createDirectories(jailLocal.getParent()); } catch (Exception ignored) {}
                 appended.append("# Generated by the panel\n\n");
             }
@@ -1068,7 +1068,7 @@ public class Fail2banManager {
         }
     }
 
-    /** Reload fail2ban ignorando errori (best-effort dopo una modifica di file). */
+    /** Reload fail2ban ignoring errors (best-effort after a file change). */
     private void reloadFail2banQuiet() {
         try {
             // TODO: migrate to Shell.run when touched
@@ -1081,11 +1081,11 @@ public class Fail2banManager {
     }
 
     /**
-     * Cambia il valore di "filter = ..." in una jail (con backup automatico).
-     * Esempio: setJailFilter("postfix-auth", "postfix[mode=aggressive]").
+     * Changes the value of "filter = ..." in a jail (with automatic backup).
+     * Example: setJailFilter("postfix-auth", "postfix[mode=aggressive]").
      *
-     * Cerca la sezione [jailName] in jail.local e jail.d/*.local|conf, fa il
-     * backup del file modificato, scrive il nuovo valore, ricarica fail2ban.
+     * Looks for the [jailName] section in jail.local and jail.d/*.local|conf, backs up
+     * the modified file, writes the new value, reloads fail2ban.
      */
     public BanAction setJailFilter(String jailName, String newFilter) {
         BanAction r = new BanAction();
@@ -1096,8 +1096,8 @@ public class Fail2banManager {
             r.message = I18n.tr("server.f2bm.badJail");
             return r;
         }
-        // Validation: il filter name deve essere alfanumerico, con dash/underscore,
-        // ed eventualmente "[mode=xxx]" come opzione. NIENTE shell metachars.
+        // Validation: the filter name must be alphanumeric, with dash/underscore,
+        // and optionally "[mode=xxx]" as an option. NO shell metachars.
         if (newFilter == null || newFilter.isBlank()
                 || !newFilter.matches("^[a-zA-Z0-9_\\-]+(?:\\[[a-zA-Z0-9_=,\\-\\s]*\\])?$")) {
             r.success = false;
@@ -1105,7 +1105,7 @@ public class Fail2banManager {
             return r;
         }
         try {
-            // Cerca in tutti i file possibili
+            // Search all the possible files
             java.util.List<java.nio.file.Path> candidates = new java.util.ArrayList<>();
             candidates.add(java.nio.file.Paths.get(JAIL_LOCAL_PATH));
             try {
@@ -1132,7 +1132,7 @@ public class Fail2banManager {
                 String section = content.substring(sectionStart, sectionEnd);
                 String updated = setOrAddKey(section, "filter", newFilter);
 
-                // Backup prima di scrivere
+                // Backup before writing
                 java.nio.file.Files.copy(path,
                     backupCopy(path));
 
@@ -1154,8 +1154,8 @@ public class Fail2banManager {
     }
 
     /**
-     * Lista degli IP attualmente nella whitelist (ignoreip) per una specifica jail,
-     * a runtime (tramite fail2ban-client get).
+     * List of the IPs currently in the whitelist (ignoreip) for a specific jail,
+     * at runtime (via fail2ban-client get).
      */
     public java.util.List<String> getIgnoreIps(String jailName) {
         java.util.List<String> ips = new java.util.ArrayList<>();
@@ -1163,13 +1163,13 @@ public class Fail2banManager {
         try {
             String out = executeCommand(FAIL2BAN_CLIENT + " get " + jailName + " ignoreip");
             if (out == null) return ips;
-            // L'output ha tipicamente una riga per IP, possibilmente con prefisso "|-" o "`-"
+            // The output typically has one line per IP, possibly prefixed with "|-" or "`-"
             for (String line : out.split("\\r?\\n")) {
                 String t = line.trim().replaceAll("^[`|]-\\s*", "").replaceAll("^[|]\\s*", "");
                 if (t.isEmpty() || t.startsWith("|") || t.startsWith("`")) continue;
                 // Skip header lines like "No IP address/network is ignored"
                 if (t.toLowerCase().contains("no ip") || t.toLowerCase().contains("ignored:")) continue;
-                // Tieni solo cose che assomigliano a IP/CIDR
+                // Keep only things that look like IP/CIDR
                 if (t.matches("^[0-9a-fA-F:.]+(/[0-9]+)?$")) ips.add(t);
             }
         } catch (Exception ignored) {}
@@ -1177,9 +1177,9 @@ public class Fail2banManager {
     }
 
     /**
-     * Aggiunge un IP/CIDR alla whitelist di una jail.
-     * Applicato a runtime (fail2ban-client) E in modo persistente (jail.local DEFAULT
-     * section, cosi' vale per tutte le jail al prossimo restart).
+     * Adds an IP/CIDR to a jail's whitelist.
+     * Applied at runtime (fail2ban-client) AND persistently (jail.local DEFAULT
+     * section, so it applies to all jails at the next restart).
      */
     public BanAction addIgnoreIp(String jailName, String ip) {
         BanAction r = new BanAction();
@@ -1199,7 +1199,7 @@ public class Fail2banManager {
         try {
             // 1. Runtime
             executeCommand(FAIL2BAN_CLIENT + " set " + jailName + " addignoreip " + ip);
-            // 2. Persistenza: appende a ignoreip nella sezione [jailName] di jail.local
+            // 2. Persistence: append to ignoreip in the [jailName] section of jail.local
             persistIgnoreIpAdd(jailName, ip);
             r.success = true;
             r.message = I18n.tr("server.f2bm.ignoreAdded", java.util.Map.of("ip", String.valueOf(ip), "j", String.valueOf(jailName)));
@@ -1211,7 +1211,7 @@ public class Fail2banManager {
     }
 
     /**
-     * Rimuove un IP/CIDR dalla whitelist di una jail.
+     * Removes an IP/CIDR from a jail's whitelist.
      */
     public BanAction removeIgnoreIp(String jailName, String ip) {
         BanAction r = new BanAction();
@@ -1240,14 +1240,14 @@ public class Fail2banManager {
         return r;
     }
 
-    /** Validazione IP/CIDR (v4 e v6 base, no shell metachars). */
+    /** IP/CIDR validation (basic v4 and v6, no shell metachars). */
     private boolean isValidIpOrCidr(String s) {
         if (s == null || s.isBlank()) return false;
-        // Solo caratteri ammessi per IPv4/IPv6/CIDR
+        // Only characters allowed for IPv4/IPv6/CIDR
         return s.matches("^[0-9a-fA-F:.]+(/[0-9]{1,3})?$");
     }
 
-    /** Aggiunge ip a ignoreip della sezione [jailName] in jail.local (idempotente). */
+    /** Adds ip to ignoreip of the [jailName] section in jail.local (idempotent). */
     private void persistIgnoreIpAdd(String jailName, String ip) {
         try {
             java.nio.file.Path path = findJailConfigFile(jailName);
@@ -1260,20 +1260,20 @@ public class Fail2banManager {
             int sectionEnd = (next < 0) ? content.length() : next + 1;
             String section = content.substring(sectionStart, sectionEnd);
 
-            // Trova riga ignoreip esistente
+            // Find the existing ignoreip line
             java.util.regex.Pattern p = java.util.regex.Pattern.compile(
                 "(?m)^(\\s*)ignoreip\\s*=\\s*(.*)$");
             java.util.regex.Matcher m = p.matcher(section);
             String updated;
             if (m.find()) {
                 String existing = m.group(2).trim();
-                if (existing.contains(ip)) return; // gia' presente
+                if (existing.contains(ip)) return; // already present
                 String indent = m.group(1);
                 String newVal = existing.isEmpty() ? ip : existing + " " + ip;
                 updated = m.replaceFirst(java.util.regex.Matcher.quoteReplacement(
                     indent + "ignoreip = " + newVal));
             } else {
-                // Aggiungi la chiave
+                // Add the key
                 updated = setOrAddKey(section, "ignoreip", ip);
             }
             // Backup
@@ -1284,7 +1284,7 @@ public class Fail2banManager {
         } catch (Exception ignored) {}
     }
 
-    /** Rimuove ip da ignoreip della sezione [jailName] in jail.local. */
+    /** Removes ip from ignoreip of the [jailName] section in jail.local. */
     private void persistIgnoreIpRemove(String jailName, String ip) {
         try {
             java.nio.file.Path path = findJailConfigFile(jailName);
@@ -1318,7 +1318,7 @@ public class Fail2banManager {
         } catch (Exception ignored) {}
     }
 
-    /** Trova il file di config che contiene la sezione [jailName]. */
+    /** Finds the config file that contains the [jailName] section. */
     private java.nio.file.Path findJailConfigFile(String jailName) {
         java.util.List<java.nio.file.Path> candidates = new java.util.ArrayList<>();
         candidates.add(java.nio.file.Paths.get(JAIL_LOCAL_PATH));
@@ -1346,9 +1346,9 @@ public class Fail2banManager {
     }
 
     /**
-     * Sostituisce una riga "key = ..." nella sezione (regex-based, conserva
-     * indentazione). Se la chiave non esiste la aggiunge in fondo prima della
-     * prossima sezione.
+     * Replaces a "key = ..." line in the section (regex-based, preserves
+     * indentation). If the key does not exist it adds it at the end, before the
+     * next section.
      */
     private String setOrAddKey(String section, String key, String value) {
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(
@@ -1359,7 +1359,7 @@ public class Fail2banManager {
             String indent = m.group(1) == null ? "" : m.group(1);
             return m.replaceFirst(java.util.regex.Matcher.quoteReplacement(indent + key + " = " + value));
         } else {
-            // Append before trailing newline (se la sezione finisce con \n) o append diretto
+            // Append before trailing newline (if the section ends with \n) or append directly
             if (section.endsWith("\n")) {
                 return section + key + " = " + value + "\n";
             } else {
@@ -1383,7 +1383,7 @@ public class Fail2banManager {
                 return info;
             }
 
-            // 1. Whois — fornisce dati di REGISTRAZIONE (organization, netRange, country di registrazione)
+            // 1. Whois -- provides REGISTRATION data (organization, netRange, country of registration)
             String output = executeCommand("whois " + ip + " 2>/dev/null | head -50");
             String whoisCountry = null;
 
@@ -1412,10 +1412,10 @@ public class Fail2banManager {
                 }
             }
 
-            // 2. GeoIP via ip-api.com — fornisce la posizione FISICA reale dell'IP
-            //    (whois ritorna il paese di REGISTRAZIONE che spesso è la sede legale,
-            //    non dove l'IP è effettivamente assegnato. Es. 80.94.95.242 è registrato
-            //    in UK ma fisicamente è in Romania).
+            // 2. GeoIP via ip-api.com -- provides the real PHYSICAL location of the IP
+            //    (whois returns the country of REGISTRATION, which is often the registered office,
+            //    not where the IP is actually assigned. E.g. 80.94.95.242 is registered
+            //    in the UK but is physically in Romania).
             enrichWithGeoIP(info, ip, whoisCountry);
 
         } catch (Exception e) {
@@ -1426,14 +1426,14 @@ public class Fail2banManager {
     }
 
     /**
-     * Arricchisce IpInfo con dati di geolocalizzazione da ipapi.co (HTTPS).
-     * Best-effort: se l'API è offline / rate-limited / il pannello non ha
-     * accesso a internet, info rimane com'è (whois only).
-     * Free tier: 1000 req/giorno, HTTPS, no auth richiesta.
+     * Enriches IpInfo with geolocation data from ipapi.co (HTTPS).
+     * Best-effort: if the API is offline / rate-limited / the panel has no
+     * internet access, info stays as it is (whois only).
+     * Free tier: 1000 req/day, HTTPS, no auth required.
      *
      * Endpoint: https://ipapi.co/<ip>/json/
-     * Campi rilevanti: country_code, country_name, region, city, org, asn, latitude, longitude
-     * Errore (es. IP privato): {"error": true, "reason": "...", "message": "..."}
+     * Relevant fields: country_code, country_name, region, city, org, asn, latitude, longitude
+     * Error (e.g. private IP): {"error": true, "reason": "...", "message": "..."}
      */
     private void enrichWithGeoIP(IpInfo info, String ip, String whoisCountry) {
         try {
@@ -1446,8 +1446,8 @@ public class Fail2banManager {
             conn.setRequestProperty("User-Agent", "DaemoxCP-Mail/1.0");
             conn.setRequestProperty("Accept", "application/json");
             int code = conn.getResponseCode();
-            // ipapi.co usa 200 anche per errori di lookup (campo "error: true" nel body),
-            // ma può tornare 429 per rate limit
+            // ipapi.co uses 200 even for lookup errors ("error: true" field in the body),
+            // but can return 429 for rate limiting
             java.io.InputStream is = (code >= 200 && code < 400) ? conn.getInputStream() : conn.getErrorStream();
             if (is == null) {
                 if (whoisCountry != null) info.geoSource = "whois (geoip http " + code + ")";
@@ -1459,20 +1459,20 @@ public class Fail2banManager {
             }
             org.json.JSONObject json = new org.json.JSONObject(body);
 
-            // Errore esplicito da ipapi.co (es. IP privato, rate limited)
+            // Explicit error from ipapi.co (e.g. private IP, rate limited)
             if (json.optBoolean("error", false)) {
                 String reason = json.optString("reason", json.optString("message", "unknown"));
                 if (whoisCountry != null) info.geoSource = "whois (geoip: " + reason + ")";
                 return;
             }
 
-            // GeoIP è più accurato per la posizione fisica: prevale su whois country
+            // GeoIP is more accurate for the physical location: it prevails over the whois country
             info.country = json.optString("country_code", info.country);
             info.countryName = json.optString("country_name", null);
             info.region = json.optString("region", null);
             info.city = json.optString("city", null);
             info.asn = json.optString("asn", null);
-            // ipapi.co non distingue ISP da org — usa "org" per entrambi
+            // ipapi.co does not distinguish ISP from org -- use "org" for both
             String org = json.optString("org", null);
             if (org != null && !org.isEmpty()) {
                 if (info.isp == null) info.isp = org;
@@ -1484,7 +1484,7 @@ public class Fail2banManager {
             if (json.has("longitude") && !json.isNull("longitude")) info.longitude = json.getDouble("longitude");
             info.geoSource = (whoisCountry != null) ? "ipapi.co + whois" : "ipapi.co";
         } catch (Exception e) {
-            // Non fatale — whois data resta disponibile
+            // Not fatal -- whois data stays available
             if (whoisCountry != null) info.geoSource = "whois " + I18n.tr("server.f2bm.geoipDown");
         }
     }
@@ -1504,9 +1504,9 @@ public class Fail2banManager {
         return false;
     }
 
-    // Validazione difensiva del nome jail per prevenire command injection.
-    // Il nome jail viene concatenato in shell, quindi DEVE rispettare
-    // un pattern molto restrittivo.
+    // Defensive validation of the jail name to prevent command injection.
+    // The jail name is concatenated into a shell, so it MUST follow
+    // a very restrictive pattern.
     private boolean isValidJailName(String jail) {
         return jail != null && jail.matches("^[a-zA-Z0-9_-]{1,64}$");
     }
@@ -1551,21 +1551,21 @@ public class Fail2banManager {
     }
 
     /**
-     * La jail aggancia davvero quel log, oppure gira a vuoto?
+     * Does the jail really hook that log, or does it run idle?
      *
-     * Perche' serve. "0 ban, 0 tentativi falliti" ha due letture opposte: nessuno ha mai
-     * attaccato quel servizio, oppure il filtro non corrisponde a nessuna riga e la jail e'
-     * accesa senza vedere niente. La scheda mostrava lo zero e basta, e uno zero che puo'
-     * voler dire due cose contrarie non e' un'informazione.
+     * Why it is needed. "0 bans, 0 failed attempts" has two opposite readings: nobody has ever
+     * attacked that service, or the filter matches no line and the jail is
+     * on without seeing anything. The card showed the zero and nothing else, and a zero that
+     * can mean two opposite things is not information.
      *
-     * Si risponde con fail2ban-regex(1), che prende un log e un filtro e dice quante righe
-     * combaciano. Confrontando con quante righe ha il log si distinguono i due casi:
-     *   - log vuoto            -> non si puo' dire niente, e si dice cosi'
-     *   - log pieno, 0 agganci -> il filtro non vede quel formato: la jail e' cieca
-     *   - agganci > 0          -> la jail funziona, e semplicemente non ci sono stati attacchi
+     * The answer comes from fail2ban-regex(1), which takes a log and a filter and says how many
+     * lines match. Comparing with how many lines the log has, the two cases can be told apart:
+     *   - empty log            -> nothing can be said, and that is what is said
+     *   - full log, 0 matches  -> the filter does not see that format: the jail is blind
+     *   - matches > 0          -> the jail works, and there simply have been no attacks
      *
-     * Legge e basta. La regex NON passa da una shell: si costruisce la riga di comando come
-     * lista di argomenti, altrimenti i suoi metacaratteri verrebbero interpretati due volte.
+     * It only reads. The regex does NOT go through a shell: the command line is built as a
+     * list of arguments, otherwise its metacharacters would be interpreted twice.
      */
     public FilterCheck verifyFilter(String jailName) {
         FilterCheck c = new FilterCheck();
@@ -1582,10 +1582,10 @@ public class Fail2banManager {
             if (!f.canRead()) { c.message = I18n.tr("server.f2bm.logUnreadable", java.util.Map.of("l", String.valueOf(log))); return c; }
             c.logLines2 = countLines(f);
             if (c.logLines2 == 0) {
-                // Un log vuoto ha una terza spiegazione, ed e' la piu' insidiosa: il file
-                // giusto e' un altro, a un'estensione di distanza. Prima di dire "non lo so"
-                // si guarda accanto — e' un controllo che costa una lettura di cartella e
-                // trasforma un dubbio in una diagnosi.
+                // An empty log has a third explanation, and it is the most insidious: the right
+                // file is another one, one extension away. Before saying "I don't know"
+                // we look next to it -- it is a check that costs one directory read and
+                // turns a doubt into a diagnosis.
                 String near = nearWritten(new java.io.File(log));
                 if (near != null) {
                     c.message = I18n.tr("server.f2bm.logEmptyNeighbor", java.util.Map.of("v", String.valueOf(near)));
@@ -1595,9 +1595,9 @@ public class Fail2banManager {
                 return c;
             }
 
-            // Il secondo argomento di fail2ban-regex puo' essere il NOME di un filtro. Si prova
-            // con quello della jail, che e' la convenzione; se non esiste si ripiega sulla
-            // failregex vera, chiesta a fail2ban.
+            // The second argument of fail2ban-regex can be the NAME of a filter. We try
+            // with the jail's one, which is the convention; if it does not exist we fall back on the
+            // real failregex, asked of fail2ban.
             String output = runArgv(java.util.List.of(FAIL2BAN_REGEX, log, jailName));
             if (output == null || !output.contains("Lines:")) {
                 String fr = firstFailregex(jailName);
@@ -1627,19 +1627,20 @@ public class Fail2banManager {
     }
 
     /**
-     * Dove mettere la copia di sicurezza di un file di configurazione: MAI accanto all'originale.
+     * Where to put the backup copy of a configuration file: NEVER next to the original.
      *
-     * Fail2ban legge /usr/local/etc/fail2ban/jail.d, e finora le copie finivano proprio li'
-     * dentro: sul server ce ne sono sei di mail.local, ognuna con la sua sezione [recidive] e
-     * [dovecot]. Non finiscono in .conf, quindi oggi non vengono caricate — ma sono sei file che
-     * definiscono le stesse jail dentro la cartella che fail2ban scandaglia, e la diagnosi le
-     * mostrava accanto a quello vero. In un file che decide chi entra, "oggi non viene letto"
-     * non e' una garanzia sufficiente.
+     * Fail2ban reads /usr/local/etc/fail2ban/jail.d, and until now the copies ended up right
+     * in there: on the server there are six of mail.local, each with its own [recidive] and
+     * [dovecot] section. They do not end in .conf, so today they are not loaded -- but they are
+     * six files that define the same jails inside the folder fail2ban scans, and the diagnosis
+     * showed them next to the real one. In a file that decides who gets in, "today it is not
+     * read" is not a sufficient guarantee.
      */
     private Path backupCopy(Path original) throws Exception {
         Path dir = org.daemoxcp.mail.system.ConfigBackups.FAIL2BAN_FOLDER;
         Files.createDirectories(dir);
-        // Le copie di prima oltre le ultime KEEP - 1: con quella che il chiamante fa adesso tornano KEEP (ConfigBackups).
+        // The older copies beyond the latest KEEP - 1: with the one the caller makes now, there are
+        // KEEP again (ConfigBackups).
         org.daemoxcp.mail.system.ConfigBackups.prune(dir, original.getFileName().toString(), org.daemoxcp.mail.system.ConfigBackups.KEEP - 1);
         return dir.resolve(original.getFileName().toString() + ".bak."
             + java.time.LocalDateTime.now().format(
@@ -1647,13 +1648,13 @@ public class Fail2banManager {
     }
 
     /**
-     * La porta che una jail dichiara, letta dai file di configurazione.
+     * The port a jail declares, read from the configuration files.
      *
-     * Si guarda prima il parametro dell'azione — "pf[name=x, port=\"http,https\"]" — perche' e'
-     * quello che finisce nella regola pf; se manca si ripiega sulla riga "port =" della sezione,
-     * che e' cio' che l'azione userebbe. Stringa vuota quando nessuno dei due c'e': e' il caso
-     * di recidive, e quel vuoto non e' un dettaglio estetico ma la ragione per cui la sua regola
-     * pf non si carica.
+     * The action's parameter is looked at first -- "pf[name=x, port=\"http,https\"]" -- because it
+     * is what ends up in the pf rule; if missing we fall back on the "port =" line of the section,
+     * which is what the action would use. Empty string when neither is there: it is the case
+     * of recidive, and that empty value is not a cosmetic detail but the reason why its pf rule
+     * does not load.
      */
     private String portFromConfiguration(String jailName) {
         try {
@@ -1692,18 +1693,18 @@ public class Fail2banManager {
     }
 
     /**
-     * I file di log che una jail sorveglia. Una funzione sola, usata da chi mostra e da chi
-     * verifica.
+     * The log files a jail watches. A single function, used both by what shows and by what
+     * checks.
      *
-     * Ce n'erano due che leggevano la stessa cosa in modi diversi: la scheda prendeva la riga
-     * "File list:" dall'uscita di "status", il controllo del filtro chiedeva "get <jail>
-     * logpath" e pretendeva una riga che COMINCIASSE con "/". Quell'uscita elenca i percorsi
-     * preceduti da un carattere di albero, quindi nessuna riga comincia con "/": il controllo
-     * annunciava "questa jail non sorveglia un file di log" mentre due righe piu' sotto la
-     * stessa scheda mostrava il log. Due letture della stessa cosa divergono sempre.
+     * There were two that read the same thing in different ways: the card took the
+     * "File list:" line from the output of "status", the filter check asked for "get <jail>
+     * logpath" and required a line that STARTED with "/". That output lists the paths
+     * preceded by a tree character, so no line starts with "/": the check
+     * announced "this jail does not watch a log file" while two lines below, the
+     * same card showed the log. Two readings of the same thing always diverge.
      *
-     * Qui si cerca un percorso assoluto ovunque nella riga, e si prova la seconda fonte se la
-     * prima non da' niente.
+     * Here an absolute path is searched for anywhere in the line, and the second source is
+     * tried if the first gives nothing.
      */
     private java.util.List<String> logPathOf(String jailName) {
         java.util.List<String> out = new ArrayList<>();
@@ -1720,12 +1721,12 @@ public class Fail2banManager {
     }
 
     /**
-     * I percorsi assoluti contenuti in un'uscita di fail2ban-client.
+     * The absolute paths contained in a fail2ban-client output.
      *
-     * Sta in un metodo suo per poter essere provato: le due uscite da cui va estratto hanno
-     * forme diverse — "get <jail> logpath" elenca i file preceduti da caratteri di albero
-     * ("`-", "|-"), "status <jail>" li mette dopo "File list:" — e una lettura che funziona
-     * su una sola delle due e' esattamente il difetto che si sta correggendo.
+     * It lives in its own method so that it can be tested: the two outputs it must be extracted
+     * from have different forms -- "get <jail> logpath" lists the files preceded by tree
+     * characters ("`-", "|-"), "status <jail>" puts them after "File list:" -- and a reading that
+     * works on only one of the two is exactly the defect being fixed.
      */
     static java.util.List<String> pathsIn(String output) {
         java.util.List<String> out = new ArrayList<>();
@@ -1733,7 +1734,7 @@ public class Fail2banManager {
         java.util.regex.Matcher m = Pattern.compile("(/[^\\s,]+)").matcher(output);
         while (m.find()) {
             String v = m.group(1).trim();
-            // L'uscita nomina anche il comando invocato: non e' un log sorvegliato.
+            // The output also names the command invoked: it is not a watched log.
             if (v.length() <= 1 || v.contains("fail2ban-client") || v.contains("fail2ban-regex")) continue;
             if (!out.contains(v)) out.add(v);
         }
@@ -1741,12 +1742,12 @@ public class Fail2banManager {
     }
 
     /**
-     * Un file "fratello" nella stessa cartella, con lo stesso nome a meno dell'estensione, che
-     * a differenza di quello sorvegliato contiene qualcosa. Descrizione leggibile, o null.
+     * A "sibling" file in the same folder, with the same name apart from the extension, which
+     * unlike the watched one contains something. Readable description, or null.
      *
-     * Serve a distinguere il caso peggiore fra quelli che producono un log vuoto: non "nessuno
-     * ha attaccato", ma "stiamo guardando il file sbagliato di un'estensione". E' successo con
-     * roundcube-auth: la jail sorvegliava "userlogins" mentre Roundcube scrive "userlogins.log".
+     * It serves to single out the worst case among those that produce an empty log: not "nobody
+     * has attacked", but "we are looking at the wrong file, one extension off". It happened with
+     * roundcube-auth: the jail watched "userlogins" while Roundcube writes "userlogins.log".
      */
     private String nearWritten(java.io.File watched) {
         try {
@@ -1768,10 +1769,10 @@ public class Fail2banManager {
     }
 
     /**
-     * I nomi delle jail caricate adesso in Fail2ban.
+     * The names of the jails loaded in Fail2ban right now.
      *
-     * La stessa riga "Jail list:" veniva letta gia' in due punti con due espressioni diverse.
-     * Una lettura sola, qui, cosi' chi controlla e chi mostra guardano lo stesso elenco.
+     * The same "Jail list:" line was already read in two places with two different expressions.
+     * A single reading, here, so that what checks and what shows look at the same list.
      */
     public java.util.List<String> activeJailNames() {
         java.util.List<String> out = new ArrayList<>();
@@ -1786,25 +1787,25 @@ public class Fail2banManager {
     }
 
     /**
-     * Le jail che sorvegliano un file incapace di dirgli qualcosa.
+     * The jails that watch a file incapable of telling them anything.
      *
-     * Perche' e' un controllo a se'. La diagnosi della pagina chiedeva "la jail e' caricata nel
-     * runtime?", e per roundcube-auth la risposta era si': la jail c'era, accesa, e la pagina
-     * dava verde. Sorvegliava pero' "userlogins" mentre Roundcube scriveva "userlogins.log"
-     * nella stessa cartella, e in quella condizione non avrebbe bannato nessuno mai. Caricata e
-     * capace di vedere sono due domande diverse: finche' se ne faceva una sola, il verde della
-     * prima copriva la seconda, e non c'era nemmeno il pulsante per rimediare perche' secondo la
-     * diagnosi non c'era niente da rimediare.
+     * Why it is a check of its own. The page's diagnosis asked "is the jail loaded in the
+     * runtime?", and for roundcube-auth the answer was yes: the jail was there, on, and the page
+     * showed green. It watched, however, "userlogins" while Roundcube wrote "userlogins.log"
+     * in the same folder, and in that condition it would never have banned anyone. Loaded and
+     * able to see are two different questions: as long as only one was asked, the green of the
+     * first covered the second, and there was not even a button to fix it, because according to
+     * the diagnosis there was nothing to fix.
      *
-     * Qui si guardano i file, non i nomi. Si segnalano i due casi che non hanno una seconda
-     * lettura possibile:
-     *   - il file sorvegliato non esiste
-     *   - e' vuoto, ma accanto c'e' lo stesso nome a un'estensione di distanza, gia' scritto
-     * Il log vuoto senza fratelli scritti resta fuori di proposito: puo' davvero voler dire che
-     * nessuno ha ancora attaccato quel servizio, e segnalarlo renderebbe la diagnosi rumore.
+     * Here the files are looked at, not the names. The two cases that have no possible second
+     * reading are flagged:
+     *   - the watched file does not exist
+     *   - it is empty, but next to it there is the same name one extension away, already written
+     * The empty log without written siblings is left out on purpose: it can really mean that
+     * nobody has attacked that service yet, and flagging it would turn the diagnosis into noise.
      *
-     * Costa una lettura di cartella per jail: nessun processo, nessun fail2ban-regex. Puo'
-     * quindi stare nel controllo di salute che parte all'apertura della pagina.
+     * It costs one directory read per jail: no process, no fail2ban-regex. So it can
+     * be part of the health check that runs when the page opens.
      */
     public LogReview reviewWatchedLogs(java.util.Collection<String> jails) {
         LogReview e = new LogReview();
@@ -1830,31 +1831,31 @@ public class Fail2banManager {
         return e;
     }
 
-    /** Tutte le jail caricate adesso, non solo quelle di posta. */
+    /** All the jails loaded right now, not only the mail ones. */
     public LogReview reviewWatchedLogs() {
         return reviewWatchedLogs(activeJailNames());
     }
 
     /**
-     * L'esito dell'esame, con quante jail sono state davvero guardate.
+     * The outcome of the examination, with how many jails were really looked at.
      *
-     * Il conteggio non e' un dettaglio: senza, "nessun problema trovato" e "non ho guardato
-     * niente" producono la stessa lista vuota e quindi lo stesso verde. Un controllo che
-     * diventa verde quando fallisce e' peggio di un controllo che non c'e', perche' invita a
-     * non guardare piu'. Chi legge questo esito deve poter distinguere i due casi, e per farlo
-     * deve poter contare.
+     * The count is not a detail: without it, "no problem found" and "I looked at
+     * nothing" produce the same empty list and therefore the same green. A check that
+     * turns green when it fails is worse than a check that does not exist, because it invites
+     * people to stop looking. Whoever reads this outcome must be able to tell the two cases
+     * apart, and to do so must be able to count.
      */
     public static class LogReview {
-        /** Jail per cui abbiamo ottenuto almeno un percorso e lo abbiamo guardato. */
+        /** Jails for which we obtained at least one path and looked at it. */
         public final java.util.List<String> reviewed = new ArrayList<>();
-        /** Jail che non hanno un file di log da sorvegliare, o che non ce lo hanno detto. */
+        /** Jails that have no log file to watch, or that did not tell us. */
         public final java.util.List<String> withoutLog = new ArrayList<>();
-        /** Nomi che non passano la validazione: non ci si costruisce un comando sopra. */
+        /** Names that do not pass validation: no command is built on top of them. */
         public final java.util.List<String> skipped = new ArrayList<>();
         public final java.util.List<WrongLog> issues = new ArrayList<>();
     }
 
-    /** Una jail e il log che non puo' dirle niente. */
+    /** A jail and the log that cannot tell it anything. */
     public static class WrongLog {
         public final String jail, log, near, reason;
         WrongLog(String jail, String log, String near, String reason) {
@@ -1863,26 +1864,26 @@ public class Fail2banManager {
     }
 
     /**
-     * Gli indirizzi che Fail2ban crede bannati, e quelli che pf blocca davvero.
+     * The addresses Fail2ban believes are banned, and those pf really blocks.
      *
-     * Perche' serve. "Currently banned: 1" e' la contabilita' che Fail2ban tiene su se stesso:
-     * dice che ha eseguito il comando di ban, non che l'indirizzo sia bloccato. Se l'ancora non
-     * fosse caricata, o la tabella avesse un altro nome, o pfctl fallisse in silenzio, quella
-     * riga sarebbe identica a com'e' adesso. E' la stessa distanza fra "l'ho fatto" e "e'
-     * successo" che rendeva cieca roundcube-auth mentre la pagina la dava attiva.
+     * Why it is needed. "Currently banned: 1" is the bookkeeping Fail2ban keeps about itself:
+     * it says it ran the ban command, not that the address is blocked. If the anchor were not
+     * loaded, or the table had another name, or pfctl failed silently, that
+     * line would be identical to what it is now. It is the same gap between "I did it" and "it
+     * happened" that made roundcube-auth blind while the page showed it as active.
      *
-     * Come si misura. Il bersaglio pf non si indovina dal nome della jail: si legge dal comando
-     * di ban vero, chiesto a Fail2ban, perche' ancora e tabella sono configurabili e una
-     * convenzione data per scontata e' gia' un'ipotesi. Da li' si legge la tabella con pfctl e
-     * si confrontano i due insiemi.
+     * How it is measured. The pf target is not guessed from the jail name: it is read from the
+     * real ban command, asked of Fail2ban, because anchor and table are configurable and a
+     * convention taken for granted is already a hypothesis. From there the table is read with
+     * pfctl and the two sets are compared.
      *
-     * Le differenze hanno letture opposte e vanno tenute separate:
-     *   - solo in Fail2ban -> il ban NON e' applicato: quell'indirizzo passa
-     *   - solo in pf       -> resta bloccato uno che Fail2ban ha gia' sbannato
-     * Una tabella che non esiste non e' un errore di lettura ma il difetto stesso, e viene
-     * detta cosi'.
+     * The differences have opposite readings and must be kept separate:
+     *   - only in Fail2ban -> the ban is NOT applied: that address gets through
+     *   - only in pf       -> someone Fail2ban has already unbanned stays blocked
+     * A table that does not exist is not a read error but the defect itself, and it is
+     * reported as such.
      *
-     * Legge e basta: nessun pfctl che modifichi qualcosa.
+     * It only reads: no pfctl that changes anything.
      */
     public PfComparison compareBansWithPf() {
         PfComparison c = new PfComparison();
@@ -1899,16 +1900,16 @@ public class Fail2banManager {
                 if (b != null) break;
             }
             if (b == null) {
-                // Quando non si e' capito, si mette a disposizione tutto cio' che serve a
-                // capire: cosa risponde fail2ban, cosa ha scritto nel log dopo l'ultimo reload,
-                // e quali file definiscono questa jail. Le tre cose insieme rispondono a "cosa
-                // vede fail2ban", che non e' la stessa domanda di "cosa ho scritto io".
+                // When it was not understood, everything needed to understand is made
+                // available: what fail2ban answers, what it wrote in the log after the last
+                // reload, and which files define this jail. The three things together answer
+                // "what does fail2ban see", which is not the same question as "what did I write".
                 j.logFail2ban = BanActionRepair.logErrorsFor(jail);
                 j.sections = BanActionRepair.sectionsDefining(jail);
                 j.dump = BanActionRepair.readConfiguration(jail);
-                // Non si conclude "non banna via pf": non e' stato misurato. Si dice cosa
-                // esegue davvero, perche' e' l'unico modo perche' qualcuno se ne accorga se
-                // quel comando su questo sistema non fa niente.
+                // We do not conclude "does not ban via pf": it has not been measured. We say
+                // what it really runs, because it is the only way for someone to notice if
+                // that command does nothing on this system.
                 j.note = j.unreachable
                     ? I18n.tr("server.f2bm.restarting")
                     : j.banCommands.isEmpty()
@@ -1922,8 +1923,8 @@ public class Fail2banManager {
             }
             j.table = b.table;
 
-            // Si prova dove la tabella puo' stare, e si tiene il posto dove ha risposto. Cosi'
-            // "non esiste" lo si dice solo dopo aver guardato in tutti i posti sensati.
+            // We try where the table can be, and keep the place where it answered. That way
+            // "does not exist" is said only after looking in all the sensible places.
             java.util.List<String> candidates = new ArrayList<>();
             if (b.anchor != null) candidates.add(b.anchor);
             if (b.stillLikely != null && !b.stillLikely.equals(b.anchor)) candidates.add(b.stillLikely);
@@ -1934,7 +1935,7 @@ public class Fail2banManager {
             for (String cand : candidates) {
                 TableReading test = addressesInPfTable(cand, b.table);
                 if (test.read && !test.missing) { t = test; stillUsed = cand; break; }
-                if (t == null) { t = test; stillUsed = cand; }   // il primo esito, se nessuno trova
+                if (t == null) { t = test; stillUsed = cand; }   // the first outcome, if none finds it
             }
             j.anchor = stillUsed == null ? I18n.tr("server.f2bm.mainRuleset") : stillUsed;
             if (!t.read) {
@@ -1944,14 +1945,14 @@ public class Fail2banManager {
             }
             j.read = true;
             j.missingTable = t.missing;
-            // Una tabella piena non blocca niente da sola: serve la regola che la legge. E' la
-            // verifica che fail2ban stesso fa ("pfctl -sr | grep -q <tabella>"), ed e' l'unico
-            // modo per accorgersi che actionstart abbia creato la tabella e poi fallito sulla
-            // regola — che e' esattamente cio' che succede quando la porta e' vuota.
+            // A full table blocks nothing on its own: the rule that reads it is needed. It is the
+            // check fail2ban itself does ("pfctl -sr | grep -q <table>"), and it is the only
+            // way to notice that actionstart created the table and then failed on the
+            // rule -- which is exactly what happens when the port is empty.
             String rules = rulesOf(stillUsed, c);
             if (rules == null) {
-                // pfctl non ha risposto. Dire "nessuna regola" sarebbe una conclusione tratta
-                // dal non aver letto, e accuserebbe di guasto cinque jail sane.
+                // pfctl did not answer. Saying "no rule" would be a conclusion drawn
+                // from not having read, and would accuse five healthy jails of being broken.
                 j.ruleVerified = false;
             } else {
                 j.ruleVerified = true;
@@ -1966,15 +1967,15 @@ public class Fail2banManager {
     }
 
     /**
-     * Le regole pf caricate, per ancora. Lette una volta sola e tenute per la durata del
-     * confronto: sono identiche per tutte le jail che condividono l'ancora, e rileggerle a ogni
-     * jail vorrebbe dire eseguire pfctl sette volte per avere sette volte lo stesso testo.
+     * The loaded pf rules, per anchor. Read only once and kept for the duration of the
+     * comparison: they are identical for all the jails sharing the anchor, and rereading them for
+     * every jail would mean running pfctl seven times to get the same text seven times.
      */
     private String rulesOf(String anchor, PfComparison inMemory) {
         String key = anchor == null ? "" : anchor;
         String already = inMemory.rules.get(key);
         if (already != null) return already;
-        String text = null;   // null = non letto. Diverso da "letto e non contiene niente".
+        String text = null;   // null = not read. Different from "read and contains nothing".
         try {
             java.util.List<String> argv = new ArrayList<>();
             argv.add("/sbin/pfctl");
@@ -1988,7 +1989,7 @@ public class Fail2banManager {
         return text;
     }
 
-    /** Gli indirizzi che Fail2ban elenca come bannati adesso per quella jail. */
+    /** The addresses Fail2ban lists as banned right now for that jail. */
     private java.util.List<String> ipsBannedByFail2ban(String jail) {
         java.util.List<String> out = new ArrayList<>();
         try {
@@ -2002,24 +2003,24 @@ public class Fail2banManager {
     }
 
     /**
-     * I comandi che una jail esegue davvero per bannare, uno per azione.
+     * The commands a jail really runs to ban, one per action.
      *
-     * Si prendono tutti, non solo quello che sembra parlare di pf: quando nessuno nomina una
-     * tabella, la risposta giusta non e' "questa jail non usa pf" — che sarebbe una conclusione
-     * tratta dal non aver trovato — ma mostrare cosa esegue, e lasciare che si veda.
+     * All of them are taken, not only the one that seems to talk about pf: when none names a
+     * table, the right answer is not "this jail does not use pf" -- which would be a conclusion
+     * drawn from not having found anything -- but to show what it runs, and let it be seen.
      */
     private void banCommandsOf(String jail, JailPf j) {
         try {
             String actions = executeCommand(FAIL2BAN_CLIENT + " get " + jail + " actions");
-            // Si conserva l'uscita cruda. Quando non se ne ricava niente, "non sono riuscito" e'
-            // un vicolo cieco: chi legge la scheda non puo' fare un passo avanti, e chi la
-            // scrive finisce a indovinare. Mostrare cosa ha risposto fail2ban trasforma un
-            // fallimento muto in un indizio, e costa niente perche' l'uscita l'abbiamo gia'.
+            // The raw output is kept. When nothing can be derived from it, "I could not" is
+            // a dead end: whoever reads the card cannot take a step forward, and whoever
+            // writes it ends up guessing. Showing what fail2ban answered turns a
+            // silent failure into a clue, and costs nothing because we already have the output.
             j.actionsOutput = actions == null ? "" : actions.trim();
             if (actions == null) return;
-            // Durante un "reload --restart" il server non risponde per qualche istante. E' una
-            // condizione del pannello, non un difetto della jail: attribuirgliela farebbe
-            // comparire un guasto inventato proprio mentre si sta riparando qualcos'altro.
+            // During a "reload --restart" the server does not answer for a few moments. It is a
+            // condition of the panel, not a defect of the jail: attributing it to the jail would make
+            // an invented fault appear right while something else is being repaired.
             if (j.actionsOutput.contains("Unable to contact server")
                 || j.actionsOutput.contains("Connection refused")) {
                 j.unreachable = true;
@@ -2043,7 +2044,7 @@ public class Fail2banManager {
         }
     }
 
-    /** Il contenuto di una tabella pf. Una tabella assente non e' un errore: e' una risposta. */
+    /** The contents of a pf table. A missing table is not an error: it is an answer. */
     private TableReading addressesInPfTable(String anchor, String table) {
         TableReading t = new TableReading();
         try {
@@ -2056,8 +2057,8 @@ public class Fail2banManager {
                 java.time.Duration.ofSeconds(20), argv.toArray(new String[0]));
             String out = r.output() == null ? "" : r.output();
             if (!r.success()) {
-                // Tabella inesistente: e' precisamente il guasto che questo controllo cerca,
-                // non un fallimento della misura. Si prosegue con l'insieme vuoto.
+                // Non-existent table: it is precisely the fault this check looks for,
+                // not a failure of the measurement. We go on with the empty set.
                 if (out.toLowerCase().contains("does not exist") || out.toLowerCase().contains("no such")) {
                     t.read = true;
                     t.missing = true;
@@ -2079,12 +2080,12 @@ public class Fail2banManager {
     }
 
     /**
-     * Stessa forma per i due insiemi prima di confrontarli.
+     * Same form for the two sets before comparing them.
      *
-     * pfctl stampa gli indirizzi con la maschera ("213.209.159.175/32"), Fail2ban li elenca
-     * nudi. Confrontati cosi' com'erano, ogni indirizzo bannato sarebbe risultato presente in
-     * uno solo dei due: il controllo avrebbe segnalato un guasto ovunque, e un controllo che
-     * grida sempre non viene piu' letto.
+     * pfctl prints the addresses with the mask ("213.209.159.175/32"), Fail2ban lists them
+     * bare. Compared as they were, every banned address would have appeared in
+     * only one of the two: the check would have flagged a fault everywhere, and a check that
+     * always shouts is no longer read.
      */
     static String normalizeAddress(String v) {
         String s = v.trim();
@@ -2096,9 +2097,10 @@ public class Fail2banManager {
     }
 
     /**
-     * Ancora e tabella lette da un comando di ban. Separata dall'esecuzione per poter essere
-     * provata: e' l'unico punto del confronto dove un'espressione sbagliata non si vedrebbe —
-     * darebbe "questa jail non usa pf" e il confronto sparirebbe in silenzio invece di fallire.
+     * Anchor and table read from a ban command. Separated from execution so that it can be
+     * tested: it is the only point of the comparison where a wrong expression would not show --
+     * it would give "this jail does not use pf" and the comparison would vanish silently instead
+     * of failing.
      */
     static PfTarget targetFromCommand(String cmd) {
         if (cmd == null || !cmd.contains("pfctl")) return null;
@@ -2110,17 +2112,17 @@ public class Fail2banManager {
         java.util.regex.Matcher ma = Pattern.compile("-a\\s+(\\S+)").matcher(cmd);
         if (ma.find()) { b.anchor = ma.group(1); return b; }
 
-        // Nessun "-a" nel testo non vuol dire nessuna ancora. Il file dell'azione definisce
+        // No "-a" in the text does not mean no anchor. The action file defines
         //     pfctl = pfctl -a f2b/<name>
-        // e fail2ban restituisce i comandi con i segnaposto NON espansi — si vede bene in
-        // "<iptables> -I ..." — quindi l'ancora e' nascosta dentro <pfctl> e cercarla nel testo
-        // non la trova mai. Cercare la tabella senza ancora significa guardare nel ruleset
-        // principale, dove non c'e': si concluderebbe "tabella inesistente" per ogni jail sana.
+        // and fail2ban returns the commands with the placeholders NOT expanded -- it is easy to see in
+        // "<iptables> -I ..." -- so the anchor is hidden inside <pfctl> and searching for it in the
+        // text never finds it. Looking for the table without an anchor means looking in the main
+        // ruleset, where it is not: one would conclude "table does not exist" for every healthy jail.
         //
-        // L'ancora si ricava dalle stesse definizioni: la tabella e' "<tablename>-<name>" e
-        // l'ancora "f2b/<name>", quindi condividono <name>. Non e' una convenzione indovinata,
-        // e' la lettura delle due righe che la compongono. Resta comunque un candidato da
-        // provare, non una certezza: chi legge prova e guarda se la tabella risponde.
+        // The anchor is derived from the same definitions: the table is "<tablename>-<name>" and
+        // the anchor "f2b/<name>", so they share <name>. It is not a guessed convention,
+        // it is the reading of the two lines that compose it. It is still a candidate to
+        // try, though, not a certainty: whoever reads tries it and sees whether the table answers.
         int dash = b.table.indexOf('-');
         if (dash > 0 && dash < b.table.length() - 1)
             b.stillLikely = "f2b/" + b.table.substring(dash + 1);
@@ -2128,8 +2130,8 @@ public class Fail2banManager {
     }
 
     static class PfTarget {
-        String anchor;          // scritta nel comando: certa
-        String stillLikely; // ricavata dalle definizioni dell'azione: da provare
+        String anchor;          // written in the command: certain
+        String stillLikely; // derived from the action's definitions: to be tried
         String table;
     }
 
@@ -2139,16 +2141,16 @@ public class Fail2banManager {
         final java.util.List<String> addresses = new ArrayList<>();
     }
 
-    /** Il confronto, jail per jail. */
+    /** The comparison, jail by jail. */
     public static class PfComparison {
         public final java.util.List<JailPf> jails = new ArrayList<>();
         final java.util.Map<String, String> rules = new java.util.HashMap<>();
         /**
-         * Indirizzi che Fail2ban crede bannati e che pf non blocca: passano.
+         * Addresses Fail2ban believes are banned and pf does not block: they get through.
          *
-         * Ci finiscono anche quelli presenti nella tabella quando nessuna regola la legge:
-         * essere nella tabella e' una condizione necessaria, non sufficiente, e contarli come
-         * bloccati sarebbe lo stesso errore di leggere "Currently banned" come una prova.
+         * Those present in the table when no rule reads it end up here too:
+         * being in the table is a necessary condition, not a sufficient one, and counting them as
+         * blocked would be the same mistake as reading "Currently banned" as proof.
          */
         public int totalNotApplied() {
             int n = 0;
@@ -2160,20 +2162,20 @@ public class Fail2banManager {
             return n;
         }
 
-        /** Jail la cui tabella non e' letta da nessuna regola pf: bannano nel vuoto. */
+        /** Jails whose table is read by no pf rule: they ban into the void. */
         public int totalWithoutRule() {
             int n = 0;
             for (JailPf j : jails) if (j.read && j.ruleVerified && !j.rulePresent) n++;
             return n;
         }
         /**
-         * Jail di cui non si e' potuto misurare niente: il loro silenzio non e' un via libera.
+         * Jails for which nothing could be measured: their silence is not a go-ahead.
          *
-         * Ci finiscono TUTTE quelle non lette, qualunque ne sia il motivo. La prima versione
-         * contava solo gli errori di lettura e lasciava fuori le jail per cui non si trovava
-         * una tabella pf: la jail della 443 aveva un indirizzo bannato, nessuna verifica, e
-         * il riepilogo diceva "Coerenti". Un verde che nasce da cio' che non si e' guardato e'
-         * il difetto che questa scheda esiste per scoprire, e ce l'aveva dentro.
+         * ALL the ones not read end up here, whatever the reason. The first version
+         * counted only read errors and left out the jails for which no pf table
+         * was found: the jail of port 443 had a banned address, no check, and
+         * the summary said "Consistent". A green that comes from what was not looked at is
+         * the defect this card exists to uncover, and it had it inside.
          */
         public int totalUnmeasured() {
             int n = 0;
@@ -2181,7 +2183,7 @@ public class Fail2banManager {
             return n;
         }
 
-        /** Ban dichiarati da Fail2ban per jail che non siamo riusciti a verificare. */
+        /** Bans declared by Fail2ban for jails we could not verify. */
         public int unverifiedBans() {
             int n = 0;
             for (JailPf j : jails) if (!j.read) n += j.believedBanned.size();
@@ -2192,23 +2194,23 @@ public class Fail2banManager {
     public static class JailPf {
         public String jail = "", anchor = "", table = "", note = "";
         public boolean read, missingTable;
-        /** Esiste una regola pf che legge questa tabella? Senza, la tabella non blocca nulla. */
+        /** Is there a pf rule that reads this table? Without one, the table blocks nothing. */
         public boolean rulePresent;
-        /** Il ruleset e' stato letto davvero. Senza questo, rulePresent non vuol dire niente. */
+        /** The ruleset was really read. Without this, rulePresent means nothing. */
         public boolean ruleVerified;
         public final java.util.List<String> believedBanned = new ArrayList<>();
         public final java.util.List<String> inFirewall = new ArrayList<>();
         public final java.util.List<String> onlyInFail2ban = new ArrayList<>();
         public final java.util.List<String> onlyInPf = new ArrayList<>();
-        /** Cosa esegue davvero per bannare. Si mostra quando non si e' potuto verificare. */
+        /** What it really runs to ban. Shown when it could not be verified. */
         public final java.util.List<String> banCommands = new ArrayList<>();
-        /** L'uscita cruda di "get <jail> actions": l'indizio quando non se ne ricava niente. */
+        /** The raw output of "get <jail> actions": the clue when nothing can be derived from it. */
         public String actionsOutput = "";
         public final java.util.List<String> seenActions = new ArrayList<>();
         public final java.util.List<String> discardedActions = new ArrayList<>();
-        /** Le righe di fail2ban.log e le sezioni che definiscono la jail: l'evidenza da leggere. */
+        /** The lines of fail2ban.log and the sections that define the jail: the evidence to read. */
         public String logFail2ban = "", sections = "", dump = "";
-        /** Fail2ban non ha risposto: si sta riavviando. Non e' un guasto di questa jail. */
+        /** Fail2ban did not answer: it is restarting. It is not a fault of this jail. */
         public boolean unreachable;
     }
 
@@ -2237,7 +2239,7 @@ public class Fail2banManager {
         } catch (Exception e) { return null; }
     }
 
-    /** Esegue senza shell: gli argomenti restano argomenti, i metacaratteri non si interpretano. */
+    /** Runs without a shell: arguments stay arguments, metacharacters are not interpreted. */
     private String runArgv(java.util.List<String> argv) {
         try {
             ProcessBuilder pb = new ProcessBuilder(argv);
@@ -2274,7 +2276,7 @@ public class Fail2banManager {
     }
 
     /**
-     * Esegue per una specifica jail i comandi:
+     * Runs the following commands for a specific jail:
      *   fail2ban-client get <jail> maxretry
      *   fail2ban-client get <jail> findtime
      *   fail2ban-client get <jail> bantime
@@ -2283,8 +2285,8 @@ public class Fail2banManager {
      *   fail2ban-client get <jail> filter
      *   fail2ban-client status <jail>
      *
-     * Restituisce un oggetto strutturato con l'output testuale di ogni comando
-     * + i valori parsati delle statistiche per la UI.
+     * Returns a structured object with the text output of each command
+     * + the parsed values of the statistics for the UI.
      */
     public JailLiveState getJailLiveState(String jailName) {
         JailLiveState s = new JailLiveState();
@@ -2293,26 +2295,26 @@ public class Fail2banManager {
             s.error = I18n.tr("server.f2bm.badJailNamed", java.util.Map.of("j", String.valueOf(jailName)));
             return s;
         }
-        // PARALLELIZZAZIONE: ognuno dei 5 "fail2ban-client get" + lo "status" parte su
-        // un virtual thread separato. Tempo totale = tempo del comando piu' lento
-        // (~150ms) invece della somma (~900ms).
-        // Usiamo CompletableFuture + virtual threads (API stabile, no preview flags).
+        // PARALLELIZATION: each of the 5 "fail2ban-client get" + the "status" starts on
+        // a separate virtual thread. Total time = time of the slowest command
+        // (~150ms) instead of the sum (~900ms).
+        // We use CompletableFuture + virtual threads (stable API, no preview flags).
         try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
             var maxretryF = java.util.concurrent.CompletableFuture.supplyAsync(I18n.withCurrentSupplier(() -> runGetCommand(jailName, "maxretry")), executor);
             var findtimeF = java.util.concurrent.CompletableFuture.supplyAsync(I18n.withCurrentSupplier(() -> runGetCommand(jailName, "findtime")), executor);
             var bantimeF  = java.util.concurrent.CompletableFuture.supplyAsync(I18n.withCurrentSupplier(() -> runGetCommand(jailName, "bantime")),  executor);
             var logpathF  = java.util.concurrent.CompletableFuture.supplyAsync(I18n.withCurrentSupplier(() -> runGetCommand(jailName, "logpath")),  executor);
             var ignoreipF = java.util.concurrent.CompletableFuture.supplyAsync(I18n.withCurrentSupplier(() -> runGetCommand(jailName, "ignoreip")), executor);
-            // Nota: `fail2ban-client get <jail> filter` non e' supportato in tutte
-            // le versioni di fail2ban-client. Leggiamo da config (file I/O, veloce).
+            // Note: `fail2ban-client get <jail> filter` is not supported in all
+            // versions of fail2ban-client. We read from config (file I/O, fast).
             var filterF   = java.util.concurrent.CompletableFuture.supplyAsync(I18n.withCurrentSupplier(() -> readFilterNameFromConfig(jailName)), executor);
-            // Status: testo multilinea, lo manteniamo intero per il parsing
+            // Status: multiline text, we keep it whole for parsing
             var statusF   = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
                 try { return executeCommand(FAIL2BAN_CLIENT + " status " + jailName); }
                 catch (Exception e) { throw new RuntimeException(e); }
             }, executor);
 
-            // Aspetta tutti — join() rilancia eventuali eccezioni
+            // Wait for all -- join() rethrows any exceptions
             java.util.concurrent.CompletableFuture.allOf(
                 maxretryF, findtimeF, bantimeF, logpathF, ignoreipF, filterF, statusF
             ).orTimeout(15, java.util.concurrent.TimeUnit.SECONDS).join();
@@ -2337,8 +2339,8 @@ public class Fail2banManager {
             String out = executeCommand(FAIL2BAN_CLIENT + " get " + jailName + " " + key);
             if (out == null) return "";
             String trimmed = out.trim();
-            // fail2ban-client get a volte ritorna prefissi tipo "`-" o "|-" per liste — li puliamo
-            // Esempio: get <jail> ignoreip può ritornare "127.0.0.1/8\n::1"
+            // fail2ban-client get sometimes returns prefixes like "`-" or "|-" for lists -- we clean them
+            // Example: get <jail> ignoreip can return "127.0.0.1/8\n::1"
             return trimmed;
         } catch (Exception e) {
             return "(" + I18n.tr("server.f2bm.errorLower", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e))) + ")";
@@ -2353,7 +2355,7 @@ public class Fail2banManager {
             if (colon < 0) continue;
             String key = l.substring(0, colon).trim().toLowerCase();
             String val = l.substring(colon + 1).trim();
-            // Switch arrow syntax (Java 14+): nessun fall-through, nessun break.
+            // Switch arrow syntax (Java 14+): no fall-through, no break.
             switch (key) {
                 case "currently failed" -> s.currentlyFailed = parseIntSafe(val);
                 case "total failed"     -> s.totalFailed     = parseIntSafe(val);
@@ -2361,18 +2363,18 @@ public class Fail2banManager {
                 case "total banned"     -> s.totalBanned     = parseIntSafe(val);
                 case "banned ip list"   -> s.bannedIpsRaw    = val;
                 case "file list"        -> s.fileListRaw     = val;
-                default -> { /* ignora chiavi sconosciute */ }
+                default -> { /* ignore unknown keys */ }
             }
         }
     }
 
     /**
-     * Cerca il valore di "filter = ..." nella sezione [jailName] dentro:
+     * Looks for the value of "filter = ..." in the [jailName] section inside:
      *   /usr/local/etc/fail2ban/jail.local
      *   /usr/local/etc/fail2ban/jail.d/*.conf|local
-     * Restituisce il nome del filtro, "(default: jailName)" se la sezione esiste ma
-     * non specifica filter (fail2ban usa il nome della jail come default), oppure
-     * "(non trovato)" se la sezione manca del tutto.
+     * Returns the filter name, "(default: jailName)" if the section exists but
+     * does not specify filter (fail2ban uses the jail name as default), or
+     * "(not found)" if the section is missing altogether.
      */
     private String readFilterNameFromConfig(String jailName) {
         List<Path> candidates = new ArrayList<>();
@@ -2425,16 +2427,16 @@ public class Fail2banManager {
         public String name;
         public boolean success;
         public String error;
-        // Output dei comandi "get"
+        // Output of the "get" commands
         public String maxretry;
         public String findtime;
         public String bantime;
         public String logpath;
         public String ignoreip;
         public String filter;
-        // Output completo di "status"
+        // Full output of "status"
         public String statusRaw;
-        // Campi parsati da status (con default 0/null se non disponibili)
+        // Fields parsed from status (with default 0/null if not available)
         public int currentlyFailed;
         public int totalFailed;
         public int currentlyBanned;
@@ -2464,18 +2466,18 @@ public class Fail2banManager {
         public int totalFailed;
         public List<String> bannedIps = new ArrayList<>();
         public String logFile;
-        /** Le porte che la jail protegge, come le dichiara fail2ban. Vuoto = non dichiarata. */
+        /** The ports the jail protects, as fail2ban declares them. Empty = not declared. */
         public String ports = "";
-        /** false quando fail2ban non ha saputo dirle: "non dichiarata" non e' "nessuna". */
+        /** false when fail2ban could not tell them: "not declared" is not "none". */
         public boolean declaredPort;
         /**
-         * Il comando di ban usa davvero la porta, oppure blocca l'indirizzo e basta?
+         * Does the ban command really use the port, or does it just block the address?
          *
-         * Senza questa distinzione l'elenco delle porte non si sa come leggere. Se il comando
-         * NON le nomina — il caso tipico di una tabella di pf — allora il ban vale per
-         * l'indirizzo su tutte le porte, e una lista che non corrisponde ai servizi veri non
-         * fa alcun danno: e' decorativa. Se invece le nomina, una lista sbagliata e' un buco,
-         * perche' l'attaccante viene bloccato su porte che non sta usando.
+         * Without this distinction it is not known how to read the list of ports. If the command
+         * does NOT name them -- the typical case of a pf table -- then the ban applies to
+         * the address on all ports, and a list that does not match the real services
+         * does no harm: it is decorative. If instead it names them, a wrong list is a hole,
+         * because the attacker gets blocked on ports they are not using.
          */
         public boolean banUsesPort;
         public String banCommand = "";
@@ -2483,15 +2485,15 @@ public class Fail2banManager {
     }
 
     /**
-     * IP attualmente bannato in una specifica jail.
-     * Record immutabile. bannedAt/expiresAt sono opzionali (possono essere null
-     * se fail2ban non li espone — la 'status' attuale non li include).
+     * IP currently banned in a specific jail.
+     * Immutable record. bannedAt/expiresAt are optional (they can be null
+     * if fail2ban does not expose them -- the current 'status' does not include them).
      */
     public record BannedIp(String ip, String jail, boolean active,
                            LocalDateTime bannedAt, LocalDateTime expiresAt) {}
 
     /**
-     * Evento storico di ban/unban estratto dal log di fail2ban.
+     * Historical ban/unban event extracted from the fail2ban log.
      */
     public record BanEvent(LocalDateTime timestamp, String action, String jail, String ip) {}
 
@@ -2524,42 +2526,41 @@ public class Fail2banManager {
         public String error;
     }
 
-    // ============== PERMABAN (ban permanente via pf, independent from Fail2ban) ==============
+    // ============== PERMABAN (permanent ban via pf, independent from Fail2ban) ==============
     //
-    // Architettura:
-    //   - File: /var/db/daemoxcp-mail/permaban.list (lista IP, uno per riga)
-    //   - Tabella pf: <permaban> persist file ".../permaban.list"
-    //   - Regola pf:  block in quick from <permaban>
+    // Architecture:
+    //   - File: /var/db/daemoxcp-mail/permaban.list (IP list, one per line)
+    //   - pf table: <permaban> persist file ".../permaban.list"
+    //   - pf rule:  block in quick from <permaban>
     //
-    // Vantaggi rispetto a fail2ban bantime=-1:
-    //   - Sopravvive a riavvii pannello, fail2ban, server
-    //   - Funziona anche se fail2ban è giù
-    //   - Granulare per singolo IP
-    //
+    // Advantages over fail2ban bantime=-1:
+    //   - Survives restarts of the panel, fail2ban, server
+    //   - Works even if fail2ban is down
+    //   - Granular per single IP
     public static final String PERMABAN_DIR  = "/var/db/daemoxcp-mail";
     public static final String PERMABAN_FILE = PERMABAN_DIR + "/permaban.list";
     public static final String PERMABAN_TABLE = "permaban";
-    /** Le righe di commento in testa alla lista, e la riga vuota che le separa dagli IP. */
+    /** The comment lines at the top of the list, and the blank line that separates them from the IPs. */
     public static final String PERMABAN_HEADER = "# Permaban list — managed by DaemoxCP Mail\n"
             + "# The IPs in here are loaded into the pf table <permaban>\n"
             + "# and blocked with the rule: block in quick from <permaban>\n\n";
 
     /**
-     * Aggiunge un IP alla lista permaban.
-     * - Aggiunge al file (con dedup)
-     * - Aggiunge runtime alla tabella pf
-     * Ritorna true se l'IP è stato effettivamente aggiunto (false se già presente).
+     * Adds an IP to the permaban list.
+     * - Adds it to the file (with dedup)
+     * - Adds it at runtime to the pf table
+     * Returns true if the IP was actually added (false if already present).
      */
     public synchronized boolean addPermanentBan(String ip) throws Exception {
         if (!isValidIp(ip)) throw org.daemoxcp.mail.util.ShownException.Argument.of("server.badIp");
 
         ensurePermanentBanFile();
         java.util.Set<String> current = readPermanentBanFile();
-        if (current.contains(ip)) return false; // già presente, no-op
+        if (current.contains(ip)) return false; // already present, no-op
         current.add(ip);
         writePermabanFile(current);
 
-        // Sync runtime con pfctl (se pf è attivo)
+        // Sync runtime with pfctl (if pf is active)
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "add", ip);
@@ -2567,15 +2568,15 @@ public class Fail2banManager {
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
-            // Anche se pfctl fallisce (es. tabella non ancora creata), il file è già scritto
+            // Even if pfctl fails (e.g. table not created yet), the file is already written
         } catch (Exception ignored) {}
 
         return true;
     }
 
     /**
-     * Rimuove un IP dalla lista permaban.
-     * Ritorna true se rimosso, false se non era presente.
+     * Removes an IP from the permaban list.
+     * Returns true if removed, false if it was not present.
      */
     public synchronized boolean removePermanentBan(String ip) throws Exception {
         if (!isValidIp(ip)) throw org.daemoxcp.mail.util.ShownException.Argument.of("server.badIp");
@@ -2597,7 +2598,7 @@ public class Fail2banManager {
         return true;
     }
 
-    /** Ritorna la lista corrente di IP permabanned. */
+    /** Returns the current list of permabanned IPs. */
     public synchronized java.util.List<String> listPermanentBans() {
         try {
             return new java.util.ArrayList<>(readPermanentBanFile());
@@ -2606,7 +2607,7 @@ public class Fail2banManager {
         }
     }
 
-    /** Ritorna gli IP attualmente caricati nella tabella pf <permaban> (runtime). */
+    /** Returns the IPs currently loaded in the pf table <permaban> (runtime). */
     public java.util.Set<String> listPermanentBanRuntime() {
         java.util.Set<String> result = new java.util.HashSet<>();
         try {
@@ -2626,8 +2627,8 @@ public class Fail2banManager {
     }
 
     /**
-     * Ricarica la tabella pf dal file (es. dopo restart pannello).
-     * Equivale a: pfctl -t permaban -T replace -f <file>
+     * Reloads the pf table from the file (e.g. after a panel restart).
+     * Equivalent to: pfctl -t permaban -T replace -f <file>
      */
     public boolean reloadPermanentBanFromFile() {
         try {
@@ -2651,7 +2652,7 @@ public class Fail2banManager {
         if (!Files.exists(file)) Files.createFile(file);
     }
 
-    /** Legge il file ignorando righe vuote, commenti (#) e IP non validi. */
+    /** Reads the file ignoring empty lines, comments (#) and invalid IPs. */
     private java.util.Set<String> readPermanentBanFile() throws java.io.IOException {
         java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
         Path file = Paths.get(PERMABAN_FILE);
@@ -2678,17 +2679,17 @@ public class Fail2banManager {
     public static class IpInfo {
         public String ip;
         public boolean found;
-        public String country;         // codice (es. "RO") — da geoIP se disponibile, altrimenti whois
-        public String countryName;     // nome completo (es. "Romania")
+        public String country;         // code (e.g. "RO") -- from geoIP if available, otherwise whois
+        public String countryName;     // full name (e.g. "Romania")
         public String region;          // regione/stato (es. "Bucharest")
-        public String city;            // città
-        public String organization;    // org registrazione (da whois)
+        public String city;            // city
+        public String organization;    // registration org (from whois)
         public String isp;             // ISP (da geoIP)
         public String asn;             // ASN (es. "AS12345")
-        public String netRange;        // range di IP (da whois)
+        public String netRange;        // IP range (from whois)
         public Double latitude;
         public Double longitude;
-        public String geoSource;       // "ip-api.com" oppure "whois" oppure "both"
+        public String geoSource;       // "ip-api.com" or "whois" or "both"
         public String rawWhois;
         public String error;
     }

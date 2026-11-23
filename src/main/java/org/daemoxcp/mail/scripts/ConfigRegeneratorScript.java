@@ -19,7 +19,7 @@ public class ConfigRegeneratorScript {
 
     private final MailDatabase mailDb;
 
-    /** Un comando come vmail, con l'ambiente vuoto: come AddressTransform.asVmail. */
+    /** A command as vmail, with an empty environment: like AddressTransform.asVmail. */
     static final String AS_VMAIL = "env -i /usr/sbin/chroot -u vmail -g vmail -G vmail / /bin/";
 
     public ConfigRegeneratorScript(MailDatabase mailDb) {
@@ -46,18 +46,20 @@ public class ConfigRegeneratorScript {
             // Create maildir directories
             script.append("# Create maildir directories\n");
             script.append("echo 'Creating maildir directories...'\n");
-            // I nomi vengono da MySQL, che col pannello separato scrive anche la parte web: questo script lo
-            // esegue root, quindi un nome entra solo se ha la forma di un dominio o di una casella (SafeNames),
-            // e comunque fra apici. Un nome che non passa si salta, e lo si dice senza ripeterlo nello script.
-            // Le tre cartelle una per una: /bin/sh di FreeBSD non espande {cur,new,tmp}, e creava una cartella
-            // con quel nome.
+            // The names come from MySQL, which with the separated panel the web part also writes: this script is
+            // run by root, so a name gets in only if it has the form of a domain or a mailbox (SafeNames),
+            // and in quotes anyway. A name that does not pass is skipped, and this is reported without repeating
+            // it in the script.
+            // The three folders one by one: FreeBSD's /bin/sh does not expand {cur,new,tmp}, and created a folder
+            // with that name.
             for (MailDatabase.Domain domain : domains) {
                 if (!SafeNames.domain(domain.domain)) {
                     LOGGER.warning("[ConfigRegenerator] domain id " + domain.id + " has a name that is not a domain: skipped");
                     script.append("echo '[WARNING] a domain with an invalid name was skipped (see the panel log)'\n");
                     continue;
                 }
-                // Le crea vmail, non root: un collegamento messo da vmail porta solo dove vmail scrive gia' (reperto 252)
+                // vmail creates them, not root: a link placed by vmail leads only where vmail already writes
+                // (finding 252)
                 script.append(AS_VMAIL).append("mkdir -p '/var/vmail/").append(domain.domain).append("'\n");
                 List<MailDatabase.Mailbox> mailboxes = mailDb.getMailboxes(domain.id);
                 for (MailDatabase.Mailbox mb : mailboxes) {
@@ -67,10 +69,11 @@ public class ConfigRegeneratorScript {
                         script.append("echo '[WARNING] a mailbox with an invalid name was skipped (see the panel log)'\n");
                         continue;
                     }
-                    // La casella come la legge Dovecot: la posta nella sua radice (mail_location maildir:/var/vmail/%d/%n),
-                    // e la home nella cartella home/ (DovecotHome). Prima si creava .../Maildir/{cur,new,tmp}, che Dovecot
-                    // non usa: restava vuota in ogni casella (12 su 12 sul server vero, 20/11/2026), e la home arrivava solo
-                    // al riavvio del pannello. Le cartelle vuote vecchie le toglie UnusedMaildir all'avvio.
+                    // The mailbox as Dovecot reads it: the mail in its root (mail_location maildir:/var/vmail/%d/%n),
+                    // and the home in the home/ folder (DovecotHome). Before, .../Maildir/{cur,new,tmp} was created,
+                    // which Dovecot does not use: it stayed empty in every mailbox (12 out of 12 on the production
+                    // server, 2026-11-20), and the home arrived only at the panel's restart. The old empty folders are
+                    // removed by UnusedMaildir at boot.
                     String box = "/var/vmail/" + domain.domain + "/" + user + "/";
                     script.append(AS_VMAIL).append("mkdir -p '").append(box).append("cur' '").append(box).append("new' '")
                           .append(box).append("tmp'");
@@ -79,20 +82,20 @@ public class ConfigRegeneratorScript {
                     script.append("\n");
                 }
             }
-            // Quello che le versioni di prima avevano creato da root torna a vmail: solo cartelle e file con un solo nome.
-            // «chown -R» dava a vmail anche un file di root collegato li' dentro con un hard link (reperto 252).
+            // What previous versions had created as root goes back to vmail: only folders and files with a single name.
+            // "chown -R" also gave vmail a root file linked in there with a hard link (finding 252).
             script.append(org.daemoxcp.mail.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail"));
-            // Le cartelle le crea root (umask 022, quindi 0755) e Dovecot copia i permessi della
-            // cartella radice nelle cose nuove: solo vmail, come fa VmailPermissions all'avvio.
+            // root creates the folders (umask 022, so 0755) and Dovecot copies the permissions of the
+            // root folder onto new things: vmail only, as VmailPermissions does at boot.
             script.append(org.daemoxcp.mail.system.VmailPermissions.SHELL).append("\n");
 
             // Reload services
             script.append("# Reload services\n");
             script.append("echo 'Reloading Postfix...'\n");
             script.append("service postfix reload 2>/dev/null || true\n");
-            // Si chiede a Dovecot se accetta la configurazione PRIMA di ricaricarla.
-            // Un reload su una configurazione rotta ferma il servizio: meglio non ricaricare
-            // e lasciare in servizio quella precedente, dicendolo a chiare lettere.
+            // Dovecot is asked whether it accepts the configuration BEFORE reloading it.
+            // A reload on a broken configuration stops the service: better not to reload
+            // and leave the previous one in service, saying so clearly.
             script.append("echo 'Checking the Dovecot configuration...'\n");
             script.append("if command -v doveconf >/dev/null 2>&1; then\n");
             script.append("    DOVECONF_ERR=$(doveconf -n 2>&1 >/dev/null)\n");
@@ -112,7 +115,7 @@ public class ConfigRegeneratorScript {
             script.append("echo 'Configuration regenerated successfully'\n");
 
         } catch (SQLException e) {
-            // Il messaggio non entra nello script: potrebbe contenere apici, e lo script lo esegue root.
+            // The message does not go into the script: it could contain quotes, and root runs the script.
             LOGGER.warning("[ConfigRegenerator] the mail data could not be read: " + e.getMessage());
             script.append("echo 'Error: the mail data could not be read from MySQL (see the panel log)'\n");
             script.append("exit 1\n");

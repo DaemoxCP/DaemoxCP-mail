@@ -11,21 +11,21 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
- * inet_protocols scritto in chiaro in main.cf, col valore che Postfix usa gia'.
+ * inet_protocols written explicitly in main.cf, with the value Postfix already uses.
  *
- * Lo script di installazione di ogni aggiornamento di postfix (/usr/local/libexec/postfix/post-install, letto
- * sulla VM il 09/11/2026) fa questo: se il predefinito non e' ipv4 e main.cf non dice inet_protocols, scrive
- * {@code inet_protocols = ipv4}. Su FreeBSD il predefinito e' all, quindi lo scrive ogni volta che manca, e al
- * riavvio postfix smette di ascoltare in IPv6 (reperto 42). Il pannello lo vede e non riavvia (InstallSideEffects),
- * ma il passo si ferma: nella prova di «Aggiorna tutto» sulla VM (reperto 207) la catena si e' fermata al passo
- * di postfix-mysql per questo. L'installazione completa non scriveva la riga; quella dello stack e PostfixScript
- * si'.
+ * The installation script of every postfix upgrade (/usr/local/libexec/postfix/post-install, read on the VM
+ * on 2026-11-09) does this: if the default is not ipv4 and main.cf does not set inet_protocols, it writes
+ * {@code inet_protocols = ipv4}. On FreeBSD the default is all, so it writes it every time it is missing, and
+ * on restart postfix stops listening on IPv6 (finding 42). The panel sees it and does not restart
+ * (InstallSideEffects), but the step stops: in the test of "Update all" on the VM (finding 207) the chain
+ * stopped at the postfix-mysql step because of this. The full installation did not write the line; the stack
+ * one and PostfixScript did.
  *
- * Qui la riga si scrive col valore di adesso, quello che {@code postconf -h} legge: niente cambia in quello che
- * Postfix fa, quindi non serve ricaricarlo, e lo script non ha piu' niente da scrivere. Un valore gia' scritto,
- * qualunque sia, resta: e' una scelta di qualcuno (sul server vero ipv4, senza indirizzi IPv6). Dopo si controlla
- * che main.cf dica il valore giusto e che {@code postfix check} passi; se no main.cf torna com'era, byte per byte.
- * Al secondo avvio non fa niente.
+ * Here the line is written with the current value, the one {@code postconf -h} reads: nothing changes in what
+ * Postfix does, so there is no need to reload it, and the script has nothing left to write. A value already
+ * written, whatever it is, stays: it is someone's choice (on the production server ipv4, with no IPv6
+ * addresses). Afterwards it checks that main.cf says the right value and that {@code postfix check} passes; if
+ * not, main.cf goes back to how it was, byte for byte. On the second startup it does nothing.
  */
 public final class PostfixInetProtocols {
 
@@ -34,7 +34,7 @@ public final class PostfixInetProtocols {
     static final String POSTCONF = "/usr/local/sbin/postconf";
     static final String POSTFIX = "/usr/local/sbin/postfix";
 
-    /** I valori che Postfix accetta: all, oppure ipv4 e ipv6, da soli o insieme. Nient'altro va in main.cf. */
+    /** The values Postfix accepts: all, or ipv4 and ipv6, alone or together. Nothing else goes into main.cf. */
     private static final Pattern VALUE = Pattern.compile("all|ipv4|ipv6|ipv4[ ,]+ipv6|ipv6[ ,]+ipv4");
 
     private PostfixInetProtocols() {}
@@ -44,8 +44,8 @@ public final class PostfixInetProtocols {
     record Decision(Action action, String value, String reason) {}
 
     /**
-     * Funzione pura: se Postfix c'e', il valore scritto in main.cf ({@code postconf -nh}, vuoto se non c'e') e
-     * quello in uso ({@code postconf -h}).
+     * Pure function: if Postfix is there, the value written in main.cf ({@code postconf -nh}, empty if absent)
+     * and the one in use ({@code postconf -h}).
      */
     static Decision decide(boolean installed, String explicit, String effective) {
         if (!installed) return new Decision(Action.NOTHING, "", "Postfix is not installed");
@@ -85,7 +85,7 @@ public final class PostfixInetProtocols {
         }
         byte[] before = Files.readAllBytes(mainCf);
         PosixFileAttributes attrs = Files.readAttributes(mainCf, PosixFileAttributes.class);
-        // Un controllo che non passava gia' prima non e' colpa di questa riga: conta solo se passava.
+        // A check that was already failing before is not this line's fault: it counts only if it used to pass.
         boolean checkedBefore = Shell.run(Duration.ofSeconds(60), POSTFIX, "check").success();
         Shell.Result r = Shell.run(Duration.ofSeconds(30), POSTCONF, "-e", "inet_protocols=" + d.value());
         String problem = !r.success() ? "postconf -e failed (exit " + r.exitCode() + "): " + r.outputTrim() : verify(d.value(), checkedBefore);
@@ -102,7 +102,7 @@ public final class PostfixInetProtocols {
                 + " (the value already in use: nothing changes, no reload)");
     }
 
-    /** main.cf dice il valore, quello in uso e' lo stesso, e la configurazione passa ancora il controllo di Postfix. */
+    /** main.cf states the value, the one in use is the same, and the configuration still passes Postfix's check. */
     private static String verify(String value, boolean checkedBefore) {
         String now = postconf("-n", "-h", "inet_protocols").trim().replaceAll("\\s+", " ");
         if (!now.equals(value)) return "main.cf says '" + now + "' instead of '" + value + "'";

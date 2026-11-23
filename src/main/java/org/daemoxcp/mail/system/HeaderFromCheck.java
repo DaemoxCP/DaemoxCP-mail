@@ -13,28 +13,30 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
- * Chi si autentica scrive nell'intestazione From solo un indirizzo suo.
+ * Whoever authenticates writes only an address of their own in the From header.
  *
- * Postfix controlla l'indirizzo della busta (SenderLoginMap): una casella spedisce solo dai suoi indirizzi. Ma
- * l'intestazione From, quella che il programma di posta mostra e che DMARC allinea alla firma DKIM, Postfix non la
- * guarda: misurato sulla VM il 20/11/2026, una casella autenticata sulla 587 con la sua busta e «From: boss@» dello
- * stesso dominio passava, firmata con la chiave del dominio.
+ * Postfix checks the envelope address (SenderLoginMap): a mailbox sends only from its own addresses. But Postfix
+ * does not look at the From header, the one the mail program shows and that DMARC aligns with the DKIM signature:
+ * measured on the VM on 2026-11-20, a mailbox authenticated on 587 with its own envelope and "From: boss@" of the
+ * same domain went through, signed with the domain's key.
  *
- * Una regola Lua di Rspamd la chiude. Rspamd sta dietro Postfix come milter, e dal milter sa chi si e' autenticato
- * (la macro {auth_authen}, task:get_user()): misurato attraverso la 587, il From giusto passa e quello di un altro
- * indirizzo prende «554 5.7.1» col messaggio di qui. Per un client autenticato il From deve contenere un indirizzo
- * solo, in un'intestazione sola, e deve essere l'indirizzo della busta (che Postfix ha gia' controllato) o la casella
- * stessa; con la busta vuota, solo la casella. Il rifiuto arriva prima di ogni altro controllo (prefilter,
- * set_pre_result, come i moduli di Rspamd che rifiutano: spamtrap, force_actions). Quello che non si autentica non
- * lo guarda: la posta che arriva da fuori, quella che il pannello manda con sendmail, le risposte automatiche.
+ * A Lua rule in Rspamd closes the gap. Rspamd sits behind Postfix as a milter, and from the milter it knows who
+ * authenticated (the {auth_authen} macro, task:get_user()): measured through 587, the right From goes through and
+ * one with another address gets "554 5.7.1" with the message from here. For an authenticated client the From must
+ * contain a single address, in a single header, and it must be the envelope address (which Postfix has already
+ * checked) or the mailbox itself; with an empty envelope, only the mailbox. The rejection comes before any other
+ * check (prefilter, set_pre_result, like the Rspamd modules that reject: spamtrap, force_actions). It does not look
+ * at whoever does not authenticate: mail arriving from outside, the mail the panel sends with sendmail, automatic
+ * replies.
  *
- * Il file e' lua.local.d/daemoxcp-header-from.lua: rules/rspamd.lua di Rspamd (4.1 sulla VM, 4.2 sul server vero)
- * carica da solo ogni lua.local.d/*.lua, senza toccare rspamd.local.lua, che resta dell'amministratore. L'installatore
- * lo scrive (FullMailServerScript); sui server installati prima lo scrive questa riparazione all'avvio, con lo stesso
- * contenuto. Prima di toccare qualcosa controlla che Rspamd analizzi; dopo, che rspamadm configtest lo accetti e che,
- * ricaricato, Rspamd rifiuti un From non suo e lasci passare quello giusto (due scansioni vere, con un utente finto, sul
- * worker normale). Se qualcosa non torna rimette il file di prima (o lo toglie) e ricarica. Un file con lo stesso nome
- * scritto a mano resta com'e'. Al secondo avvio non fa niente.
+ * The file is lua.local.d/daemoxcp-header-from.lua: Rspamd's rules/rspamd.lua (4.1 on the VM, 4.2 on the
+ * production server) loads every lua.local.d/*.lua by itself, without touching rspamd.local.lua, which stays the
+ * administrator's. The installer writes it (FullMailServerScript); on servers installed earlier this boot repair
+ * writes it, with the same content. Before touching anything it checks that Rspamd scans; afterwards, that rspamadm
+ * configtest accepts it and that, once reloaded, Rspamd rejects a From that is not the sender's own and lets the
+ * right one through (two real scans, with a fake user, on the normal worker). If something does not add up it puts
+ * the previous file back (or removes it) and reloads. A file with the same name written by hand stays as it is. At
+ * the second startup it does nothing.
  */
 public final class HeaderFromCheck {
 
@@ -48,13 +50,13 @@ public final class HeaderFromCheck {
     public static final String REPLY = "The From header must be the sender address of the signed-in mailbox";
     static final Pattern MILTER = Pattern.compile("(?m)^\\s*milter\\s*=\\s*(yes|true)\\b");
 
-    /** L'utente finto delle prove: nessuna casella vera, nessun messaggio consegnato (rspamc analizza e basta). */
+    /** The fake user of the tests: no real mailbox, no message delivered (rspamc just scans). */
     static final String PROBE_USER = "probe@daemoxcp-mail.invalid";
     static final String PROBE_OTHER = "other@daemoxcp-mail.invalid";
 
     private HeaderFromCheck() {}
 
-    /** Il contenuto del file: lo stesso per l'installatore (FullMailServerScript) e per la riparazione. */
+    /** The content of the file: the same for the installer (FullMailServerScript) and for the repair. */
     public static String content() {
         return "-- " + PanelMarker.WRITTEN + ", which rewrites it: do not edit (HeaderFromCheck).\n"
              + "-- A client that signs in writes in the From header only the envelope sender, which Postfix already\n"
@@ -101,9 +103,9 @@ public final class HeaderFromCheck {
     enum Action { NOTHING, APPLY, LEFT_ALONE }
 
     /**
-     * Che cosa fare. installed: c'e' rspamadm; proxy: il worker-proxy.inc di local.d (null se non c'e'); current: il
-     * file di adesso (null se non c'e'). Solo sul Rspamd del pannello, quello che sta dietro Postfix come milter.
-     * Funzione pura.
+     * What to do. installed: rspamadm is there; proxy: the worker-proxy.inc of local.d (null if it is not
+     * there); current: the current file (null if it is not there). Only on the panel's Rspamd, the one behind
+     * Postfix as a milter. A pure function.
      */
     static Action decide(boolean installed, String proxy, String current) {
         if (!installed || proxy == null || !MILTER.matcher(proxy).find()) return Action.NOTHING;
@@ -112,13 +114,13 @@ public final class HeaderFromCheck {
         return current.contains(PanelMarker.WRITTEN) ? Action.APPLY : Action.LEFT_ALONE;
     }
 
-    /** Un messaggio di prova con quell'intestazione From. */
+    /** A test message with that From header. */
     static String message(String from) {
         return "From: " + from + "\r\nTo: <" + PROBE_OTHER + ">\r\nSubject: daemoxcp-mail header from probe\r\n"
              + "Message-ID: <header-from-" + System.nanoTime() + "@daemoxcp-mail.invalid>\r\n\r\nprobe\r\n";
     }
 
-    /** Quello che rspamc dice di un messaggio di un client autenticato come PROBE_USER; null se non risponde. */
+    /** What rspamc says about a message from a client authenticated as PROBE_USER; null if it does not answer. */
     static String scan(String headerFrom) {
         Shell.Result r = Shell.runWithInput(Duration.ofSeconds(60), message(headerFrom), RspamdUser.RSPAMC,
                 "-h", "127.0.0.1:11333", "--user", PROBE_USER, "--from", PROBE_USER, "--rcpt", PROBE_OTHER,
@@ -126,7 +128,10 @@ public final class HeaderFromCheck {
         return r.success() && r.output().contains("Action:") ? r.output() : null;
     }
 
-    /** Il From giusto passa senza il simbolo, quello di un altro indirizzo e' rifiutato col simbolo. Funzione pura. */
+    /**
+     * The right From goes through without the symbol, one with another address is rejected with the symbol.
+     * A pure function.
+     */
     static String judge(String own, String other) {
         if (own == null || other == null) return "Rspamd does not answer a scan";
         if (own.contains(SYMBOL)) return "the sender's own From is refused";

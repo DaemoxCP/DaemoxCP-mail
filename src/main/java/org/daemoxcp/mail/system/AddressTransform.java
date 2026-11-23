@@ -35,32 +35,32 @@ import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 /**
- * Trasformare un alias in una casella vera, e una casella in un alias: solo quando si puo'
- * davvero, e dicendo prima che cosa cambia.
+ * Turning an alias into a real mailbox, and a mailbox into an alias: only when it is really
+ * possible, and saying first what changes.
  *
- * Come arriva la posta qui (scripts/FullMailServerScript, DovecotConfig):
- *  - Postfix chiede al database prima gli alias attivi (aliases.source), poi le caselle attive che
- *    ricevono (mailboxes.email): un indirizzo con alias attivi va alle loro destinazioni, e alla
- *    casella solo se fra queste c'e' lui stesso;
- *  - la posta di una casella sta in /var/vmail/dominio/nome, i suoi filtri compilati in
- *    /var/mail/sieve/dominio/nome. Il database non la contiene: eliminare la riga della casella
- *    non la tocca, e una casella nuova con lo stesso indirizzo la ritroverebbe.
+ * How mail arrives here (scripts/FullMailServerScript, DovecotConfig):
+ *  - Postfix asks the database first for the active aliases (aliases.source), then for the active mailboxes that
+ *    receive (mailboxes.email): an address with active aliases goes to their destinations, and to the
+ *    mailbox only if it is itself among them;
+ *  - a mailbox's mail is in /var/vmail/domain/name, its compiled filters in
+ *    /var/mail/sieve/domain/name. The database does not contain it: deleting the mailbox row
+ *    does not touch it, and a new mailbox with the same address would find it again.
  *
- * Alias -> casella si puo' se l'indirizzo ha un nome prima della @ (una raccolta "@dominio" no),
- * il dominio e' del pannello e l'indirizzo non e' gia' una casella. Serve una password: una casella
- * vera la vuole, per IMAP e SMTP. Le destinazioni di prima o se ne vanno, o restano e la casella ne
- * tiene una copia. Se sul disco c'e' la posta di una casella di prima con lo stesso indirizzo, si
- * sceglie: ritrovarla, o metterla da parte e partire vuoti. I filtri rimasti di quella casella non
- * devono valere per la nuova.
+ * Alias -> mailbox is possible if the address has a name before the @ (a "@domain" catch-all is not),
+ * the domain belongs to the panel and the address is not already a mailbox. A password is needed: a real
+ * mailbox wants one, for IMAP and SMTP. The previous destinations either go away, or stay and the mailbox
+ * keeps a copy. If on disk there is the mail of an earlier mailbox with the same address, one
+ * chooses: recover it, or set it aside and start empty. The leftover filters of that mailbox must not
+ * apply to the new one.
  *
- * Casella -> alias si puo' verso destinazioni valide, diverse dall'indirizzo, che non riportino a
- * lui (sarebbe un giro senza fine, che Postfix rifiuta) e che, se stanno su un dominio del pannello,
- * esistano: casella che riceve, alias attivo o raccolta. Si perdono il login, la risposta
- * automatica, i filtri e gli inoltri della casella, e l'anteprima li elenca. La posta gia' arrivata
- * resta dov'e'.
+ * Mailbox -> alias is possible towards valid destinations, different from the address, that do not lead back to
+ * it (that would be an endless loop, which Postfix rejects) and that, if they are on a panel domain,
+ * exist: a receiving mailbox, an active alias or a catch-all. The mailbox's login, automatic
+ * reply, filters and forwards are lost, and the preview lists them. Mail that has already arrived
+ * stays where it is.
  *
- * L'anteprima consegna un'impronta dello stato: se fra anteprima e conferma qualcosa cambia (un
- * alias, la casella, la posta che compare sul disco), la trasformazione non parte.
+ * The preview hands over a fingerprint of the state: if between preview and confirmation something changes (an
+ * alias, the mailbox, mail appearing on disk), the transformation does not start.
  */
 public final class AddressTransform {
 
@@ -68,31 +68,31 @@ public final class AddressTransform {
 
     private static final Logger LOGGER = Logger.getLogger(AddressTransform.class.getName());
 
-    /** Dove Dovecot tiene la posta e i filtri. Le prove li spostano in una cartella temporanea. */
+    /** Where Dovecot keeps the mail and the filters. Tests move them to a temporary folder. */
     static Path vmail = Path.of("/var/vmail");
     static Path sieve = Path.of("/var/mail/sieve");
-    /** La posta messa da parte: sotto /var/vmail (stesso disco, lo spostamento e' istantaneo), con un nome che nessun dominio puo' avere. */
+    /** Mail set aside: under /var/vmail (same disk, the move is instantaneous), with a name no domain can have. */
     static Path archive() { return vmail.resolve(".panel-archive"); }
     /**
-     * Le regole del pannello messe da parte: nell'albero di root, accanto a quelle vive (stesso disco), con un nome che
-     * nessun dominio puo' avere. Mai sotto /var/vmail: e' di vmail (reperto 222).
+     * The panel's rules set aside: in root's tree, next to the live ones (same disk), with a name that
+     * no domain can have. Never under /var/vmail: that belongs to vmail (finding 222).
      */
     static Path rulesArchive() { return sieve.resolve(".panel-archive"); }
 
     /**
-     * Come si diventa vmail per spostare la posta: chroot(8) con radice /, senza shell ne' PAM, e solo il gruppo vmail
-     * (senza -G il comando terrebbe i gruppi aggiuntivi di root). Le prove senza root lo svuotano: allora lo spostamento
-     * lo fa l'utente che le lancia, nelle sue cartelle.
+     * How one becomes vmail to move the mail: chroot(8) with root /, without a shell or PAM, and only the vmail group
+     * (without -G the command would keep root's supplementary groups). Tests without root empty it: then the move
+     * is done by the user running them, in their own folders.
      */
     static List<String> asVmail = List.of("/usr/sbin/chroot", "-u", "vmail", "-g", "vmail", "-G", "vmail", "/");
 
     /**
-     * Lo spostamento della posta, eseguito come vmail: $1 la fase, poi i percorsi, sempre assoluti (mai un argomento che
-     * cominci con un trattino). Scrive una riga sola: MOVED e dove e' finita, oppure NOTHING se non c'era una cartella.
-     *  archive: $2 la casella, $3 la cartella dell'archivio del dominio (creata se manca), $4 il nome voluto; se e' preso,
+     * The mail move, run as vmail: $1 the phase, then the paths, always absolute (never an argument that
+     * starts with a hyphen). It writes a single line: MOVED and where it ended up, or NOTHING if there was no folder.
+     *  archive: $2 the mailbox, $3 the domain's archive folder (created if missing), $4 the wanted name; if it is taken,
      *           -2, -3...;
-     *  back:    $2 da dove, $3 dove; se dove c'e' gia' qualcosa non si sposta niente.
-     * Seguire un collegamento qui da' a vmail solo cio' che vmail ha gia'.
+     *  back:    $2 from where, $3 to where; if there is already something at the destination nothing is moved.
+     * Following a link here gives vmail only what vmail already has.
      */
     static final String MOVE_SCRIPT = """
             PATH=/bin:/usr/bin; export PATH
@@ -118,33 +118,33 @@ public final class AddressTransform {
             """;
 
     static final int MAX_DESTINATIONS = 20;
-    /** Oltre, il conto dei messaggi si ferma e si dice "almeno". */
+    /** Beyond that, the message count stops and says "at least". */
     static final int MAX_COUNTED_FILES = 200_000;
 
     private static final DateTimeFormatter ARCHIVE_NAME = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
     private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
-    // ===================== Lo stato di un indirizzo =====================
+    // ===================== The state of an address =====================
 
-    /** La posta sul disco per un indirizzo. */
+    /** The mail on disk for an address. */
     public record MailContent(boolean present, long messages, boolean atLeast, long totalBytes, long lastMs, boolean filters) {
         static final MailContent NONE = new MailContent(false, 0, false, 0, 0, false);
     }
 
-    /** Cio' che una casella ha e un alias no. */
+    /** What a mailbox has and an alias does not. */
     public record Losses(boolean autoReply, List<String> forwards, int filters) {}
 
-    /** Quello che conta per decidere, letto dal database e dal disco. */
+    /** What matters for deciding, read from the database and from disk. */
     public record AddressState(String address, boolean panelDomain, MailDatabase.Mailbox mailbox,
                         List<MailDatabase.Alias> withThisSource, List<MailDatabase.Alias> towardsHere,
                         MailContent mail, Losses losses) {}
 
-    /** Le domande sulle destinazioni, a cui risponde il database (o la prova). */
+    /** The questions about the destinations, answered by the database (or by the test). */
     public interface Network {
         boolean panelDomain(String domain) throws SQLException;
-        /** Una casella attiva che riceve: Postfix la conosce. */
+        /** An active mailbox that receives: Postfix knows it. */
         boolean receives(String address) throws SQLException;
-        /** Le destinazioni degli alias attivi con questa sorgente. */
+        /** The destinations of the active aliases with this source. */
         List<String> activeDestinations(String source) throws SQLException;
     }
 
@@ -178,20 +178,20 @@ public final class AddressTransform {
         };
     }
 
-    // ===================== Indirizzi e percorsi =====================
+    // ===================== Addresses and paths =====================
 
-    /** Un indirizzo come lo vuole il pannello: i caratteri di isValidEmail, 254 in tutto, 64 prima della @. */
+    /** An address as the panel wants it: the characters of isValidEmail, 254 in all, 64 before the @. */
     public static boolean validAddress(String a) {
         return a != null && a.length() <= 254 && SecurityUtils.isValidEmail(a) && a.indexOf('@') <= 64;
     }
 
-    /** Solo ASCII stampabile: la lista bianca dei testi liberi (il nome di una casella). */
+    /** Printable ASCII only: the whitelist for free text (the name of a mailbox). */
     public static boolean printable(String t) {
         for (int k = 0; k < t.length(); k++) if (t.charAt(k) < 0x20 || t.charAt(k) > 0x7E) return false;
         return true;
     }
 
-    /** Dove sta la posta dell'indirizzo, per dirlo all'amministratore. */
+    /** Where the address's mail is, to tell the administrator. */
     public static String mailFolder(String address) {
         Path p = folder(vmail, address);
         return p == null ? "" : p.toString();
@@ -203,8 +203,8 @@ public final class AddressTransform {
     }
 
     /**
-     * La cartella della posta di un indirizzo, o null se il nome non si puo' usare come percorso.
-     * isValidEmail ammette anche "..@dominio": qui un nome cosi' uscirebbe da /var/vmail.
+     * The mail folder of an address, or null if the name cannot be used as a path.
+     * isValidEmail also allows "..@domain": here a name like that would escape from /var/vmail.
      */
     static Path folder(Path root, String address) {
         if (!validAddress(address)) return null;
@@ -215,7 +215,7 @@ public final class AddressTransform {
         return p.startsWith(root) && !p.equals(root) ? p : null;
     }
 
-    /** Quanta posta c'e' sul disco per l'indirizzo: i messaggi sono i file in cur/ e new/, anche nelle cartelle. */
+    /** How much mail there is on disk for the address: the messages are the files in cur/ and new/, in the folders too. */
     public static MailContent mail(String address) {
         Path dir = folder(vmail, address);
         Path filters = folder(sieve, address);
@@ -238,36 +238,36 @@ public final class AddressTransform {
                     totalBytes += a.size();
                     last = Math.max(last, a.lastModifiedTime().toMillis());
                 } catch (IOException ignored) {
-                    continue;   // un file sparito mentre si conta
+                    continue;   // a file gone while counting
                 }
                 if (messages >= MAX_COUNTED_FILES) { atLeast = true; break; }
             }
         } catch (IOException | java.io.UncheckedIOException e) {
-            // Illeggibile: c'e', ma non si sa quanta.
+            // Unreadable: it is there, but how much is unknown.
             return new MailContent(true, 0, true, 0, 0, hasFilters);
         }
         return new MailContent(true, messages, atLeast, totalBytes, last, hasFilters);
     }
 
     /**
-     * Mette da parte la posta dell'indirizzo in /var/vmail/.panel-archive/dominio/nome-DATA, e le regole del pannello in
-     * /var/mail/sieve/.panel-archive/dominio/nome-DATA-filters. Restituisce le coppie {da, a} spostate, la posta per
-     * prima, per rimetterle a posto se il resto non riesce.
+     * Sets aside the address's mail in /var/vmail/.panel-archive/domain/name-DATE, and the panel's rules in
+     * /var/mail/sieve/.panel-archive/domain/name-DATE-filters. Returns the {from, to} pairs moved, the mail
+     * first, to put them back if the rest does not succeed.
      *
-     * Nessuno dei due passi attraversa una cartella di un altro utente (reperto 222). Prima li faceva root, tutti e due
-     * sotto /var/vmail, che con tutto quello che contiene e' di vmail (l'utente con cui Dovecot consegna): vmail poteva
-     * mettere un collegamento al posto di .panel-archive o della cartella del dominio, e root lo seguiva. Misurato sulla
-     * VM: root creava cartelle sue dove vmail non puo' scrivere, rinominava una cartella di root di fuori dentro
-     * l'archivio di vmail, e nel rimettere a posto spostava una cartella di root al posto della casella. In piu' le
-     * regole, di root, finivano nell'albero di vmail; e dove /var/mail e /var/vmail stanno su due dataset (sulla VM, come
-     * li fa l'installatore di FreeBSD) lo spostamento delle regole non riusciva affatto (DirectoryNotEmptyException:
-     * Java non sposta una cartella piena da un disco all'altro), e con lui l'intera trasformazione.
-     * Adesso:
+     * Neither of the two steps goes through a folder of another user (finding 222). They used to be done by root, both
+     * under /var/vmail, which with everything it contains belongs to vmail (the user Dovecot delivers as): vmail could
+     * put a link in place of .panel-archive or of the domain folder, and root followed it. Measured on the
+     * VM: root created folders of its own where vmail cannot write, renamed a root folder from outside into
+     * vmail's archive, and when putting things back moved a root folder in place of the mailbox. Moreover the
+     * rules, owned by root, ended up in vmail's tree; and where /var/mail and /var/vmail are on two datasets (on the VM, as
+     * the FreeBSD installer makes them) moving the rules did not work at all (DirectoryNotEmptyException:
+     * Java does not move a non-empty folder from one disk to another), and with it the whole transformation.
+     * Now:
      * <ul>
-     *   <li>la posta la sposta vmail (MOVE_SCRIPT): e' sua, come l'archivio; un collegamento che lui mette gli da' solo
-     *       cio' che ha gia';</li>
-     *   <li>le regole restano a root, nel suo albero: ogni cartella da / e' controllata (RootOnlyPath), quelle
-     *       dell'archivio nascono cosi', e il rename non esce da /var/mail/sieve.</li>
+     *   <li>the mail is moved by vmail (MOVE_SCRIPT): it is its own, like the archive; a link it puts there gives it only
+     *       what it already has;</li>
+     *   <li>the rules stay with root, in its own tree: every folder from / is checked (RootOnlyPath), those
+     *       of the archive are born that way, and the rename does not leave /var/mail/sieve.</li>
      * </ul>
      */
     public static List<Path[]> archive(String address, long nowMs) throws IOException {
@@ -301,7 +301,7 @@ public final class AddressTransform {
         }
     }
 
-    /** Il primo nome libero fra p, p-2, p-3...: solo in una cartella di root (le regole), quindi senza seguire collegamenti. */
+    /** The first free name among p, p-2, p-3...: only in a root folder (the rules), so without following links. */
     private static Path free(Path p) {
         Path q = p;
         for (int k = 2; Files.exists(q, LinkOption.NOFOLLOW_LINKS); k++) q = p.resolveSibling(p.getFileName() + "-" + k);
@@ -309,10 +309,10 @@ public final class AddressTransform {
     }
 
     /**
-     * Uno spostamento della posta fatto da vmail (MOVE_SCRIPT, con {@link #asVmail} e l'ambiente vuoto): dove e' finita,
-     * o null se non c'era una cartella da spostare.
+     * A mail move done by vmail (MOVE_SCRIPT, with {@link #asVmail} and an empty environment): where it ended up,
+     * or null if there was no folder to move.
      *
-     * @throws IOException con quello che hanno scritto mkdir o mv, se vmail non ci riesce
+     * @throws IOException with what mkdir or mv wrote, if vmail does not manage it
      */
     static Path moveAsVmail(String phase, Path... paths) throws IOException {
         List<String> cmd = new ArrayList<>(asVmail);
@@ -328,9 +328,9 @@ public final class AddressTransform {
     }
 
     /**
-     * Rimette dov'erano le cartelle spostate da archive(), dall'ultima: la posta la rimette vmail, le regole root, solo
-     * se le cartelle di partenza e di arrivo passano RootOnlyPath. Quello che non torna resta in archivio (meglio li' che
-     * perso), e il registro lo dice.
+     * Puts back where they were the folders moved by archive(), starting from the last: vmail puts back the mail, root
+     * the rules, only if the source and destination folders pass RootOnlyPath. Whatever does not go back stays in the
+     * archive (better there than lost), and the log says so.
      */
     public static void restore(List<Path[]> moved) {
         for (int k = moved.size() - 1; k >= 0; k--) {
@@ -342,7 +342,7 @@ public final class AddressTransform {
                     String why = RootOnlyPath.problem(from.getParent());
                     if (why == null) why = RootOnlyPath.problem(to.getParent());
                     if (why != null) throw new IOException(why);
-                    // rename(2) sostituirebbe una cartella vuota rinata nel frattempo: qui si lascia stare.
+                    // rename(2) would replace an empty folder recreated in the meantime: here it is left alone.
                     if (Files.exists(to, LinkOption.NOFOLLOW_LINKS)) throw new IOException("taken: " + to);
                     Files.move(from, to, StandardCopyOption.ATOMIC_MOVE);
                 }
@@ -352,9 +352,9 @@ public final class AddressTransform {
         }
     }
 
-    // ===================== Impronta =====================
+    // ===================== Fingerprint =====================
 
-    /** Lo stato che l'anteprima ha mostrato. Il numero dei messaggi non conta: in una casella cambia di continuo. */
+    /** The state the preview showed. The number of messages does not count: in a mailbox it changes all the time. */
     public static String fingerprint(AddressState s) {
         StringBuilder t = new StringBuilder(s.address()).append('|').append(s.panelDomain()).append('|');
         MailDatabase.Mailbox m = s.mailbox();
@@ -378,9 +378,9 @@ public final class AddressTransform {
         return o;
     }
 
-    // ===================== Alias -> casella =====================
+    // ===================== Alias -> mailbox =====================
 
-    /** Perche' l'indirizzo non puo' diventare una casella, o null se puo'. */
+    /** Why the address cannot become a mailbox, or null if it can. */
     public static String noMailboxReason(AddressState s) {
         String a = s.address();
         if (a != null && a.startsWith("@"))
@@ -406,7 +406,7 @@ public final class AddressTransform {
                 .put("towardsHere", towardsHere(s)).put("mail", mail(s.mail(), zone)).put("fingerprint", fingerprint(s));
     }
 
-    // ===================== Casella -> alias =====================
+    // ===================== Mailbox -> alias =====================
 
     public static JSONObject previewToAlias(AddressState s, ZoneId zone) {
         JSONObject o = new JSONObject().put("address", s.address());
@@ -423,7 +423,7 @@ public final class AddressTransform {
                 .put("lastAccess", m.lastLogin == null ? "" : ISO.format(m.lastLogin.toInstant().atZone(zone)))
                 .put("sendOnly", !m.receiveEnabled).put("active", m.active)
                 .put("autoReply", p.autoReply()).put("forwards", new JSONArray(p.forwards())).put("filters", p.filters());
-        // Gli inoltri della casella fanno gia' quello che fara' l'alias: sono le destinazioni proposte.
+        // The mailbox's forwards already do what the alias will do: they are the proposed destinations.
         List<String> proposals = new ArrayList<>(new LinkedHashSet<>(p.forwards()));
         proposals.removeIf(x -> x.equals(s.address()));
         return o.put("possible", true).put("losses", losses).put("proposals", new JSONArray(proposals))
@@ -433,9 +433,9 @@ public final class AddressTransform {
     }
 
     /**
-     * Le destinazioni chieste, controllate: valide, diverse dall'indirizzo, esistenti se sono sui
-     * domini del pannello, e senza un giro che torni all'indirizzo. Lancia IllegalArgumentException
-     * con il motivo.
+     * The requested destinations, checked: valid, different from the address, existing if they are on the
+     * panel's domains, and without a loop leading back to the address. Throws IllegalArgumentException
+     * with the reason.
      */
     public static List<String> destinations(AddressState s, JSONArray requests, Network network) throws SQLException {
         String address = s.address();
@@ -456,7 +456,7 @@ public final class AddressTransform {
                     && network.activeDestinations("@" + dom).isEmpty())
                 throw org.daemoxcp.mail.util.ShownException.Argument.of("server.convert.deadDest", java.util.Map.of("x", String.valueOf(x)));
         }
-        // Dopo, la posta per l'indirizzo andra' alle destinazioni nuove e a quelle che ha gia'.
+        // Afterwards, mail for the address will go to the new destinations and to those it already has.
         Set<String> all = new LinkedHashSet<>(d);
         for (MailDatabase.Alias a : s.withThisSource()) if (a.active && !a.destination.equals(address)) all.add(a.destination);
         for (String x : all) {
@@ -467,7 +467,7 @@ public final class AddressTransform {
         return d;
     }
 
-    /** La strada da un indirizzo all'altro seguendo gli alias attivi, o null se non c'e'. */
+    /** The path from one address to the other following the active aliases, or null if there is none. */
     static String round(String from, String to, Network network) throws SQLException {
         Deque<List<String>> queue = new ArrayDeque<>();
         Set<String> seen = new HashSet<>();
@@ -485,7 +485,7 @@ public final class AddressTransform {
         return null;
     }
 
-    // ===================== Per la pagina =====================
+    // ===================== For the page =====================
 
     private static JSONArray towardsHere(AddressState s) {
         JSONArray v = new JSONArray();

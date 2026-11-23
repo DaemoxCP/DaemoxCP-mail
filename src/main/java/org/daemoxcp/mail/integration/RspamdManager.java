@@ -20,9 +20,9 @@ public class RspamdManager {
     private static final String RSPAMD_HOST = "http://127.0.0.1:11334";
 
     /**
-     * La password del controller, dai segreti di root (RspamdController, reperto 236); "" se non c'e' ancora. Prima era
-     * una costante vuota: il pannello entrava solo perche' il controller lasciava entrare chiunque da 127.0.0.1.
-     * Gli handler che usano questa classe girano nella parte root.
+     * The controller's password, from root's secrets (RspamdController, finding 236); "" if there is none yet.
+     * Before, it was an empty constant: the panel got in only because the controller let anyone in from 127.0.0.1.
+     * The handlers that use this class run in the root part.
      */
     private static String password() {
         try {

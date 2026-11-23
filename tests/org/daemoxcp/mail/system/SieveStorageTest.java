@@ -6,7 +6,7 @@ import org.daemoxcp.mail.i18n.I18n;
 import org.daemoxcp.mail.scripts.DovecotConfig;
 
 /**
- * Users' Sieve scripts in their mail folder, the panel's rules before them (reperto 214).
+ * Users' Sieve scripts in their mail folder, the panel's rules before them (finding 214).
  *
  * Before, the panel's rules and the users' scripts were the same file under /var/mail/sieve, owned by root:
  * ManageSieve, the webmail's filters and doveadm sieve could save nothing ("mkdir_parents_chgrp(/var/mail/sieve/...)

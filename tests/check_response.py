@@ -4,7 +4,7 @@ JavaScript reads them with a dot. Renamed on one side only, the read returns und
 function dies silently.
 
 It is the defect that on 17 October 2026 killed "Run now" in the Cron page: CronManagement sent
-exitCode and output, the page read e.codice and e.uscita, and "undefined === 0" is false, so every
+exitCode and output, the page read `e.codice` and `e.uscita`, and "undefined === 0" is false, so every
 successful job was declared in error. It compiled, no warning. This net's companion is
 tests/check_api.py, which does the same thing the other way round (the parameters the page SENDS
 and the route reads).
@@ -22,8 +22,7 @@ the truth (the keys of the called methods are taken too). So the net does not sh
 objects, and stays true when it says "nobody puts this key".
 
 Run from the project root:  python3 tests/check_response.py
-It runs on the Mac: it reads files of the repository and does not touch the system.
-"""
+It runs on the Mac: it reads files of the repository and does not touch the system."""
 import os
 import re
 import sys
@@ -121,9 +120,9 @@ for n, (fn_name, start) in enumerate(starts):
     for m in re.finditer(r"(?:const|let|var)?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*await\s+[a-zA-Z]+Api\(\s*'([a-z0-9_]+)'", body):
         var, action = m.group(1), m.group(2)
         # The reads of this binding: up to the next binding of the same name (const r = ..., r = ..., an arrow r => ...).
-        # Before, the whole function counted, and «Aggiorna tutto» was reported for r.checks and r.services: in the
+        # Before, the whole function counted, and "Update everything" was reported for r.checks and r.services: in the
         # same function a second "const r" takes the answer of package_preflight / java_preflight (an action computed
-        # here, so not seen), which does put them (reperto 230).
+        # here, so not seen), which does put them (finding 230).
         again = re.compile(r"(?<![.\w$])" + re.escape(var) + r"\s*=(?!=)").search(body, m.end())
         segment = body[m.end():again.start() if again else len(body)]
         fields = set(re.findall(r"(?<![.\w$])" + re.escape(var) + r"\.([A-Za-z_][A-Za-z0-9_]*)", segment))
@@ -148,9 +147,9 @@ for action in sorted(read_fields):
 #
 # It was the third side of the same name, and the most insidious: the fakes of
 # packages-browser-test.js, english-pages-browser-test.js and pkg-branch-browser-test.js sent
-# "spiegazione" while the server sends "explanation", so the tests were GREEN against a dead
-# page. Twelve reads of "spiegazione", three of "descrizione", two of "problemi", four of
-# "motivo", two of "uscita": twenty-three fields that in production were undefined, and no test
+# `spiegazione` while the server sends `explanation`, so the tests were GREEN against a dead
+# page. Twelve reads of `spiegazione`, three of `descrizione`, two of `problemi`, four of
+# `motivo`, two of `uscita`: twenty-three fields that in production were undefined, and no test
 # could say so because the tests were talking to themselves.
 #
 # It looks inside the objects passed to json(route, ...) and in the UPPERCASE constants the fakes

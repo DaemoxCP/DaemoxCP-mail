@@ -8,34 +8,34 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Il testo di un'eccezione che puo' arrivare a una pagina (reperto 231, r19: all'utente solo messaggi generici, mai
- * nome di tabella, colonna, percorso o versione).
+ * The text of an exception that can reach a page (finding 231, r19: only generic messages to the user, never the
+ * name of a table, column, path or version).
  *
- * <p>Le rotte mettevano nella risposta {@code e.getMessage()} di qualunque eccezione: un duplicato in MySQL diceva alla
- * pagina «Duplicate entry 'x' for key 'mailboxes.email'», un file mancante il suo percorso, un JSON storto il nome della
- * chiave. Qui si decide in un punto solo che cosa passa:
+ * <p>The routes put into the response the {@code e.getMessage()} of any exception: a duplicate in MySQL told the
+ * page "Duplicate entry 'x' for key 'mailboxes.email'", a missing file its path, a malformed JSON the name of the
+ * key. Here a single place decides what gets through:
  * <ul>
- *   <li>il testo di ShownException, gia' tradotto: e' quella che il pannello lancia con un testo scritto per chi usa
- *       la pagina (AddressTransform, gli aggiornamenti). Di PasskeyException il testo della chiave che porta. Fino al
- *       19/11/2026 passava il messaggio di ogni IllegalArgumentException e IllegalStateException: molte avevano un
- *       testo inglese scritto nel codice, o il toString() di un'eccezione avvolta (classe, percorso), e arrivavano
- *       cosi' anche nelle pagine italiane (i18n completo);</li>
- *   <li>un duplicato di MySQL (errore 1062, anche dentro un'altra eccezione): «esiste gia'», senza la chiave;</li>
- *   <li>qualunque altra: una riga nel log del pannello con l'eccezione intera, e alla pagina il testo generico.</li>
+ *   <li>the text of ShownException, already translated: it is the one the panel throws with a text written for
+ *       whoever uses the page (AddressTransform, the updates). For PasskeyException, the text of the key it carries.
+ *       Until 2026-11-19 the message of every IllegalArgumentException and IllegalStateException got through: many
+ *       had an English text written in the code, or the toString() of a wrapped exception (class, path), and so
+ *       they reached the Italian pages too (complete i18n);</li>
+ *   <li>a MySQL duplicate (error 1062, even inside another exception): "already exists", without the key;</li>
+ *   <li>any other: a line in the panel log with the whole exception, and the generic text for the page.</li>
  * </ul>
  */
 public final class ErrorText {
 
     private static final Logger LOGGER = Logger.getLogger(ErrorText.class.getName());
 
-    /** L'errore di MySQL per un valore gia' presente in una colonna UNIQUE. */
+    /** The MySQL error for a value already present in a UNIQUE column. */
     static final int MYSQL_DUPLICATE = 1062;
 
     private ErrorText() {}
 
     /**
-     * Il testo che il pannello ha scritto per la pagina, null se l'eccezione non ne porta uno. PasskeyException porta la
-     * chiave del testo, non il testo: si traduce.
+     * The text the panel wrote for the page, null if the exception carries none. PasskeyException carries the
+     * key of the text, not the text: it gets translated.
      */
     static String shown(Throwable e) {
         if (e == null || e.getMessage() == null || e.getMessage().isBlank()) return null;
@@ -43,7 +43,7 @@ public final class ErrorText {
         return e instanceof TranslatedError ? e.getMessage() : null;
     }
 
-    /** Vero se fra le cause c'e' un duplicato di MySQL. */
+    /** True if among the causes there is a MySQL duplicate. */
     static boolean duplicate(Throwable e) {
         for (Throwable t = e; t != null; t = t.getCause()) {
             if (t instanceof SQLException s && s.getErrorCode() == MYSQL_DUPLICATE) return true;
@@ -53,10 +53,10 @@ public final class ErrorText {
     }
 
     /**
-     * Il campo d'errore di una risposta: il messaggio se e' del pannello, «esiste gia'» per un duplicato, altrimenti
-     * una riga nel log e «Richiesta non riuscita: i dettagli sono nel log del pannello».
+     * The error field of a response: the message if it is the panel's, "already exists" for a duplicate, otherwise
+     * a line in the log and "Request failed: the details are in the panel log".
      *
-     * @param caller il metodo che risponde, per ritrovare la riga nel log
+     * @param caller the method that responds, to find the line in the log again
      */
     public static String forPage(String caller, Throwable e) {
         String text = shown(e);
@@ -67,8 +67,8 @@ public final class ErrorText {
     }
 
     /**
-     * Il pezzo da mettere nel posto {error} di un testo che lo incornicia («Conversione non riuscita: {error}»): il
-     * messaggio se e' del pannello, altrimenti una riga nel log e «i dettagli sono nel log del pannello».
+     * The piece to put in the {error} slot of a text that frames it ("Conversion failed: {error}"): the
+     * message if it is the panel's, otherwise a line in the log and "the details are in the panel log".
      */
     public static String detail(String caller, Throwable e) {
         String text = shown(e);

@@ -198,7 +198,7 @@ public class RoundcubeConfig {
         } else if (!HOST_PATTERN.matcher(domain).matches()) {
             errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.domainChars")).append("\n");
         } else if (domain.equalsIgnoreCase(org.daemoxcp.mail.system.InstallNames.DEFAULT_WEBMAIL)) {
-            // Il nome di fabbrica non e' un nome (reperto 244): l'installazione non partirebbe.
+            // The factory name is not a name (finding 244): the installation would not start.
             errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.domainExample")).append("\n");
         }
 
@@ -231,8 +231,9 @@ public class RoundcubeConfig {
             errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.chainChars")).append("\n");
         }
 
-        // Il certificato della webmail come quello del pannello (reperto 243): i file ci sono, il certificato copre il
-        // nome della webmail, vale adesso e la chiave e' la sua. nginx li legge da li': devono restare dove sono.
+        // The webmail's certificate like the panel's (finding 243): the files exist, the certificate covers the
+        // webmail's name, it is valid now and the key is its own. nginx reads them from there: they must stay
+        // where they are.
         certCheck = null;
         if (errors.length() == 0 && !sslCert.isEmpty() && !sslKey.isEmpty()) {
             try {

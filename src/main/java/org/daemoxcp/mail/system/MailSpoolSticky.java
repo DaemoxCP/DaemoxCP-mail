@@ -10,23 +10,25 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * Il bit sticky su /var/mail (reperto 221).
+ * The sticky bit on /var/mail (finding 221).
  *
- * <p>/var/mail e' root:mail 0775 come la fa FreeBSD (mtree), e dentro c'e' /var/mail/sieve, la cartella delle regole
- * Sieve del pannello, di root. Chi ha il gruppo mail poteva rinominarla intera e metterne un'altra al suo posto, con
- * regole sue che Dovecot esegue prima di quelle della casella (misurato sulla VM). Il gruppo mail ce l'hanno postfix e
- * clamav, dma (setgid mail, lo lancia qualunque utente) e, fino al reperto 221, i processi delle caselle di Dovecot.
+ * <p>/var/mail is root:mail 0775 as FreeBSD makes it (mtree), and inside it is /var/mail/sieve, the folder of the
+ * panel's Sieve rules, owned by root. Whoever has the mail group could rename it whole and put another one in its
+ * place, with their own rules that Dovecot runs before the mailbox's ones (measured on the VM). The mail group is
+ * held by postfix and clamav, dma (setgid mail, run by any user) and, until finding 221, Dovecot's mailbox
+ * processes.
  *
- * <p>Col bit sticky chi scrive in /var/mail non puo' piu' rinominare ne' togliere quello che non e' suo: la cartella di
- * root resta dov'e'. E' il modo che la documentazione di Dovecot indica per /var/mail («Set sticky bit to the
- * directory ... users can't delete each others mailboxes»). Misurato sulla VM: la rinomina col gruppo mail e' rifiutata,
- * i file di blocco propri si fanno e si tolgono ancora; Postfix (local) e dma, da root e da nobody, consegnano ancora in
- * /var/mail/root. freebsd-update tiene i permessi cambiati sul posto (KeepModifiedMetadata, predefinito yes); solo
- * mtree -U o etcupdate rimetterebbero 0775, e allora qui si rimette al primo avvio, mentre il pannello intanto non
- * scrive regole (RootOnlyPath vuole lo sticky sopra la cartella delle regole).
+ * <p>With the sticky bit, whoever writes in /var/mail can no longer rename or remove what is not theirs: root's
+ * folder stays where it is. It is the way the Dovecot documentation indicates for /var/mail ("Set sticky bit to the
+ * directory ... users can't delete each others mailboxes"). Measured on the VM: renaming with the mail group is
+ * refused, one's own lock files are still created and removed; Postfix (local) and dma, as root and as nobody,
+ * still deliver into /var/mail/root. freebsd-update keeps permissions changed in place (KeepModifiedMetadata,
+ * default yes); only mtree -U or etcupdate would put back 0775, and then it is set again here at the first startup,
+ * while in the meantime the panel does not write rules (RootOnlyPath wants the sticky bit above the rules folder).
  *
- * <p>Si tocca solo se la cartella e' vera, di root, scritta da altri e senza sticky; poi si rilegge, e se non e' come
- * deve essere si rimette com'era. Al secondo avvio non trova niente da fare.
+ * <p>It is touched only if the folder is real, owned by root, writable by others and without sticky; then it is
+ * read again, and if it is not as it should be it is put back as it was. At the second startup it finds nothing to
+ * do.
  */
 public final class MailSpoolSticky {
 
@@ -39,8 +41,8 @@ public final class MailSpoolSticky {
     private MailSpoolSticky() {}
 
     /**
-     * I permessi con lo sticky, o -1 se non c'e' niente da fare: nessun altro scrive, o c'e' gia'. Solo i bit dei
-     * permessi (07777). Pura.
+     * The permissions with sticky, or -1 if there is nothing to do: nobody else writes, or it is already there. Only
+     * the permission bits (07777). Pure.
      */
     static int next(int mode) {
         int perms = mode & 07777;
@@ -48,7 +50,7 @@ public final class MailSpoolSticky {
         return perms | STICKY;
     }
 
-    /** All'avvio della parte root. */
+    /** At the start of the root part. */
     public static void ensureAtBoot() {
         try {
             String r = ensure(SPOOL, PANEL_RULES);
@@ -60,7 +62,7 @@ public final class MailSpoolSticky {
         }
     }
 
-    /** Null se non c'era niente da fare; altrimenti cosa e' successo (DONE, ROLLED_BACK, o perche' resta com'e'). */
+    /** Null if there was nothing to do; otherwise what happened (DONE, ROLLED_BACK, or why it stays as it is). */
     static synchronized String ensure(Path spool, Path rules) throws IOException {
         if (!Files.exists(spool, LinkOption.NOFOLLOW_LINKS)) return null;
         Map<String, Object> a = Files.readAttributes(spool, "unix:mode,uid", LinkOption.NOFOLLOW_LINKS);
@@ -84,7 +86,10 @@ public final class MailSpoolSticky {
         return rulesNote == null ? done : done + "; " + rulesNote;
     }
 
-    /** Se la cartella delle regole c'e' ma root non ci scriverebbe, il motivo: va detto, non corretto a caso. */
+    /**
+     * If the rules folder exists but root would not write in it, the reason: it must be reported, not corrected at
+     * random.
+     */
     static String rulesNote(Path rules) {
         if (!Files.exists(rules, LinkOption.NOFOLLOW_LINKS)) return null;
         String why = RootOnlyPath.problem(rules);

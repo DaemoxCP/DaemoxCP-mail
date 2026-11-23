@@ -18,30 +18,30 @@ import java.util.TreeMap;
 import java.util.logging.Logger;
 
 /**
- * Un lavoro sui pacchetti morto a meta' si completa da solo: il pannello in servizio controlla quello che il lavoro
- * ha cambiato, rimette in servizio i servizi e verifica.
+ * A package job that died halfway completes itself: the panel in service checks what the job had changed,
+ * puts the services back in service and verifies.
  *
- * <p>Prima (reperto 152) il pannello riproteggeva i pacchetti e lasciava un avviso: «il lavoro non ha fatto i suoi
- * controlli finali, falli a mano: pkg check -s, riavvia i servizi, reinstalla un pacchetto il cui script potrebbe
- * non essere finito». Il committente (08/11/2026): li deve fare il pannello. Adesso, quando trova la traccia di un
- * lavoro (PackageQueue.runningRecord) il cui processo non c'e' piu':
+ * <p>Before (finding 152) the panel locked the packages again and left a notice: "the job did not run its final
+ * checks, do them by hand: pkg check -s, restart the services, reinstall a package whose script might not have
+ * finished". The owner (2026-11-08): the panel has to do them. Now, when it finds the trace of a job
+ * (PackageQueue.runningRecord) whose process is gone:
  * <ol>
- *   <li>aspetta che pkg abbia finito e che i pacchetti siano di nuovo protetti, e prende il turno: nessun altro
- *       lavoro sui pacchetti nel frattempo;</li>
- *   <li>confronta i pacchetti di adesso con quelli che la traccia aveva all'inizio: quello che e' cambiato e' quello
- *       che il lavoro ha fatto prima di morire;</li>
- *   <li>controlla i file dei pacchetti cambiati (pkg check -s) e reinstalla quelli che non tornano;</li>
- *   <li>per ogni servizio di quei pacchetti: se gira ancora coi file di prima (partito prima dell'ultimo pacchetto
- *       che lo riguarda) lo riavvia, dopo avergli fatto provare la configurazione, e controlla che il pid sia
- *       cambiato; se era acceso all'inizio e adesso e' spento lo riaccende; poi i suoi dati (redis);</li>
- *   <li>verifica: i servizi accesi all'inizio sono accesi, e le ricerche della posta rispondono (Postfix e
+ *   <li>it waits for pkg to finish and for the packages to be locked again, and takes the package turn: no other
+ *       package job in the meantime;</li>
+ *   <li>it compares the packages now with those the trace had at the start: what changed is what the job did
+ *       before dying;</li>
+ *   <li>it checks the files of the changed packages (pkg check -s) and reinstalls those that do not match;</li>
+ *   <li>for each service of those packages: if it still runs with the old files (started before the last package
+ *       that concerns it) it restarts it, after having it test its configuration, and checks that the pid has
+ *       changed; if it was running at the start and is stopped now it starts it again; then its data (redis);</li>
+ *   <li>verifies: the services running at the start are running, and the mail lookups answer (Postfix and
  *       Dovecot);</li>
- *   <li>scrive nell'avviso che cosa ha fatto. Se tutto torna, l'avviso resta da leggere ma non e' piu' una cosa
- *       da fare; se qualcosa non torna, dice che cosa e come rimediare.</li>
+ *   <li>writes in the notice what it did. If everything matches, the notice is still there to be read but is no
+ *       longer something to do; if something does not match, it says what and how to fix it.</li>
  * </ol>
- * Non lo fa per la reinstallazione completa interrotta (la posta puo' essere spenta con le configurazioni
- * cancellate: li' serve la via di ritorno, e l'avviso la dice), ne' per un riavvio voluto (l'aggiornamento della
- * JVM). Un servizio la cui configurazione non passa la prova non si riavvia: riavviarlo lo spegnerebbe.
+ * It does not do this for an interrupted full reinstall (mail may be down with the configurations deleted: there
+ * the way back is needed, and the notice states it), nor for an intended restart (the JVM update). A service whose
+ * configuration fails the test is not restarted: restarting it would stop it.
  */
 public final class InterruptedJobRecovery {
 
@@ -49,41 +49,44 @@ public final class InterruptedJobRecovery {
 
     private InterruptedJobRecovery() {}
 
-    /** Quello che serve dal sistema, separato per provare le decisioni senza pkg ne' servizi veri. */
+    /** What is needed from the system, kept separate to test the decisions without real pkg or services. */
     interface Machine {
         long now();
-        /** pkg sta lavorando adesso? */
+        /** Is pkg working right now? */
         boolean pkgRunning();
-        /** I pacchetti installati adesso, nome -> versione. */
+        /** The packages installed now, name -> version. */
         Map<String, String> inventory();
-        /** Quando e' stato installato ciascuno (secondi dall'epoca), per i nomi dati. */
+        /** When each one was installed (seconds since the epoch), for the given names. */
         Map<String, Long> installTimes(Collection<String> names);
-        /** I nomi veri (rc.d) dei servizi che un pacchetto riguarda, lui o chi dipende da lui. */
+        /** The real (rc.d) names of the services a package concerns, itself or whatever depends on it. */
         List<String> servicesOf(String pkg);
-        /** Quali servizi sono accesi adesso (solo quelli presenti sul sistema). */
+        /** Which services are running now (only those present on the system). */
         Map<String, Boolean> servicesState();
         String pid(String service);
-        /** Quando e' partito quel processo (secondi dall'epoca), -1 se non si sa. */
+        /** When that process started (seconds since the epoch), -1 if unknown. */
         long processStart(String pid);
-        /** La prova della configurazione del servizio, o null se non ne ha una. */
+        /** The service's configuration test, or null if it has none. */
         Shell.Result configTest(String service);
         boolean restart(String service);
         boolean start(String service);
         boolean running(String service);
-        /** Dopo il riavvio: il servizio ha ritrovato i suoi dati? null se non c'e' una prova, altrimenti il perche' no ("" = si'). */
+        /**
+         * After the restart: did the service find its data again? null if there is no test, otherwise the reason
+         * why not ("" = yes).
+         */
         String dataCheck(String service);
-        /** I pacchetti fra quelli dati i cui file non tornano (pkg check -s). */
+        /** The packages among those given whose files do not match (pkg check -s). */
         List<String> checksumFailures(Collection<String> pkgs);
-        /** Reinstalla quei pacchetti dallo stesso catalogo, togliendo e rimettendo le protezioni: null se riesce. */
+        /** Reinstalls those packages from the same catalogue, removing and putting back the locks: null if it succeeds. */
         String reinstall(List<String> pkgs);
-        /** Le ricerche della posta (Postfix e Dovecot): null se rispondono, altrimenti il perche'. */
+        /** The mail lookups (Postfix and Dovecot): null if they answer, otherwise the reason. */
         String mailLookups();
     }
 
-    /** Un servizio da rimettere in servizio, e perche'. */
+    /** A service to put back in service, and why. */
     enum Action { RESTART, START, CHECK }
 
-    /** Che cosa e' cambiato fra l'inizio del lavoro e adesso: nome -> {prima, adesso} ("" = non c'era / non c'e' piu'). */
+    /** What changed between the start of the job and now: name -> {before, now} ("" = was not there / is gone). */
     static Map<String, String[]> changes(Map<String, String> before, Map<String, String> now) {
         Map<String, String[]> out = new TreeMap<>();
         Set<String> names = new LinkedHashSet<>(before.keySet());
@@ -96,9 +99,10 @@ public final class InterruptedJobRecovery {
     }
 
     /**
-     * Che cosa fare di un servizio. RESTART se e' acceso ma col processo partito prima dell'ultimo pacchetto che lo
-     * riguarda (gira ancora coi file di prima); START se era acceso all'inizio del lavoro e adesso e' spento; CHECK se
-     * e' acceso e gia' partito dopo (per esempio dopo un riavvio della macchina); null se era spento e lo e' ancora.
+     * What to do with a service. RESTART if it is running but with its process started before the last package that
+     * concerns it (it still runs with the old files); START if it was running at the start of the job and is stopped
+     * now; CHECK if it is running and already started after it (for example after a reboot of the machine); null if it
+     * was stopped and still is.
      */
     static Action decide(boolean wasRunning, boolean running, long processStart, long newestChange) {
         if (running) return processStart >= 0 && processStart > newestChange ? Action.CHECK : Action.RESTART;
@@ -106,26 +110,26 @@ public final class InterruptedJobRecovery {
     }
 
     /**
-     * All'avvio del giro del guardiano (UpdateManager.watchOnce), solo nel pannello in servizio. "" se non c'era
-     * niente da fare o se e' presto (pkg lavora ancora, l'elenco c'e' ancora, il turno lo tiene un altro).
+     * At the start of the watchdog's round (UpdateManager.watchOnce), only in the panel in service. "" if there was
+     * nothing to do or if it is too early (pkg is still working, the list is still there, someone else holds the turn).
      */
     static String completeIfInterrupted(Machine m) {
         JSONObject rec = PackageQueue.runningRecord();
         if (rec.isEmpty()) return "";
         long pid = rec.optLong("pid", 0), self = ProcessHandle.current().pid();
-        if (pid == self && PackageQueue.holder() != null) return "";           // un lavoro di questo processo
+        if (pid == self && PackageQueue.holder() != null) return "";           // a job of this process
         if (pid > 0 && pid != self && ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) return "";
         if (rec.optBoolean("expectsRestart")) {
             PackageQueue.deleteRunning();
             return "";
         }
-        // Prima le protezioni (lo fa il ripristino) e pkg fermo: completare mentre pkg scrive vorrebbe dire
-        // riavviare servizi a meta' di un aggiornamento.
+        // First the locks (the restore does that) and pkg idle: completing while pkg writes would mean
+        // restarting services halfway through an update.
         if (PackageQueue.statePresent() || m.pkgRunning()) return "";
         String refusal = PackageQueue.takeForLocks("interrupted-recovery", I18n.tr("server.recovery.turnComplete"));
         if (refusal != null) return "";
         try {
-            // Riletta col turno: un altro processo puo' averla gia' chiusa.
+            // Re-read with the package turn held: another process may already have closed it.
             rec = PackageQueue.runningRecord();
             if (rec.isEmpty()) return "";
             JSONObject outcome = complete(m, rec);
@@ -136,7 +140,7 @@ public final class InterruptedJobRecovery {
         }
     }
 
-    /** Il lavoro interrotto, completato e verificato. null se non aveva cambiato niente. */
+    /** The interrupted job, completed and verified. null if it had not changed anything. */
     static JSONObject complete(Machine m, JSONObject rec) {
         String description = rec.optString("description", "");
         boolean reinstallJob = rec.optString("id", "").startsWith(InstallLocks.REINSTALL_TURN_PREFIX);
@@ -164,18 +168,18 @@ public final class InterruptedJobRecovery {
             changedJson.put(new JSONObject().put("name", e.getKey()).put("from", e.getValue()[0]).put("to", e.getValue()[1]));
         r.put("changed", changedJson);
         List<String> problems = new ArrayList<>();
-        // Gli stessi problemi in inglese, per il registro: i registri sono in inglese per tutti (EnglishLogsTest).
+        // The same problems in English, for the log: the logs are in English for everyone (EnglishLogsTest).
         List<String> problemsLog = new ArrayList<>();
 
         if (reinstallJob) {
-            // La reinstallazione completa: niente riavvii automatici, la via di ritorno la dice gia' l'avviso.
+            // The full reinstall: no automatic restarts, the notice already states the way back.
             r.put("skipped", "reinstall");
             r.put("ok", false).put("problems", new JSONArray().put(I18n.tr("server.recovery.complete.reinstall")));
             PackageRecovery.recordRecovery(rec, r);
             return r.put("summary", "the interrupted job was the complete reinstallation: nothing restarted automatically");
         }
 
-        // 1. I file dei pacchetti cambiati e ancora installati; quelli che non tornano si reinstallano.
+        // 1. The files of the packages that changed and are still installed; those that do not match are reinstalled.
         List<String> installedChanged = new ArrayList<>();
         for (Map.Entry<String, String[]> e : changed.entrySet()) if (!e.getValue()[1].isEmpty()) installedChanged.add(e.getKey());
         List<String> broken = installedChanged.isEmpty() ? List.of() : m.checksumFailures(installedChanged);
@@ -192,7 +196,7 @@ public final class InterruptedJobRecovery {
             }
         }
 
-        // 2. I servizi: quelli dei pacchetti cambiati, e quelli accesi all'inizio e spenti adesso.
+        // 2. The services: those of the changed packages, and those running at the start and stopped now.
         Map<String, Long> times = m.installTimes(installedChanged);
         Map<String, Long> newestFor = new LinkedHashMap<>();
         for (String p : installedChanged)
@@ -242,7 +246,7 @@ public final class InterruptedJobRecovery {
         }
         r.put("services", services);
 
-        // 3. La verifica: accesi quelli accesi all'inizio, e la posta che trova le caselle.
+        // 3. The check: the services running at the start are running, and mail finds the mailboxes.
         Map<String, Boolean> after = m.servicesState();
         for (Map.Entry<String, Boolean> e : servicesBefore.entrySet())
             if (e.getValue() && !Boolean.TRUE.equals(after.get(e.getKey())))
@@ -255,7 +259,7 @@ public final class InterruptedJobRecovery {
         PackageRecovery.recordRecovery(rec, r);
         String summary = description + ": " + changed.size() + " packages changed, " + services.length()
                 + " services handled, " + (unique.isEmpty() ? "all verified" : "problems: " + String.join("; ", unique));
-        // Nel registro l'id del lavoro e i problemi in inglese; il riepilogo tradotto va all'avviso.
+        // In the log, the job id and the problems in English; the translated summary goes to the notice.
         String logLine = "job " + rec.optString("id", "?") + ": " + changed.size() + " packages changed, " + services.length()
                 + " services handled, " + (unique.isEmpty() ? "all verified"
                 : "problems: " + String.join("; ", new LinkedHashSet<>(problemsLog)));
@@ -264,7 +268,7 @@ public final class InterruptedJobRecovery {
         return r.put("summary", summary);
     }
 
-    /** Un problema: nella lingua di chi legge l'avviso, e in inglese per il registro. Restituisce il testo tradotto. */
+    /** A problem: in the language of whoever reads the notice, and in English for the log. Returns the translated text. */
     private static String problem(List<String> problems, List<String> forLog, String key, Map<String, ?> params) {
         String text = I18n.tr(key, params);
         problems.add(text);

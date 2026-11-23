@@ -339,9 +339,11 @@ pw groupadd vmail -g 5000 2>/dev/null || true
 pw useradd vmail -u 5000 -g vmail -d /var/vmail -s /usr/sbin/nologin -c "Virtual Mail" 2>/dev/null || true
 mkdir -p /var/vmail
 """
-            // Le cartelle della posta a vmail senza dargli file di altri: niente hard link, niente collegamenti (reperto 252)
+            // The mail folders to vmail without giving it other people's files: no hard links, no symbolic links
+            // (finding 252)
             + org.daemoxcp.mail.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail") + middle()
-            // Le cartelle della posta a vmail senza dargli file di altri: niente hard link, niente collegamenti (reperto 252)
+            // The mail folders to vmail without giving it other people's files: no hard links, no symbolic links
+            // (finding 252)
             + org.daemoxcp.mail.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail") + """
 chmod 770 /var/vmail
 chown root:dovecot /var/run/dovecot
@@ -611,11 +613,11 @@ chmod 710 /var/spool/postfix/private
 sysrc postfix_enable="YES"
 
 """
-            // Postfix come MTA locale: senza, la posta di sistema esce da dma. Lo stesso pezzo
-            // e' in PostfixScript e FullMailStackScript.
+            // Postfix as the local MTA: without it, the system mail goes out through dma. The same piece
+            // is in PostfixScript and FullMailStackScript.
             + LocalMtaScript.SHELL
-            // Il livello di compatibilita' che chiede il Postfix installato, se esaminato (reperto 251). Lo stesso pezzo
-            // e' in PostfixScript e FullMailStackScript, dopo main.cf.
+            // The compatibility level the installed Postfix asks for, if examined (finding 251). The same piece
+            // is in PostfixScript and FullMailStackScript, after main.cf.
             + PostfixLevelScript.shell() + """
 
 echo "${GREEN}  Postfix configured${NC}"
@@ -629,15 +631,15 @@ echo "${YELLOW}[PHASE 7/10] Configuring Dovecot...${NC}"
 # The Dovecot configuration is written further on, in a single block.
 
 """
-            // L'utente master di Dovecot per «Apri webmail»: lo stesso pezzo e' in FullMailStackScript
-            // e DovecotScript. Passa di qui prima di dovecot.conf, e per questo usa "doveadm -O".
+            // Dovecot's master user for "Open webmail": the same piece is in FullMailStackScript
+            // and DovecotScript. It runs here before dovecot.conf, and that is why it uses "doveadm -O".
             + org.daemoxcp.mail.system.DovecotMasterUser.shell() + """
 
 # SQL config
 """
-            // Sorgente UNICA della configurazione Dovecot, scritta DOPO master-users
-            // perche' auth-master.conf.ext lo referenzia. Prima questo script aveva
-            // la sua copia della configurazione, divergente dalle altre due.
+            // SINGLE source of the Dovecot configuration, written AFTER master-users
+            // because auth-master.conf.ext references it. Before, this script had
+            // its own copy of the configuration, diverging from the other two.
             + DovecotConfig.fromPanelConfig().scriptFragment() + """
 
 sysrc dovecot_enable="YES"
@@ -651,8 +653,8 @@ echo ""
 echo "${YELLOW}[PHASE 8/10] Configuring Rspamd, ClamAV, Redis...${NC}"
 
 """
-            // Il risolutore ricorsivo locale, prima che rspamd parta (fase 10): senza, le liste
-            // di Spamhaus non rispondono. Lo stesso pezzo e' in RspamdScript e FullMailStackScript.
+            // The local recursive resolver, before rspamd starts (phase 10): without it, the Spamhaus
+            // lists do not answer. The same piece is in RspamdScript and FullMailStackScript.
             + LocalResolverScript.SHELL + """
 
 # Redis only on the Unix socket, 0770 of the redis group, and rspamd in that group: the package's redis.conf
@@ -998,9 +1000,9 @@ exit 0
         """;
 
     /**
-     * Il pezzo centrale dello script, dalla cartella della posta in poi: una costante a parte. Nella stessa espressione
-     * tutte le parti fisse finiscono in una sola «ricetta» di invokedynamic, che non puo' superare i 64 KB (raggiunti il
-     * 20/11/2026).
+     * The central piece of the script, from the mail folder onwards: a separate constant. In the same expression
+     * all the fixed parts end up in a single invokedynamic "recipe", which cannot exceed 64 KB (reached on
+     * 2026-11-20).
      */
     private static String middle() {
         return """
@@ -1403,7 +1405,7 @@ mkdir -p /var/db/daemoxcp-mail
 """;
     }
 
-    /** Sempre, tutto o niente, con l'impronta del jar (InstallScripts): mai uno script di una versione di prima. */
+    /** Always, all or nothing, with the jar's fingerprint (InstallScripts): never a script from a previous version. */
     public void write_file() {
         this.writed = InstallScripts.write(SCRIPT_PATH, this.data);
     }

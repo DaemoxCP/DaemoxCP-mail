@@ -27,81 +27,81 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Le mappe di Postfix scritte in un file, e la libreria che le legge.
+ * Postfix's maps written to a file, and the library that reads them.
  *
- * <p>Postfix tiene alcune tabelle (alias, accessi, trasporti, e le sue cache) in file indicizzati:
- * hash e btree (Berkeley DB), lmdb, cdb, dbm, sdbm. Se un aggiornamento cambia la libreria che
- * legge un tipo, i file scritti dalla vecchia possono diventare illeggibili. Lo dice il port di
- * FreeBSD (databases/lmdb, pkg-message): «Databases created with LMDB 0.9.x cannot be opened with
- * LMDB 1.0». E il prossimo cambio non togliera' nessun pacchetto: lmdb0 convive con lmdb, e il
- * port di Postfix ha un'opzione per passare a LMDB 1.0 (mail/postfix: LMDB0 e LMDB1). Quindi non
- * si guardano le rimozioni: si guarda la libreria dietro ogni tipo.
+ * <p>Postfix keeps some tables (aliases, access, transports, and its caches) in indexed files:
+ * hash and btree (Berkeley DB), lmdb, cdb, dbm, sdbm. If an upgrade changes the library that
+ * reads a type, the files written by the old one can become unreadable. The FreeBSD port says so
+ * (databases/lmdb, pkg-message): "Databases created with LMDB 0.9.x cannot be opened with
+ * LMDB 1.0". And the next change will not remove any package: lmdb0 coexists with lmdb, and the
+ * Postfix port has an option to move to LMDB 1.0 (mail/postfix: LMDB0 and LMDB1). So the panel
+ * does not look at the removals: it looks at the library behind each type.
  *
- * <p>Le mappe si possono rigenerare. La documentazione di Postfix (DATABASE_README della 3.11.7,
- * installata col pacchetto): i file «pubblici» si creano con postmap o postalias da un file di
- * testo, i «privati» sono cache tenute dai demoni. Quindi, se la libreria di un tipo cambia:
- * le mappe si rigenerano dal loro testo, le cache si cancellano (Postfix le ricrea), si controlla
- * che ogni mappa risponda per la sua prima chiave e si ricarica Postfix. Una mappa senza il suo
- * testo non si puo' rigenerare: se l'aggiornamento puo' cambiarne la libreria, il pannello si
- * ferma PRIMA.
+ * <p>The maps can be regenerated. Postfix's documentation (DATABASE_README of 3.11.7, installed
+ * with the package): the "public" files are created with postmap or postalias from a text file,
+ * the "private" ones are caches kept by the daemons. So, if the library of a type changes: the
+ * maps are regenerated from their text, the caches are deleted (Postfix recreates them), every
+ * map is checked to answer for its first key, and Postfix is reloaded. A map without its text
+ * cannot be regenerated: if the upgrade can change its library, the panel stops BEFORE.
  *
- * <p>La mappa si costruisce ACCANTO, da una copia del testo, e poi si rinomina sopra quella vecchia.
- * Misurato sulla VM il 31/10/2026: postmap sopra un file che la sua libreria non sa leggere si
- * ferma («MDB_INVALID: File is not an LMDB file»), che e' proprio il caso di un file della 0.9
- * davanti a LMDB 1.0. E cancellare prima lascerebbe Postfix senza la mappa finche' non e' pronta.
+ * <p>The map is built ALONGSIDE, from a copy of the text, and then renamed over the old one.
+ * Measured on the VM on 2026-10-31: postmap over a file that its library cannot read stops
+ * ("MDB_INVALID: File is not an LMDB file"), which is exactly the case of a 0.9 file in front
+ * of LMDB 1.0. And deleting first would leave Postfix without the map until it is ready.
  *
- * <p>Rigenerare dal testo e' giusto solo se il testo dice quello che c'e' nel database. Una voce
- * aggiunta con postmap -i (o postalias -i) sta solo nel database, e una riga del testo cambiata
- * senza rilanciare postmap non ci e' ancora: rigenerare cambierebbe quello che Postfix usa. Quindi,
- * PRIMA di pkg upgrade e con la libreria di adesso (dopo il database puo' non leggersi piu'), ogni
- * mappa si confronta col suo testo: il testo si costruisce in una copia accanto, con lo stesso
- * programma, e si confrontano i due contenuti come li legge Postfix.
+ * <p>Regenerating from the text is right only if the text says what is in the database. An entry
+ * added with postmap -i (or postalias -i) is only in the database, and a line of the text changed
+ * without running postmap again is not in it yet: regenerating would change what Postfix uses.
+ * So, BEFORE pkg upgrade and with the current library (afterwards the database may no longer be
+ * readable), every map is compared with its text: the text is built in a copy alongside, with the
+ * same program, and the two contents are compared as Postfix reads them.
  *
- * <p>Una mappa che non coincide col testo, o che il testo non ce l'ha, si ricostruisce dal suo
- * contenuto: prima di pkg upgrade lo si legge (postmap -s) e lo si tiene in memoria, dopo lo si da'
- * a postmap -i sullo stdin, e la mappa nuova deve avere la stessa impronta di prima. Misurato sulla
- * VM il 31/10/2026: lmdb e hash con voci aggiunte con -i, continuazioni e doppioni, gli alias veri e
- * alias con liste, "|comando", :include: e nomi fra virgolette tornano identici. Resta senza rimedio
- * solo una mappa che non si legge gia' prima, o il cui contenuto supera maxSavedBytes: per quella il
- * pannello si ferma prima, o dopo non la tocca e lo dice.
+ * <p>A map that does not match its text, or that has no text, is rebuilt from its content: before
+ * pkg upgrade it is read (postmap -s) and kept in memory, afterwards it is given to postmap -i on
+ * stdin, and the new map must have the same fingerprint as before. Measured on the VM on
+ * 2026-10-31: lmdb and hash with entries added with -i, continuations and duplicates, the real
+ * aliases and aliases with lists, "|command", :include: and quoted names come back identical.
+ * Only a map that is already unreadable before, or whose content exceeds maxSavedBytes, is left
+ * without a remedy: for that one the panel stops before, or afterwards does not touch it and says
+ * so.
  *
- * <p>Su FreeBSD hash e btree li fornisce Berkeley DB 1.85 dentro la libc del sistema base
- * (libpostfix-util non e' collegata a nessun libdb di pacchetto, misurato sulla VM il 31/10/2026):
- * un aggiornamento dei pacchetti non li tocca. Se Postfix fosse costruito con un Berkeley DB di
- * pacchetto (db5, db18), la stessa regola varrebbe anche per loro.
+ * <p>On FreeBSD hash and btree are provided by Berkeley DB 1.85 inside the base system's libc
+ * (libpostfix-util is not linked to any package libdb, measured on the VM on 2026-10-31): a
+ * package upgrade does not touch them. If Postfix were built with a package Berkeley DB (db5,
+ * db18), the same rule would apply to them too.
  */
 final class PostfixMaps {
 
     private PostfixMaps() {}
 
-    /** I tipi scritti in un file, con le estensioni dei loro file. */
+    /** The types written to a file, with the extensions of their files. */
     static final Map<String, String[]> SUFFIXES = Map.of(
             "btree", new String[]{".db"}, "hash", new String[]{".db"}, "cdb", new String[]{".cdb"},
             "lmdb", new String[]{".lmdb"}, "dbm", new String[]{".dir", ".pag"}, "sdbm", new String[]{".dir", ".pag"});
 
-    /** I tipi che Postfix ha dentro libpostfix-util; gli altri gli arrivano da un modulo (dynamicmaps). */
+    /** The types Postfix has built into libpostfix-util; the others come to it from a module (dynamicmaps). */
     static final Set<String> BUILT_IN = Set.of("btree", "dbm", "hash", "sdbm");
 
-    /** I parametri le cui tabelle sono cache dei demoni (database privati): si cancellano, Postfix le ricrea. */
+    /** The parameters whose tables are daemon caches (private databases): they are deleted, Postfix recreates them. */
     static final Set<String> CACHES = Set.of("address_verify_map", "postscreen_cache_map",
             "smtpd_tls_session_cache_database", "smtp_tls_session_cache_database",
             "lmtp_tls_session_cache_database", "smtp_sasl_auth_cache_name", "lmtp_sasl_auth_cache_name");
 
-    /** I parametri le cui tabelle si costruiscono con postalias. */
+    /** The parameters whose tables are built with postalias. */
     static final Set<String> ALIASES = Set.of("alias_database", "alias_maps");
 
-    /** In ordine di precedenza: se due parametri nominano la stessa tabella, vince l'ultimo. */
+    /** In order of precedence: if two parameters name the same table, the last one wins. */
     enum Kind { PUBLIC, ALIAS, CACHE }
 
-    /** Una tabella in uso: il parametro che la nomina, il tipo, il percorso senza estensione. */
+    /** A table in use: the parameter that names it, the type, the path without extension. */
     record Table(String parameter, String type, String path, Kind kind) {
         String name() { return type + ":" + path; }
     }
 
-    /** Una libreria che legge un tipo: il nome con cui la si chiede, dove sta, chi la possiede. */
+    /** A library that reads a type: the name it is requested by, where it is, who owns it. */
     record Lib(String soname, String path, String owner) {}
 
-    /** Chi legge un tipo: l'oggetto di Postfix (modulo o libpostfix-util), il suo pacchetto, le librerie. */
+    /** Who reads a type: the Postfix object (module or libpostfix-util), its package, the libraries. */
     record Reader(String type, String object, String objectOwner, List<Lib> libs) {
         String signature() {
             List<String> s = new ArrayList<>();
@@ -110,30 +110,32 @@ final class PostfixMaps {
         }
     }
 
-    /* ===================================================================
-     * La lettura, come funzioni pure
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Reading, as pure functions
+     * ===================================================================
+     */
 
-    // "{" per le tabelle dentro unionmap:{...} e pipemap:{...}.
+    // "{" for the tables inside unionmap:{...} and pipemap:{...}.
     private static final Pattern TABLE = Pattern.compile(
             "(?:^|[\\s,{])(?:proxy:)?(btree|cdb|dbm|hash|lmdb|sdbm):(/[A-Za-z0-9._/+-]+)");
 
     /**
-     * Gli elenchi di proxymap: ripetono le tabelle nominate dagli altri parametri, cache comprese
-     * (sulla VM proxy_write_maps elenca verify_cache e postscreen_cache). Non dicono che cosa sia una
-     * tabella, e presi per primi farebbero di una cache una mappa da rigenerare.
+     * The proxymap lists: they repeat the tables named by the other parameters, caches included
+     * (on the VM proxy_write_maps lists verify_cache and postscreen_cache). They do not say what a
+     * table is, and if taken first they would turn a cache into a map to regenerate.
      */
     static final Set<String> PROXY_LISTS = Set.of("proxy_read_maps", "proxy_write_maps");
 
     /**
-     * Le tabelle di tipo file in uso, dalle uscite di postconf nell'ordine dato: "postconf -nx"
-     * (i parametri scritti in main.cf), "postconf -Px" (servizio/tipo/nome = valore, cioe'
-     * master.cf), "postconf -x" (tutti, predefiniti compresi). Una tabella nominata da piu'
-     * parametri conta una volta, col nome del primo che la nomina: cosi' una mappa di
-     * transport_maps non risulta di address_verify_transport_maps, che la eredita. Che cosa sia
-     * lo decide invece qualunque parametro la nomini: cache prima di tutto (non ha testo), poi
-     * alias (si costruisce con postalias), se no mappa pubblica. Cosi' hash:/etc/aliases resta un
-     * alias anche se main.cf la scrive in local_recipient_maps.
+     * The file-type tables in use, from the postconf outputs in the given order: "postconf -nx"
+     * (the parameters written in main.cf), "postconf -Px" (service/type/name = value, that is
+     * master.cf), "postconf -x" (all, defaults included). A table named by several parameters
+     * counts once, with the name of the first one that names it: this way a transport_maps map
+     * does not show up as belonging to address_verify_transport_maps, which inherits it. What it
+     * is, instead, is decided by any parameter that names it: cache first of all (it has no
+     * text), then alias (built with postalias), otherwise public map. This way hash:/etc/aliases
+     * stays an alias even if main.cf writes it in local_recipient_maps.
      */
     static List<Table> tablesIn(String... postconfOutputs) {
         Map<String, Table> out = new LinkedHashMap<>();
@@ -158,7 +160,7 @@ final class PostfixMaps {
         return new ArrayList<>(out.values());
     }
 
-    /** Tipo -> modulo, dalle righe di dynamicmaps.cf ("lmdb /percorso/postfix-lmdb.so dict_... mkmap_..."). */
+    /** Type -> module, from the lines of dynamicmaps.cf ("lmdb /path/postfix-lmdb.so dict_... mkmap_..."). */
     static Map<String, String> pluginsFrom(String dynamicmaps) {
         Map<String, String> out = new TreeMap<>();
         for (String line : (dynamicmaps == null ? "" : dynamicmaps).split("\n")) {
@@ -171,8 +173,8 @@ final class PostfixMaps {
     }
 
     /**
-     * Le librerie di un'uscita di ldd che non sono del sistema base: quelle che un pacchetto puo'
-     * cambiare. Per i tipi interni si tengono solo quelle di un database (libdb, gdbm).
+     * The libraries in an ldd output that are not from the base system: the ones a package can
+     * change. For the built-in types only those of a database are kept (libdb, gdbm).
      */
     static List<String[]> librariesFrom(String ldd, boolean onlyDatabases) {
         List<String[]> out = new ArrayList<>();
@@ -188,7 +190,7 @@ final class PostfixMaps {
         return out;
     }
 
-    /** I tipi la cui libreria e' diversa fra prima e dopo (un tipo comparso o sparito conta). */
+    /** The types whose library differs between before and after (a type that appeared or disappeared counts). */
     static Set<String> changed(Map<String, String> before, Map<String, String> after) {
         Set<String> out = new TreeSet<>();
         Set<String> types = new TreeSet<>(before.keySet());
@@ -198,11 +200,11 @@ final class PostfixMaps {
     }
 
     /**
-     * La prima chiave che postmap o postalias mettono davvero nella tabella. Si leggono le righe
-     * logiche come loro (postmap(1)): i commenti e le righe vuote si saltano, una riga che comincia
-     * con uno spazio continua quella prima. Una voce senza valore postmap la salta con un avviso e
-     * finisce bene (misurato sulla VM: «expected format: key whitespace value», uscita 0): cercarla
-     * darebbe un falso allarme, quindi si salta anche qui.
+     * The first key that postmap or postalias really put into the table. The logical lines are read
+     * the way they read them (postmap(1)): comments and empty lines are skipped, a line that starts
+     * with a space continues the previous one. postmap skips an entry without a value with a warning
+     * and ends fine (measured on the VM: "expected format: key whitespace value", exit 0): looking it
+     * up would give a false alarm, so it is skipped here too.
      */
     static String firstKey(String source, boolean alias) {
         List<String> logical = new ArrayList<>();
@@ -227,10 +229,10 @@ final class PostfixMaps {
     }
 
     /**
-     * I tipi il cui lettore puo' cambiare con questo piano. Per ogni libreria di pacchetto dietro
-     * un tipo: il piano toglie il pacchetto che la possiede; o lo aggiorna, e la versione nuova
-     * (catalogo, %b) non la fornisce piu'; o aggiorna il pacchetto del modulo di Postfix, e la
-     * versione nuova (catalogo, %B) non la chiede piu'. I tipi del sistema base non cambiano mai.
+     * The types whose reader can change with this plan. For every package library behind a
+     * type: the plan removes the package that owns it; or upgrades it, and the new version
+     * (catalog, %b) no longer provides it; or upgrades the package of the Postfix module, and
+     * the new version (catalog, %B) no longer requires it. The base system types never change.
      */
     static Set<String> typesThePlanMayChange(JSONObject plan, List<Reader> readers,
                                              java.util.function.Function<String, Set<String>> catalogProvides,
@@ -254,9 +256,11 @@ final class PostfixMaps {
         return out;
     }
 
-    /* ===================================================================
-     * Il sistema
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The system
+     * ===================================================================
+     */
 
     private static Shell.Result run(String... cmd) { return Shell.run(Duration.ofSeconds(60), cmd); }
 
@@ -265,20 +269,20 @@ final class PostfixMaps {
         return r.success() ? r.outputTrim() : "";
     }
 
-    /** Postfix c'e'? Senza, nessuna mappa da guardare. */
+    /** Is Postfix there? Without it, no map to look at. */
     static boolean postfixInstalled() { return Shell.resolve("postconf") != null && run("postconf", "-h", "mail_version").success(); }
 
-    /** Le tabelle di tipo file che Postfix usa adesso (parametri in vigore, predefiniti compresi, e master.cf). */
+    /** The file-type tables Postfix uses now (parameters in force, defaults included, and master.cf). */
     static List<Table> tablesInUse() {
         if (!postfixInstalled()) return List.of();
         return tablesIn(run("postconf", "-nx").output(), run("postconf", "-Px").output(), run("postconf", "-x").output());
     }
 
-    /** Chi legge ogni tipo di file, adesso. */
+    /** Who reads each file type, now. */
     static List<Reader> readers() {
         List<Reader> out = new ArrayList<>();
         if (!postfixInstalled()) return out;
-        // I moduli: dynamicmaps.cf e dynamicmaps.cf.d/*.cf nella meta_directory.
+        // The modules: dynamicmaps.cf and dynamicmaps.cf.d/*.cf in the meta_directory.
         StringBuilder dm = new StringBuilder();
         Path meta = Path.of(postconf("meta_directory").isEmpty() ? "/usr/local/libexec/postfix" : postconf("meta_directory"));
         try {
@@ -291,12 +295,12 @@ final class PostfixMaps {
             }
         } catch (Exception ignored) { }
         Map<String, String> plugins = new TreeMap<>(pluginsFrom(dm.toString()));
-        // dynamicmaps.cf.d scrive il nome del modulo relativo a shlib_directory ("postfix-lmdb.so"):
-        // misurato sulla VM, dove il percorso preso cosi' com'era non esisteva e lmdb restava fuori.
+        // dynamicmaps.cf.d writes the module name relative to shlib_directory ("postfix-lmdb.so"):
+        // measured on the VM, where the path taken as it was did not exist and lmdb was left out.
         String shlib = postconf("shlib_directory");
         boolean shared = !shlib.isEmpty() && !"no".equals(shlib);
         plugins.replaceAll((type, so) -> so.startsWith("/") || !shared ? so : Path.of(shlib, so).toString());
-        // I tipi interni: la libreria di database a cui e' collegata libpostfix-util (o smtpd).
+        // The built-in types: the database library that libpostfix-util (or smtpd) is linked to.
         String util = shared && Files.exists(Path.of(shlib, "libpostfix-util.so"))
                 ? Path.of(shlib, "libpostfix-util.so").toString()
                 : Path.of(postconf("daemon_directory"), "smtpd").toString();
@@ -317,14 +321,14 @@ final class PostfixMaps {
         return o.isEmpty() ? "base" : PackageReplacement.nameOf(o);
     }
 
-    /** Tipo -> firma della sua libreria, adesso: da prendere prima di pkg upgrade. */
+    /** Type -> signature of its library, now: to be taken before pkg upgrade. */
     static Map<String, String> librarySignature() {
         Map<String, String> out = new TreeMap<>();
         for (Reader r : readers()) out.put(r.type(), r.signature());
         return out;
     }
 
-    /** I tipi i cui lettori sono di quel pacchetto (le sue librerie, non i moduli di Postfix). */
+    /** The types whose readers belong to that package (its libraries, not the Postfix modules). */
     static Set<String> typesReadBy(String packageName) {
         Set<String> out = new TreeSet<>();
         for (Reader r : readers()) for (Lib l : r.libs()) if (l.owner().equals(packageName)) out.add(r.type());
@@ -336,9 +340,9 @@ final class PostfixMaps {
     private static String label(Table t) { return t.name() + " (" + t.parameter() + ")"; }
 
     /**
-     * Le tabelle di quei tipi che dopo un cambio di libreria non si potrebbero rigenerare uguali a
-     * prima, col perche': il database non si legge, o il testo non coincide (o non c'e') e il
-     * contenuto e' troppo grande da tenere da parte.
+     * The tables of those types that, after a library change, could not be regenerated identical to
+     * before, with the reason: the database cannot be read, or the text does not match (or is
+     * missing) and the content is too big to keep aside.
      */
     static Map<String, String> unrebuildable(Set<String> types) {
         Map<String, String> out = new LinkedHashMap<>();
@@ -351,9 +355,9 @@ final class PostfixMaps {
     }
 
     /**
-     * Il motivo per non eseguire un piano che puo' cambiare la libreria di un tipo di cui una mappa
-     * non si potrebbe rigenerare dal testo, o null. Lo chiedono le tre schede e i tre lavori, con la
-     * regola delle rimozioni.
+     * The reason not to run a plan that can change the library of a type with a map that could
+     * not be regenerated from its text, or null. The three tabs and the three jobs ask for it,
+     * together with the removals rule.
      */
     static String planBlocker(JSONObject plan) {
         if (plan == null || !postfixInstalled()) return null;
@@ -374,18 +378,18 @@ final class PostfixMaps {
         return s;
     }
 
-    /** Com'e' andata la rigenerazione: le righe del registro le ha gia' scritte. */
+    /** How the regeneration went: it has already written the log lines. */
     record Outcome(List<String> problems) {
         boolean ok() { return problems.isEmpty(); }
         String problem() { return problems.isEmpty() ? null : I18n.tr("server.maps.problem", Map.of("list", String.join("; ", problems))); }
     }
 
     /**
-     * Costruisce la tabella da una copia del suo testo, accanto (temp, e il database temp + estensione).
-     * null se e' andata, altrimenti cosa e' andato storto. I file li toglie dropBeside.
+     * Builds the table from a copy of its text, alongside (temp, and the database temp + extension).
+     * null if it worked, otherwise what went wrong. dropBeside removes the files.
      */
     private static String buildBeside(Table t, String tool, String temp) {
-        // cp -p: la copia ha proprietario e permessi del testo, e postmap lavora come il suo proprietario.
+        // cp -p: the copy has the owner and permissions of the text, and postmap works as its owner.
         Shell.Result cp = run("cp", "-p", t.path(), temp);
         if (!cp.success()) return "cp: " + cp.outputTrim();
         Shell.Result r = run(tool, t.type() + ":" + temp);
@@ -400,11 +404,12 @@ final class PostfixMaps {
     }
 
     /**
-     * Costruisce la tabella da una copia del suo testo, accanto, e la rinomina sopra quella vecchia
-     * (per dbm e sdbm, i due file). null se e' andata, altrimenti cosa e' andato storto; i file della
-     * copia se ne vanno in ogni caso. Il database nuovo prende proprietario e permessi del vecchio:
-     * misurato sulla VM, postmap sul posto li lascia com'erano (640 root:mail), ma costruito accanto
-     * nasce coi permessi del testo e il gruppo wheel (644 root:wheel), e rinominato sopra li cambiava.
+     * Builds the table from a copy of its text, alongside, and renames it over the old one
+     * (for dbm and sdbm, the two files). null if it worked, otherwise what went wrong; the files of the
+     * copy go away in any case. The new database takes the owner and permissions of the old one:
+     * measured on the VM, postmap in place leaves them as they were (640 root:mail), but built alongside
+     * the database is created with the text's permissions and the wheel group (644 root:wheel), and
+     * renaming it over the old one changed them.
      */
     private static String rebuildBeside(Table t, String tool) {
         String temp = t.path() + ".panel-rebuild";
@@ -427,30 +432,30 @@ final class PostfixMaps {
     }
 
     /**
-     * Il contenuto di una tabella come la legge Postfix ("postmap -s", "postalias -s"): quante voci,
-     * quanti byte, e un'impronta che non dipende dall'ordine, la somma degli SHA-256 delle righe.
-     * L'ordine conta poco per lmdb, ma per hash dipende dall'ordine in cui le voci sono state scritte
-     * (misurato sulla VM: le stesse cinque voci in due ordini escono in due ordini). Non finisce mai
-     * su disco ne' nel registro, perche' una mappa puo' tenere password (sasl_passwd).
+     * The content of a table as Postfix reads it ("postmap -s", "postalias -s"): how many entries,
+     * how many bytes, and a fingerprint that does not depend on the order, the sum of the SHA-256 of
+     * the lines. The order matters little for lmdb, but for hash it depends on the order in which the
+     * entries were written (measured on the VM: the same five entries in two orders come out in two
+     * orders). It never ends up on disk nor in the log, because a map can hold passwords (sasl_passwd).
      */
     record Digest(long entries, long bytes, BigInteger sum) {}
 
     private static final Duration DUMP_TIMEOUT = Duration.ofSeconds(300);
 
     /**
-     * Quanto puo' pesare, al massimo, il contenuto di una mappa tenuto in memoria durante un
-     * aggiornamento. Non e' final: le prove lo abbassano per provare una mappa che non ci sta.
+     * How much, at most, the content of a map kept in memory during an upgrade can weigh.
+     * It is not final: the tests lower it to test a map that does not fit.
      */
     static long maxSavedBytes = 32L * 1024 * 1024;
 
-    /** Lo scarico di una tabella: l'impronta, e il contenuto se e' stato chiesto e se ci sta. */
+    /** The dump of a table: the fingerprint, and the content if it was asked for and if it fits. */
     private record Read(Digest digest, byte[] content) {
         void forget() { if (content != null) java.util.Arrays.fill(content, (byte) 0); }
     }
 
     /**
-     * Legge una tabella con tool -s, a flusso; il contenuto lo tiene solo se keepUpTo >= 0 e finche'
-     * non supera keepUpTo byte. null se non si legge.
+     * Reads a table with tool -s, as a stream; it keeps the content only if keepUpTo >= 0 and as long
+     * as it does not exceed keepUpTo bytes. null if it cannot be read.
      */
     private static Read read(String tool, String table, long keepUpTo) {
         ProcessBuilder pb = new ProcessBuilder(tool, "-s", table);
@@ -461,7 +466,7 @@ final class PostfixMaps {
         try {
             p = pb.start();
             final Process proc = p;
-            // Si legge mentre postmap scrive: una mappa grande riempirebbe la pipe e lo fermerebbe.
+            // It is read while postmap writes: a big map would fill the pipe and stop it.
             java.util.concurrent.FutureTask<Read> reading = new java.util.concurrent.FutureTask<>(() -> {
                 try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.ISO_8859_1))) {
                     MessageDigest sha = MessageDigest.getInstance("SHA-256");
@@ -493,16 +498,16 @@ final class PostfixMaps {
         }
     }
 
-    /** L'impronta di una tabella, o null se non si legge. */
+    /** The fingerprint of a table, or null if it cannot be read. */
     static Digest digest(String tool, String table) {
         Read r = read(tool, table, -1);
         return r == null ? null : r.digest();
     }
 
     /**
-     * Se il database di una tabella e il suo testo dicono cose diverse, perche'; null se dicono la
-     * stessa cosa, o se il database non c'e' ancora (non c'e' niente da perdere). Va chiamata prima
-     * di pkg upgrade: dopo, il database puo' non leggersi piu'.
+     * If the database of a table and its text say different things, why; null if they say the
+     * same thing, or if the database does not exist yet (there is nothing to lose). Must be called
+     * before pkg upgrade: afterwards, the database may no longer be readable.
      */
     static String outOfSync(Table t) {
         boolean exists = false;
@@ -514,9 +519,9 @@ final class PostfixMaps {
     }
 
     /**
-     * Il testo di t costruito in una copia accanto, con lo stesso programma, confrontato con
-     * l'impronta del database: cosi' righe di continuazione, voci senza valore e doppioni contano
-     * come per postmap. null se coincidono, altrimenti perche' no.
+     * The text of t built in a copy alongside, with the same program, compared with the
+     * database's fingerprint: this way continuation lines, entries without a value and duplicates
+     * count as they do for postmap. null if they match, otherwise why not.
      */
     private static String compareWithText(Table t, String tool, Digest db) {
         String temp = t.path() + ".panel-check";
@@ -534,9 +539,10 @@ final class PostfixMaps {
     }
 
     /**
-     * Il contenuto di una tabella letto prima di pkg upgrade, come lo scarica postmap -s: da qui la si
-     * ricostruisce dopo, uguale, anche senza testo o con un testo diverso. Sta solo in memoria e
-     * l'array si azzera dopo l'uso. textDiffers: perche' il testo non coincide, o null se non c'e'.
+     * The content of a table read before pkg upgrade, as postmap -s dumps it: from here the table is
+     * rebuilt afterwards, identical, even without text or with a different text. It lives only in
+     * memory and the array is zeroed after use. textDiffers: why the text does not match, or null if
+     * there is none.
      */
     static final class Saved {
         private byte[] content;
@@ -556,22 +562,23 @@ final class PostfixMaps {
             content = null;
         }
 
-        /** Mai il contenuto: un Before puo' finire in un messaggio. */
+        /** Never the content: a Before can end up in a message. */
         @Override public String toString() { return "Saved[" + digest.entries() + "]"; }
     }
 
     /**
-     * Come si rigenera una tabella dopo un cambio di libreria: saved, dal contenuto letto prima; lost,
-     * non si puo' (il perche'). Tutti e due null: dal testo, che coincide col database, o non c'e'
-     * ancora nessun database (e allora non c'e' niente da perdere).
+     * How a table is regenerated after a library change: saved, from the content read before; lost,
+     * it cannot be (the reason). Both null: from the text, which matches the database, or there is no
+     * database yet (and then there is nothing to lose).
      */
     record Way(Saved saved, String lost) {}
 
     private static String megabytes(long bytes) { return ((bytes + 1048575) / 1048576) + " MB"; }
 
     /**
-     * Come si potrebbe rigenerare t dopo un cambio di libreria, con la libreria di adesso. keep: tiene
-     * il contenuto, se serve (before); senza, dice solo se si potrebbe (la scheda, il giudizio).
+     * How t could be regenerated after a library change, with the current library. keep: keeps
+     * the content, if needed (before); without it, it only says whether it could be done (the tab,
+     * the verdict).
      */
     static Way way(Table t, boolean keep) {
         boolean dbExists = false;
@@ -595,17 +602,18 @@ final class PostfixMaps {
     }
 
     /**
-     * Quello che serve sapere prima di pkg upgrade: chi legge ogni tipo; il contenuto delle mappe che
-     * non si rigenerano dal testo (nome -> Saved); quelle che non si rigenerano affatto (nome -> perche').
+     * What must be known before pkg upgrade: who reads each type; the content of the maps that cannot
+     * be regenerated from the text (name -> Saved); those that cannot be regenerated at all
+     * (name -> why).
      */
     record Before(Map<String, String> signatures, Map<String, Saved> saved, Map<String, String> lost) {
         Before(Map<String, String> signatures) { this(signatures, Map.of(), Map.of()); }
 
-        /** Il contenuto tenuto da parte non serve piu': si azzera. */
+        /** The content kept aside is no longer needed: it is zeroed. */
         void forget() { saved.values().forEach(Saved::forget); }
     }
 
-    /** Da prendere prima di pkg upgrade, nei tre lavori. */
+    /** To be taken before pkg upgrade, in the three jobs. */
     static Before before() {
         Map<String, Saved> saved = new TreeMap<>();
         Map<String, String> lost = new TreeMap<>();
@@ -618,7 +626,7 @@ final class PostfixMaps {
         return new Before(librarySignature(), saved, lost);
     }
 
-    /** tool -i tabella, col contenuto sullo stdin: nessun file in mezzo. null se e' andata. */
+    /** tool -i table, with the content on stdin: no file in between. null if it worked. */
     private static String feed(String tool, String table, byte[] content) {
         ProcessBuilder pb = new ProcessBuilder(tool, "-i", table);
         Shell.applyPath(pb);
@@ -652,10 +660,11 @@ final class PostfixMaps {
     }
 
     /**
-     * Ricostruisce t dal contenuto tenuto da parte, accanto, e la rinomina sopra la vecchia. La mappa
-     * nuova deve avere la stessa impronta di quella di prima, e prende proprietario e permessi della
-     * vecchia. Misurato sulla VM: postmap -i crea il database se non c'e', sempre root:wheel 644
-     * qualunque fosse il vecchio, e su un database che c'e' AGGIUNGE: si parte da vuoto.
+     * Rebuilds t from the content kept aside, alongside, and renames it over the old one. The new
+     * map must have the same fingerprint as the previous one, and it takes the owner and permissions
+     * of the old one. Measured on the VM: postmap -i creates the database if it does not exist, always
+     * root:wheel 644 whatever the old one was, and on an existing database it ADDS: so it starts from
+     * empty.
      */
     private static String rebuildFromSaved(Table t, Saved s) {
         String tool = toolFor(t), temp = t.path() + ".panel-rebuild";
@@ -683,12 +692,12 @@ final class PostfixMaps {
     }
 
     /**
-     * Dopo pkg upgrade: se la libreria di un tipo e' cambiata, le sue mappe si rigenerano (dal
-     * contenuto letto prima, se il testo non coincide o non c'e'; altrimenti dal testo), le sue cache
-     * si cancellano, ogni mappa rigenerata si controlla, e Postfix si ricarica. Una mappa che non si
-     * poteva rigenerare non si tocca, e conta come problema. Va chiamata anche se pkg e' uscito con un
-     * errore: e' proprio quando la macchina puo' essere rimasta a meta'. Alla fine il contenuto tenuto
-     * da parte si azzera.
+     * After pkg upgrade: if the library of a type has changed, its maps are regenerated (from the
+     * content read before, if the text does not match or is missing; otherwise from the text), its
+     * caches are deleted, every regenerated map is checked, and Postfix is reloaded. A map that could
+     * not be regenerated is not touched, and counts as a problem. Must be called even if pkg exited
+     * with an error: that is exactly when the machine may have been left halfway. At the end the
+     * content kept aside is zeroed.
      */
     static Outcome afterUpgrade(Before state, Consumer<String> log) {
         try {
@@ -781,7 +790,8 @@ final class PostfixMaps {
             }
         }
         if (!touched) {
-            // «Nessuna mappa» solo se davvero non ce n'e': una che non si poteva rigenerare c'e', ed e' gia' nei problemi.
+            // "No map" only if there really is none: one that could not be regenerated does exist,
+            // and it is already among the problems.
             if (!any) log.accept(I18n.tr("server.maps.none", Map.of("types", String.join(", ", types))));
             return new Outcome(problems);
         }

@@ -18,39 +18,39 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Il piano ESATTO di un aggiornamento di pacchetti, e se una vulnerabilita' ha davvero una
- * versione corretta.
+ * The EXACT plan of a package upgrade, and whether a vulnerability really has a
+ * fixed version.
  *
- * Due domande a cui il pannello rispondeva solo a meta'.
+ * Two questions the panel answered only halfway.
  *
- * 1. "Se aggiorno X, cosa cambia?" Il preflight leggeva dal catalogo "X 1.2 -> 1.3" e basta.
- *    Ma pkg, per aggiornare X, puo' aggiornare dipendenze, installarne di nuove, reinstallarne
- *    o rimuoverne: la riga di X e' una delle righe di un piano che nessuno mostrava. E per un
- *    pacchetto PROTETTO il piano non si poteva nemmeno chiedere, perche' pkg upgrade -n i
- *    protetti li salta.
+ * 1. "If I upgrade X, what changes?" The preflight read "X 1.2 -> 1.3" from the catalogue and
+ *    that was all. But pkg, to upgrade X, may upgrade dependencies, install new ones, reinstall
+ *    them or remove them: X's line is one of the lines of a plan that nobody showed. And for a
+ *    LOCKED package the plan could not even be asked for, because pkg upgrade -n skips the
+ *    locked ones.
  *
- *    Qui il piano si chiede a pkg su una COPIA del suo database, nella quale si tolgono le
- *    stesse protezioni che l'aggiornamento vero togliera'. La risposta e' quella che pkg
- *    darebbe davvero: ogni pacchetto, da quale versione a quale, e se la versione di arrivo e'
- *    ancora vulnerabile. Il database vero non viene toccato.
+ *    Here the plan is asked of pkg on a COPY of its database, in which the same locks that
+ *    the real upgrade will remove are removed. The answer is the one pkg would really give:
+ *    every package, from which version to which, and whether the target version is still
+ *    vulnerable. The real database is not touched.
  *
- * 2. "La patch c'e' o no?" pkg audit dice "vulnerabile" e basta. Ma VuXML, il database da cui
- *    legge, per ogni problema dice QUALI versioni sono vulnerabili (per esempio "< 1.30.5,3"),
- *    cioe' da quale versione in poi il problema e' corretto. Messa accanto alla versione che il
- *    catalogo offre diventa una risposta esatta: si corregge aggiornando; oppure la correzione
- *    esiste ma il tuo ramo non ce l'ha ancora; oppure una versione corretta non esiste.
+ * 2. "Is the patch there or not?" pkg audit says "vulnerable" and that is all. But VuXML, the
+ *    database it reads from, says for every problem WHICH versions are vulnerable (for example
+ *    "< 1.30.5,3"), that is, from which version on the problem is fixed. Placed next to the
+ *    version the catalogue offers, it becomes an exact answer: it is fixed by upgrading; or the
+ *    fix exists but your branch does not have it yet; or a fixed version does not exist.
  *
- * I formati letti qui sono quelli del sorgente di pkg (src/utils.c, src/audit.c,
- * src/version.c), non quelli ricordati: una riga interpretata male qui vuol dire promettere
- * un aggiornamento diverso da quello che avverra'.
+ * The formats read here are those of pkg's source (src/utils.c, src/audit.c,
+ * src/version.c), not remembered ones: a line misread here means promising an
+ * upgrade different from the one that will happen.
  */
 public final class PackagePlan {
 
     private PackagePlan() {}
 
-    // ===================== leggere il piano di pkg =====================
+    // ===================== reading pkg's plan =====================
 
-    /** Le intestazioni che pkg stampa per ogni tipo di cambiamento, e il nome che usiamo qui. */
+    /** The headers pkg prints for each type of change, and the name we use here. */
     private static final String[][] SECTIONS = {
         {"Installed packages to be UPGRADED:",    "upgrade"},
         {"Installed packages to be DOWNGRADED:",  "downgrade"},
@@ -63,7 +63,7 @@ public final class PackagePlan {
         {"New groups to be INSTALLED:",           "group"},
     };
 
-    /** I totali che pkg scrive in fondo al piano: il controllo incrociato del parser. */
+    /** The totals pkg writes at the bottom of the plan: the parser's cross-check. */
     private static final String[][] TOTALS = {
         {"Number of packages to be upgraded: ",    "upgrade"},
         {"Number of packages to be downgraded: ",  "downgrade"},
@@ -76,34 +76,36 @@ public final class PackagePlan {
     private static final String VULNERABLE = " (vulnerable!)";
 
     private static final Pattern FROM_TO = Pattern.compile("^(\\S+): (\\S+) -> (\\S+)(?: \\[([^\\]]+)\\])?$");
-    // Una nuova installazione: "nome: versione", il repository se ce n'e' piu' d'uno e il motivo se pkg lo sa. pkg 2.9
-    // (src/utils.c, display_summary_item, PKG_DISPLAY_INSTALL) scrive il motivo per le dipendenze tirate dentro:
-    // "py312-pyproject-hooks: 1.3.3 [FreeBSD-ports] (required by py312-build)". Senza il motivo nel modello, sulla VM
-    // il 21/11/2026 il passaggio di Python si fermava con «una riga che non so leggere», e cosi' ogni piano che
-    // installa una dipendenza nuova, «Aggiorna tutto» compreso.
+    // A new installation: "name: version", the repository if there is more than one and the reason if pkg knows
+    // it. pkg 2.9 (src/utils.c, display_summary_item, PKG_DISPLAY_INSTALL) writes the reason for dependencies
+    // pulled in: "py312-pyproject-hooks: 1.3.3 [FreeBSD-ports] (required by py312-build)". Without the reason in
+    // the model, on the VM on 2026-11-21 the Python switch stopped with "a line I cannot read", and so did every
+    // plan that installs a new dependency, "Update all" included.
     private static final Pattern REPO_VERSION_NAME = Pattern.compile("^(\\S+): (\\S+)(?: \\[([^\\]]+)\\])?(?: \\((.*)\\))?$");
     private static final Pattern REINSTALL = Pattern.compile("^(\\S+)-([^\\s-]+)(?: \\[([^\\]]+)\\])?(?: \\((.*)\\))?$");
     private static final Pattern REMOVES = Pattern.compile("^(\\S+): (\\S+)(?: \\((.*)\\))?$");
     private static final Pattern PROTECTED_IN_PLAN = Pattern.compile(
             "^Package (\\S+)-([^\\s-]+) is locked and may not be (\\S+)(?: to version (\\S+))?");
     private static final Pattern PROTECTED_EVENT = Pattern.compile("^(\\S+)-([^\\s-]+) is locked and may not be modified$");
-    // pkg 2.9: quando un conflitto sui file non si risolve togliendo il pacchetto che ingombra (perche' a un altro serve
-    // ancora), pkg trattiene l'aggiornamento e lo dice dopo il controllo d'integrita', coi pacchetti gia' scaricati:
+    // pkg 2.9: when a file conflict cannot be solved by removing the package in the way (because another one
+    // still needs it), pkg holds back the upgrade and says so after the integrity check, with the packages
+    // already downloaded:
     //   "  - fakelib0-0.9 [replacement] conflicts with fakelib-1.0 [installed] on /usr/local/bin/fake-tool"
     //   "fakeapp-1.1 is held back to solve the problem"
-    // e poi "Your packages are up to date.". Misurato sulla VM il 22/11/2026 con pkg 2.9.2 (PackageReplacementE2ETest):
-    // prima pkg proponeva di togliere anche l'altro pacchetto, adesso non toglie niente e il piano resta vuoto.
+    // and then "Your packages are up to date.". Measured on the VM on 2026-11-22 with pkg 2.9.2
+    // (PackageReplacementE2ETest): before, pkg proposed removing the other package too; now it removes nothing
+    // and the plan stays empty.
     private static final Pattern CONFLICT = Pattern.compile(
             "^- (\\S+)-([^\\s-]+) \\[[^\\]]*\\] conflicts with (\\S+)-([^\\s-]+) \\[installed\\] on (\\S+)$");
     private static final Pattern HELD_BACK = Pattern.compile("^(\\S+)-([^\\s-]+) is held back to solve the problem$");
 
     /**
-     * Il piano come lo stampa {@code pkg upgrade -n}, letto sezione per sezione.
+     * The plan as {@code pkg upgrade -n} prints it, read section by section.
      *
-     * Funzione pura: riceve il testo, non lancia niente, cosi' si prova con uscite vere. Se una
-     * riga dentro una sezione non si lascia leggere, o i conti non tornano con i totali che pkg
-     * stampa da solo, il piano esce con "measured" falso: un piano letto a meta' e presentato
-     * come completo e' peggio di nessun piano.
+     * Pure function: it receives the text and launches nothing, so it can be tested with real
+     * outputs. If a line inside a section cannot be read, or the counts do not match the totals
+     * pkg prints by itself, the plan comes out with "measured" false: a plan read halfway and
+     * presented as complete is worse than no plan.
      */
     static JSONObject readPlan(String output) {
         JSONArray changes = new JSONArray(), lockedPackages = new JSONArray();
@@ -129,7 +131,7 @@ public final class PackagePlan {
                     counted.merge(section, 1, Integer::sum);
                 continue;
             }
-            section = null;   // una riga vuota o non rientrata chiude la sezione
+            section = null;   // an empty or non-indented line closes the section
             if (t.isEmpty()) continue;
 
             Matcher held = HELD_BACK.matcher(t);
@@ -165,8 +167,8 @@ public final class PackagePlan {
             if (t.startsWith("pkg:")) {
                 if (t.toLowerCase().contains("warning")) warnings.put(t); else errors.put(t);
             }
-            // Il resto (dimensioni, "Checking for upgrades", "Updating ... repository catalogue")
-            // non cambia il piano.
+            // The rest (sizes, "Checking for upgrades", "Updating ... repository catalogue")
+            // does not change the plan.
         }
 
         JSONObject r = new JSONObject().put("changes", changes).put("lockedPackages", lockedPackages)
@@ -178,8 +180,8 @@ public final class PackagePlan {
         if (unreadable.length() > 0)
             return r.put("measured", false).put("unreadable", unreadable)
                     .put("error", I18n.tr("server.plan.unreadableLines", java.util.Map.of("n", String.valueOf(unreadable.length()), "first", String.valueOf(unreadable.getString(0)))));
-        // pkg stampa un totale per ogni tipo che compare: i due conti devono coincidere, in
-        // entrambe le direzioni. Un tipo contato senza totale e' un totale che non ho letto.
+        // pkg prints a total for each type that appears: the two counts must match, in
+        // both directions. A type counted without a total is a total I did not read.
         Set<String> kinds = new LinkedHashSet<>(counted.keySet());
         kinds.addAll(declared.keySet());
         for (String type : kinds) {
@@ -191,7 +193,7 @@ public final class PackagePlan {
         return r.put("measured", true);
     }
 
-    /** Una riga rientrata di una sezione. false se non ha la forma che la sezione prevede. */
+    /** An indented line of a section. false if it does not have the form the section expects. */
     private static boolean readEntry(String section, String t, JSONArray changes, JSONArray lockedPackages, Set<String> alreadyLocked) {
         boolean vulnerable = t.endsWith(VULNERABLE);
         String s = vulnerable ? t.substring(0, t.length() - VULNERABLE.length()) : t;
@@ -224,7 +226,7 @@ public final class PackagePlan {
                     lockedPackages.put(new JSONObject().put("name", m.group(1)).put("version", m.group(2))
                             .put("action", m.group(3)).put("destination", m.group(4) == null ? "" : m.group(4)));
             }
-            case "download", "group" -> { /* non cambiano pacchetti installati */ }
+            case "download", "group" -> { /* do not change installed packages */ }
             default -> { return false; }
         }
         return true;
@@ -238,12 +240,12 @@ public final class PackagePlan {
     }
 
     /**
-     * L'impronta di un piano: cio' che e' stato approvato e cio' che si esegue devono coincidere.
+     * The fingerprint of a plan: what was approved and what is executed must match.
      *
-     * Dentro ci sono le protezioni da togliere e ogni cambiamento con le sue versioni, in ordine
-     * fisso. Fra la lettura del piano e il click puo' passare un aggiornamento del catalogo: con
-     * l'impronta, il pannello se ne accorge e si ferma invece di eseguire un piano diverso da
-     * quello che e' stato letto.
+     * Inside are the locks to remove and every change with its versions, in a fixed
+     * order. Between reading the plan and the click a catalogue update may happen: with the
+     * fingerprint, the panel notices and stops instead of executing a plan different from the
+     * one that was read.
      */
     static String signature(JSONObject plan) {
         List<String> lines = new ArrayList<>();
@@ -265,13 +267,13 @@ public final class PackagePlan {
     }
 
     /**
-     * L'impronta dei soli CAMBIAMENTI del piano, senza le protezioni da togliere.
+     * The fingerprint of the plan's CHANGES only, without the locks to remove.
      *
-     * Serve per confrontare due piani calcolati in condizioni diverse: quello approvato,
-     * dove il pacchetto era ancora protetto e andava sbloccato, e quello ricalcolato dopo lo
-     * sblocco vero, dove non c'e' piu' niente da sbloccare. La firma intera differirebbe per
-     * quella sola ragione; questa risponde alla domanda che conta, cioe' "pkg farebbe le
-     * stesse cose?".
+     * It is used to compare two plans computed under different conditions: the approved one,
+     * where the package was still locked and had to be unlocked, and the one recomputed after the
+     * real unlock, where there is nothing left to unlock. The full signature would differ for
+     * that reason alone; this one answers the question that matters, that is "would pkg do the
+     * same things?".
      */
     public static String changesSignature(JSONObject plan) {
         List<String> lines = new ArrayList<>();
@@ -290,7 +292,7 @@ public final class PackagePlan {
         }
     }
 
-    /** I cambiamenti del piano in righe leggibili, per mostrare due piani a confronto. */
+    /** The plan's changes in readable lines, to show two plans side by side. */
     public static List<String> changesInLines(JSONObject plan) {
         List<String> lines = new ArrayList<>();
         JSONArray c = plan == null ? null : plan.optJSONArray("changes");
@@ -305,10 +307,10 @@ public final class PackagePlan {
         return lines;
     }
 
-    // ===================== chiedere il piano a pkg =====================
+    // ===================== asking pkg for the plan =====================
 
-    /** Solo nomi di pacchetto plausibili: finiscono in una riga di comando. */
-    /** Il tipo di cambiamento ("aggiorna", "rimuove"...) detto nella lingua di chi legge. */
+    /** Only plausible package names: they end up in a command line. */
+    /** The type of change ("upgrade", "remove"...) in the reader's language. */
     public static String typeName(String type) {
         return switch (type == null ? "" : type) {
             case "upgrade" -> I18n.tr("up.tUpgrade");
@@ -328,31 +330,32 @@ public final class PackagePlan {
         return Shell.runShell(Duration.ofSeconds(seconds), cmd).outputTrim();
     }
 
-    /** La cartella del database di pkg: la si chiede a pkg invece di supporla. */
+    /** pkg's database folder: we ask pkg for it instead of assuming it. */
     static String dbFolder() {
         String d = sh("pkg config PKG_DBDIR 2>/dev/null", 30);
         return d.matches("/[A-Za-z0-9._/-]{1,200}") ? d : "/var/db/pkg";
     }
 
     /**
-     * Cosa farebbe {@code pkg upgrade} su 'pacchetti' (tutti, se l'elenco e' vuoto) dopo aver
-     * tolto la protezione a 'daSbloccare'.
+     * What {@code pkg upgrade} would do on 'pacchetti' (all of them, if the list is empty) after
+     * removing the lock from 'daSbloccare'.
      *
-     * Se non c'e' niente da sbloccare, la simulazione gira sul database vero: {@code -n} non
-     * scrive niente. Se c'e', gira su una copia completa della cartella di pkg (catalogo
-     * compreso), fatta in /var/tmp e cancellata subito dopo: e' l'unico modo di sapere cosa
-     * farebbe pkg su un pacchetto protetto senza togliergli davvero la protezione.
+     * If there is nothing to unlock, the simulation runs on the real database: {@code -n} does
+     * not write anything. If there is, it runs on a full copy of pkg's folder (catalogue
+     * included), made in /var/tmp and deleted right after: it is the only way to know what pkg
+     * would do on a locked package without really removing its lock.
      *
-     * {@code -U}: il catalogo non si riscarica, si usa quello che c'e'. Il pannello lo aggiorna
-     * prima di mostrare lo stato; qui conta che la simulazione e l'esecuzione usino lo STESSO.
+     * {@code -U}: the catalogue is not downloaded again, the existing one is used. The panel
+     * updates it before showing the status; what matters here is that the simulation and the
+     * execution use the SAME one.
      */
     public static JSONObject simulate(List<String> toUnlock, List<String> packages) {
         return simulate(new Command("upgrade", packages, List.of()), toUnlock);
     }
 
     /**
-     * Che cosa chiede un lavoro a pkg: "upgrade" (i pacchetti dati, o tutti) o "install" (quelli dati), dopo aver tolto
-     * i pacchetti di 'forget' (che il lavoro toglie prima, con pkg delete, anche -f).
+     * What a job asks of pkg: "upgrade" (the given packages, or all of them) or "install" (the given ones), after
+     * removing the packages of 'forget' (which the job removes first, with pkg delete, even with -f).
      */
     record Command(String verb, List<String> args, List<String> forget) {
         String shown() {
@@ -363,9 +366,9 @@ public final class PackagePlan {
     }
 
     /**
-     * Come sopra, per un comando qualunque. La copia del database si fa se c'e' da sbloccare o da dimenticare; i
-     * pacchetti da dimenticare si tolgono dalla copia con JDBC (le righe, non i file: PKGDB_FORGET_PACKAGE), e il
-     * database vero non si tocca mai.
+     * As above, for any command. The database copy is made if there is something to unlock or to forget; the
+     * packages to forget are removed from the copy with JDBC (the rows, not the files: PKGDB_FORGET_PACKAGE), and
+     * the real database is never touched.
      */
     static JSONObject simulate(Command cmd, List<String> toUnlock) {
         if (!"upgrade".equals(cmd.verb()) && !"install".equals(cmd.verb())) return failed("unknown pkg command: " + cmd.verb());
@@ -405,15 +408,15 @@ public final class PackagePlan {
                     .put("onBackup", copy != null)
                     .put("command", cmd.shown());
         } finally {
-            // La copia se ne va sempre. Il percorso e' quello creato da mktemp e verificato sopra.
+            // The copy always goes away. The path is the one created by mktemp and verified above.
             if (copy != null) Shell.runShell(Duration.ofSeconds(300), "rm -rf " + copy);
         }
     }
 
     /**
-     * Dimentica quei pacchetti nella COPIA del database di pkg (cartella 'copy', creata da mktemp qui sopra): righe del
-     * database, non file. null se e' andata, altrimenti il perche'. Un nome che non c'e' e' un errore: il piano direbbe
-     * di togliere qualcosa che non c'e'.
+     * Forgets those packages in the COPY of pkg's database (folder 'copy', created by mktemp above): database rows,
+     * not files. null if it worked, otherwise the reason. A name that is not there is an error: the plan would say
+     * to remove something that is not there.
      */
     private static String forget(String copy, List<String> names) {
         if (names.isEmpty()) return null;
@@ -435,11 +438,12 @@ public final class PackagePlan {
     }
 
     /**
-     * Il piano di un lavoro che prima toglie dei pacchetti (pkg delete, anche -f: la migrazione di MySQL, il passaggio
-     * di Python) e poi ne installa altri (pkg install -U). Sulla copia del database si dimenticano quelli da togliere e
-     * si chiede a pkg che cosa installerebbe: e' cio' che pkg fara' davvero dopo la rimozione, senza i conflitti con
-     * pacchetti che a quel punto non ci saranno piu'. In testa al piano le rimozioni, con la versione installata; le
-     * protezioni dei pacchetti tolti stanno fra quelle da togliere (il lavoro le toglie, nell'elenco su disco).
+     * The plan of a job that first removes some packages (pkg delete, even with -f: the MySQL migration, the Python
+     * switch) and then installs others (pkg install -U). On the database copy the ones to remove are forgotten and
+     * pkg is asked what it would install: that is what pkg will really do after the removal, without the conflicts
+     * with packages that by then will no longer be there. At the top of the plan the removals, with the installed
+     * version; the locks of the removed packages are among those to remove (the job removes them, in the list on
+     * disk).
      */
     public static JSONObject planRemoveThenInstall(List<String> remove, List<String> install, Set<String> protectedNames,
                                                    Function<JSONObject, String> reasonNotToUnlock) {
@@ -447,10 +451,11 @@ public final class PackagePlan {
     }
 
     /**
-     * Lo stesso, con delle protezioni tolte fin dall'inizio ('unlockFirst', solo fra quelle che ci sono): le dipendenze gia'
-     * installate che il pacchetto nuovo vuole cosi' come sono. Un pacchetto protetto pkg non lo usa per una dipendenza e
-     * ne cerca un altro che dia la stessa libreria: sulla VM, il 09/11/2026, dovecot24-mysql chiedeva mysql84-client
-     * 8.4.13, quello installato, e col blocco il piano installava mysql267-client accanto (reperto 213).
+     * The same, with some locks removed from the start ('unlockFirst', only among those that exist): the
+     * dependencies already installed that the new package wants as they are. pkg does not use a locked package for
+     * a dependency and looks for another one that provides the same library: on the VM, on 2026-11-09,
+     * dovecot24-mysql asked for mysql84-client 8.4.13, the installed one, and with the lock the plan installed
+     * mysql267-client alongside it (finding 213).
      */
     public static JSONObject planRemoveThenInstall(List<String> remove, List<String> install, java.util.Collection<String> unlockFirst,
                                                    Set<String> protectedNames, Function<JSONObject, String> reasonNotToUnlock) {
@@ -479,18 +484,18 @@ public final class PackagePlan {
     }
 
     /**
-     * Il piano per aggiornare 'pacchetti' togliendo solo le protezioni necessarie.
+     * The plan to upgrade 'pacchetti' removing only the necessary locks.
      *
-     * Si parte sbloccando, nella copia, i pacchetti richiesti che sono protetti. Se pkg trova
-     * sulla sua strada altri pacchetti protetti — una dipendenza che deve cambiare anche lei —
-     * li nomina: si aggiungono all'elenco e si rifa' il conto, ma solo se la regola del chiamante
-     * permette di sbloccarli. Quelli che non si possono sbloccare restano come impedimento, con
-     * il loro nome e il motivo: e' esattamente quello che serve sapere prima di premere.
+     * We start by unlocking, in the copy, the requested packages that are locked. If pkg finds
+     * other locked packages on its way -- a dependency that must change as well -- it names
+     * them: they are added to the list and the count is redone, but only if the caller's rule
+     * allows unlocking them. Those that cannot be unlocked remain as an obstacle, with their
+     * name and the reason: that is exactly what one needs to know before pressing.
      *
-     * @param protetti          i pacchetti protetti adesso
-     * @param reasonNotToUnlock riceve il pacchetto protetto che pkg ha nominato (nome, versione
-     *                          e, se pkg la dice, la versione a cui andrebbe); restituisce null se
-     *                          si puo' sbloccare, altrimenti il perche'
+     * @param protectedNames          the packages locked now
+     * @param reasonNotToUnlock receives the locked package that pkg named (name, version
+     *                          and, if pkg says it, the version it would go to); returns null if
+     *                          it can be unlocked, otherwise the reason
      */
     public static JSONObject planFor(List<String> packages, Set<String> protectedNames,
                                       Function<JSONObject, String> reasonNotToUnlock) {
@@ -498,10 +503,10 @@ public final class PackagePlan {
     }
 
     /**
-     * @param installedTwin riceve il nome di un pacchetto che il piano INSTALLEREBBE e
-     *                      restituisce il nome di un pacchetto GIA' installato della
-     *                      stessa famiglia, o null. Serve a riconoscere quando pkg sta
-     *                      girando attorno a un blocco: vedi il ciclo di planWith.
+     * @param installedTwin receives the name of a package that the plan WOULD INSTALL and
+     *                      returns the name of an ALREADY installed package of the
+     *                      same family, or null. It is used to recognise when pkg is
+     *                      working around a lock: see the loop in planWith.
      */
     public static JSONObject planFor(List<String> packages, Set<String> protectedNames,
                                       Function<JSONObject, String> reasonNotToUnlock,
@@ -512,10 +517,10 @@ public final class PackagePlan {
     }
 
     /**
-     * Il piano della manutenzione completa: tutto cio' che pkg aggiornerebbe, con 'toUnlock'
-     * sbloccati. Qui un pacchetto protetto che pkg nomina e che non si puo' sbloccare non e' un
-     * impedimento: e' uno di quelli trattenuti apposta, pkg lo salta e aggiorna il resto. Resta
-     * nel piano, con il suo motivo, perche' chi legge sappia cosa NON verra' aggiornato.
+     * The plan of the full maintenance: everything pkg would upgrade, with 'toUnlock'
+     * unlocked. Here a locked package that pkg names and that cannot be unlocked is not an
+     * obstacle: it is one of those held back on purpose, pkg skips it and upgrades the rest. It
+     * stays in the plan, with its reason, so that the reader knows what will NOT be upgraded.
      */
     public static JSONObject fullPlan(Set<String> toUnlock, Set<String> protectedNames,
                                          Function<JSONObject, String> reasonNotToUnlock) {
@@ -560,7 +565,7 @@ public final class PackagePlan {
         plan.put("unlockedPackages", new JSONArray(new ArrayList<>(unlock))).put("blockers", blockers)
              .put("familyUnlocked", unlockedFamily);
 
-        // I pacchetti chiesti che il piano NON cambia: pkg li lascerebbe dove sono.
+        // The requested packages that the plan does NOT change: pkg would leave them where they are.
         JSONArray stopped = new JSONArray();
         JSONArray changes = plan.optJSONArray("changes");
         for (String p : packages) {
@@ -571,10 +576,11 @@ public final class PackagePlan {
         }
         plan.put("unchangedPackages", stopped);
 
-        // pkg aggiorna prima se stesso. In un aggiornamento vero, se il catalogo ha un pkg piu'
-        // recente, pkg installa quello, si rilancia e poi fa il resto; con -n questo passo lo
-        // salta, quindi la simulazione non lo mostra. Un piano "esatto" che tace un pacchetto
-        // che cambiera' non lo e': si aggiunge in testa, entra nell'impronta e viene verificato.
+        // pkg upgrades itself first. In a real upgrade, if the catalogue has a more recent pkg,
+        // pkg installs that one, relaunches itself and then does the rest; with -n it skips this
+        // step, so the simulation does not show it. An "exact" plan that keeps quiet about a
+        // package that will change is not exact: it is added at the top, goes into the
+        // fingerprint and is verified.
         JSONObject before = plan.optBoolean("measured") ? pkgToUpdate() : null;
         if (before != null && changes != null) {
             boolean already = false;
@@ -593,37 +599,37 @@ public final class PackagePlan {
                                              && plan.getJSONArray("lockedPackages").length() == 0))
                 && plan.getJSONArray("pkgErrors").length() == 0 && !plan.optBoolean("hasConflicts")
                 && changes != null && changes.length() > 0
-                // Se nessuno dei pacchetti chiesti cambia, non c'e' niente da eseguire: nemmeno
-                // se nel piano c'e' pkg che aggiornerebbe se stesso.
+                // If none of the requested packages changes, there is nothing to execute: not even
+                // if the plan contains pkg upgrading itself.
                 && (packages.isEmpty() || stopped.length() < packages.size());
         return plan.put("runnable", runnable).put("signature", plan.optBoolean("measured") ? signature(plan) : "");
     }
 
     /**
-     * Un "installa" che e' della stessa famiglia di un pacchetto GIA' installato non e'
-     * un'aggiunta: e' pkg che gira attorno a un blocco.
+     * An "install" that belongs to the same family as an ALREADY installed package is not
+     * an addition: it is pkg working around a lock.
      *
-     * Per pkg un pacchetto protetto non e' "da non cambiare": e' **non disponibile**. Se
-     * serve una libreria che quel pacchetto fornisce, il solver cerca un altro fornitore — e
-     * lo installa, anche se si contende i file con quello che c'e' gia'.
+     * For pkg a locked package is not "not to be changed": it is **not available**. If a
+     * library that package provides is needed, the solver looks for another provider -- and
+     * installs it, even if it fights over files with the one already there.
      *
-     * Misurato sulla VM FreeBSD 15.1 il 23/10/2026. Con mysql84-client protetto, aggiornare
-     * postfix-mysql produceva un piano con "installa mysql97-client 9.7.2"; i due forniscono
-     * la stessa libmysqlclient.so.24 e si contendono /usr/local/bin/comp_err, quindi
-     * l'esecuzione moriva a meta' con «mysql97-client conflicts with mysql84-client
-     * (installs files into the same place)», uscita 3. Sbloccando ANCHE mysql84-client, nella
-     * stessa simulazione mysql97-client **spariisce dal piano**: pkg torna a usare quello che
-     * c'e'. Il piano diceva il vero su cio' che pkg avrebbe fatto; era pkg a essere stato
-     * reso cieco dal blocco.
+     * Measured on the FreeBSD 15.1 VM on 2026-10-23. With mysql84-client locked, upgrading
+     * postfix-mysql produced a plan with "install mysql97-client 9.7.2"; the two provide
+     * the same libmysqlclient.so.24 and both claim /usr/local/bin/comp_err, so the
+     * execution died halfway with "mysql97-client conflicts with mysql84-client
+     * (installs files into the same place)", exit 3. Unlocking mysql84-client TOO, in the
+     * same simulation mysql97-client **disappears from the plan**: pkg goes back to using
+     * what is there. The plan told the truth about what pkg would have done; it was pkg that
+     * had been blinded by the lock.
      *
-     * Si sblocca solo quando il catalogo ha la STESSA versione installata, cioe' quando
-     * sbloccare non puo' cambiare niente: lo scopo e' far vedere a pkg cio' che c'e' gia',
-     * non aggiornarlo. Se il catalogo ne ha una piu' recente, sbloccare sarebbe un
-     * aggiornamento che nessuno ha chiesto (e per i client MySQL l'avvertenza dice di
-     * aspettare): allora e' un impedimento, col suo motivo. E se il gemello non e' nemmeno
-     * protetto, il blocco non c'entra: e' un conflitto vero fra due membri della famiglia.
+     * We unlock only when the catalogue has the SAME version that is installed, that is when
+     * unlocking cannot change anything: the purpose is to make pkg see what is already there,
+     * not to upgrade it. If the catalogue has a more recent one, unlocking would be an
+     * upgrade nobody asked for (and for the MySQL clients the warning says to wait): then
+     * it is an obstacle, with its reason. And if the twin is not even locked, the lock has
+     * nothing to do with it: it is a real conflict between two members of the family.
      *
-     * @return true se ha allargato l'elenco da sbloccare, cioe' se il piano va rifatto
+     * @return true if it widened the list to unlock, that is, if the plan must be redone
      */
     private static boolean familyAddition(JSONObject plan, LinkedHashSet<String> unlock,
                                             Set<String> protectedNames, Function<String, String> installedTwin,
@@ -672,7 +678,7 @@ public final class PackagePlan {
         return false;
     }
 
-    /** Il pkg installato e quello del catalogo, se il catalogo ne ha uno piu' recente; altrimenti null. */
+    /** The installed pkg and the catalogue's one, if the catalogue has a more recent one; otherwise null. */
     static JSONObject pkgToUpdate() {
         String from = sh("pkg query %v pkg 2>/dev/null", 30), to = "";
         for (String line : sh("pkg rquery -U %v pkg 2>/dev/null", 60).split("\n"))
@@ -685,7 +691,7 @@ public final class PackagePlan {
         }
     }
 
-    /** Le versioni installate senza lo stato di blocco: {@code nome -> versione}. */
+    /** The installed versions without the lock state: {@code name -> version}. */
     public static Map<String, String> versionsOnly(Map<String, String[]> installed) {
         Map<String, String> r = new java.util.TreeMap<>();
         if (installed != null)
@@ -695,28 +701,28 @@ public final class PackagePlan {
     }
 
     /**
-     * Che cosa e' cambiato DAVVERO, messo a confronto con il piano firmato.
+     * What REALLY changed, compared with the signed plan.
      *
-     * {@link #verifyOutcome} scorre le righe del PIANO: vede un pacchetto del piano che non
-     * e' arrivato dove doveva, e non puo' vedere un pacchetto cambiato che nel piano non
-     * c'era. Il 18/10/2026, sulla VM, e' successo: il piano firmato (465385a9d669def8) aveva
-     * dieci cambi e nessuna rimozione; durante l'esecuzione pkg ha trovato un conflitto
-     * (lmdb0 contro lmdb su /usr/local/bin/mdb_copy), ha rifatto il calcolo e ha RIMOSSO
-     * lmdb. Il confronto ha controllato i suoi dieci, li ha trovati tutti "ok" e ha concluso
-     * "verifica superata". La rimozione stava nel log di pkg e in nessun verdetto.
+     * {@link #verifyOutcome} walks through the lines of the PLAN: it sees a package of the plan
+     * that did not get where it should, and it cannot see a changed package that was not in
+     * the plan. On 2026-10-18, on the VM, it happened: the signed plan (465385a9d669def8) had
+     * ten changes and no removal; during the execution pkg found a conflict
+     * (lmdb0 against lmdb on /usr/local/bin/mdb_copy), redid the computation and REMOVED
+     * lmdb. The comparison checked its ten, found them all "ok" and concluded
+     * "verification passed". The removal was in pkg's log and in no verdict.
      *
-     * Qui si guarda dall'altra direzione: l'inventario dei pacchetti installati prima e
-     * dopo. Ogni differenza che il piano non spiega e' una divergenza. La firma del piano
-     * esiste per garantire che venga eseguito quello che e' stato mostrato, e su un server
-     * di posta una rimozione non prevista e' precisamente il caso che deve intercettare.
+     * Here we look from the other direction: the inventory of the installed packages before
+     * and after. Every difference the plan does not explain is a divergence. The plan's
+     * signature exists to guarantee that what was shown is what gets executed, and on a mail
+     * server an unexpected removal is precisely the case it must catch.
      *
-     * Una reinstallazione non lascia traccia nell'inventario (stessa versione) e quindi non
-     * puo' comparire qui: quel caso lo copre {@link #verifyOutcome}. I due controlli sono
-     * complementari e servono entrambi.
+     * A reinstallation leaves no trace in the inventory (same version) and so cannot
+     * appear here: that case is covered by {@link #verifyOutcome}. The two checks are
+     * complementary and both are needed.
      *
-     * Funzione pura: riceve i due inventari e il piano, cosi' si prova con uscite vere.
+     * Pure function: it receives the two inventories and the plan, so it can be tested with real outputs.
      *
-     * @return una voce per divergenza: {@code name}, {@code happened}
+     * @return one entry per divergence: {@code name}, {@code happened}
      *         ("removed", "installed", "changed"), {@code from}, {@code to}, {@code why}
      */
     public static JSONArray divergences(Map<String, String> before, Map<String, String> after,
@@ -724,8 +730,8 @@ public final class PackagePlan {
         Map<String, String> a = before == null ? Map.of() : before;
         Map<String, String> b = after == null ? Map.of() : after;
 
-        // Le righe del piano per nome. Un nome puo' comparire una volta sola: se comparisse
-        // due volte il piano sarebbe ambiguo, e si tiene la prima perche' e' quella mostrata.
+        // The plan's lines by name. A name can appear only once: if it appeared twice the
+        // plan would be ambiguous, and the first is kept because it is the one shown.
         Map<String, JSONObject> planned = new HashMap<>();
         JSONArray c = plan == null ? null : plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
@@ -740,7 +746,7 @@ public final class PackagePlan {
             String versionA = a.get(name), versionB = b.get(name);
             String happened = versionA == null ? "installed" : versionB == null ? "removed"
                             : versionA.equals(versionB) ? null : "changed";
-            if (happened == null) continue;   // niente e' cambiato per questo pacchetto
+            if (happened == null) continue;   // nothing changed for this package
 
             JSONObject p = planned.get(name);
             if (p == null) {
@@ -748,7 +754,7 @@ public final class PackagePlan {
                         I18n.tr("server.plan.d.notInPlan")));
                 continue;
             }
-            // Nel piano c'era: il tipo e la versione di arrivo devono combaciare.
+            // It was in the plan: the type and the target version must match.
             String type = p.optString("type"), expected = p.optString("to");
             boolean matches = switch (happened) {
                 case "removed" -> "remove".equals(type);
@@ -770,7 +776,7 @@ public final class PackagePlan {
                 .put("why", why);
     }
 
-    /** Una divergenza detta in una riga, nella lingua di chi legge. */
+    /** A divergence stated in one line, in the reader's language. */
     public static String divergenceInLine(JSONObject d) {
         String name = d.optString("name");
         String text = switch (d.optString("happened")) {
@@ -783,8 +789,8 @@ public final class PackagePlan {
     }
 
     /**
-     * Dopo l'aggiornamento vero: ogni pacchetto del piano e' dove il piano diceva?
-     * Una riga per cambiamento, con cio' che era atteso e cio' che c'e'.
+     * After the real upgrade: is every package of the plan where the plan said?
+     * One line per change, with what was expected and what is there.
      */
     public static JSONArray verifyOutcome(JSONObject plan) {
         JSONArray outcome = new JSONArray();
@@ -803,21 +809,21 @@ public final class PackagePlan {
         return outcome;
     }
 
-    // ===================== la correzione c'e'? =====================
+    // ===================== is the fix there? =====================
 
-    /** Confronto di due versioni, con le regole di pkg. Negativo, zero o positivo. */
+    /** Comparison of two versions, with pkg's rules. Negative, zero or positive. */
     public interface VersionComparator { int compare(String a, String b); }
 
-    /** Solo versioni plausibili: finiscono in una riga di comando. */
+    /** Only plausible versions: they end up in a command line. */
     static boolean validVersion(String v) {
         return v != null && v.matches("[A-Za-z0-9._,+~]{1,64}");
     }
 
     /**
-     * Il confronto lo fa pkg stesso ({@code pkg version -t}), non una copia delle sue regole:
-     * epoch dopo la virgola, revisione del port dopo il trattino basso, "p", "a", "b", "rc".
-     * Riscriverle qui vorrebbe dire sbagliarle sul caso che conta. Le risposte si ricordano:
-     * lo stesso confronto non si chiede due volte.
+     * The comparison is done by pkg itself ({@code pkg version -t}), not by a copy of its rules:
+     * epoch after the comma, port revision after the underscore, "p", "a", "b", "rc".
+     * Rewriting them here would mean getting them wrong in the case that matters. The answers are
+     * remembered: the same comparison is not asked twice.
      */
     public static VersionComparator pkgComparison() {
         Map<String, Integer> already = new HashMap<>();
@@ -836,12 +842,12 @@ public final class PackagePlan {
         };
     }
 
-    /** Un estremo di un intervallo di VuXML, come lo scrive pkg: operatore e versione. */
+    /** One end of a VuXML range, as pkg writes it: operator and version. */
     record Bound(String op, String version) {}
 
     private static final Pattern BOUND = Pattern.compile("^(<=|>=|<|>|=)\\s*(\\S+)$");
 
-    /** "&gt;= 1.25.0 : &lt; 1.30.5,3" diventa due estremi; "&lt; 1.30.5,3" uno solo. */
+    /** "&gt;= 1.25.0 : &lt; 1.30.5,3" becomes two ends; "&lt; 1.30.5,3" just one. */
     static List<Bound> bounds(String interval) {
         List<Bound> r = new ArrayList<>();
         for (String part : interval.split(":")) {
@@ -875,11 +881,11 @@ public final class PackagePlan {
     }
 
     /**
-     * {@code pkg audit -Rjson} ridotto a cio' che serve: per ogni pacchetto la versione e i
-     * problemi, ognuno con gli intervalli di versioni vulnerabili.
+     * {@code pkg audit -Rjson} reduced to what is needed: for each package the version and the
+     * problems, each with the ranges of vulnerable versions.
      *
-     * Attenzione alla forma dell'opzione: e' {@code -Rjson}, attaccato. Con {@code -R json}
-     * pkg prende "json" per il nome di un pacchetto e produce un altro formato.
+     * Beware of the option's form: it is {@code -Rjson}, joined. With {@code -R json}
+     * pkg takes "json" for the name of a package and produces another format.
      */
     static JSONObject readAudit(String json) {
         JSONObject outside = new JSONObject();
@@ -907,29 +913,29 @@ public final class PackagePlan {
     }
 
     /**
-     * La risposta a "la correzione c'e'?" per un pacchetto: la versione installata, quella che
-     * il catalogo offre, e gli intervalli di VuXML di ogni problema.
+     * The answer to "is the fix there?" for a package: the installed version, the one the
+     * catalogue offers, and the VuXML ranges of each problem.
      *
-     * Verdetti, dal migliore al peggiore:
-     *  - "fixed-by-upgrade": il catalogo ha una versione piu' recente che VuXML non
-     *    considera vulnerabile per nessuno dei problemi;
-     *  - "upgrade-not-enough": il catalogo ha una versione piu' recente, ma per almeno un
-     *    problema e' ancora vulnerabile;
-     *  - "fix-outside-branch": il catalogo non va oltre, ma VuXML indica da quale
-     *    versione il problema e' corretto — esiste, non e' ancora nel tuo ramo;
-     *  - "fix-not-stated": vulnerabile fino a una versione compresa, senza dire la prima
-     *    corretta;
-     *  - "no-fix": VuXML non mette un limite superiore, cioe' nessuna versione
-     *    pubblicata e' corretta;
-     *  - "unknown": un intervallo non si lascia leggere o il confronto non ha risposto.
+     * Verdicts, from best to worst:
+     *  - "fixed-by-upgrade": the catalogue has a more recent version that VuXML does not
+     *    consider vulnerable for any of the problems;
+     *  - "upgrade-not-enough": the catalogue has a more recent version, but for at least one
+     *    problem it is still vulnerable;
+     *  - "fix-outside-branch": the catalogue goes no further, but VuXML states from which
+     *    version the problem is fixed -- the fix exists, it is not in your branch yet;
+     *  - "fix-not-stated": vulnerable up to a version included, without saying the first
+     *    fixed one;
+     *  - "no-fix": VuXML sets no upper limit, that is, no published version
+     *    is fixed;
+     *  - "unknown": a range cannot be read or the comparison did not answer.
      */
     static JSONObject assessFix(String installed, String catalog, JSONArray issues, VersionComparator c) {
         JSONObject r = new JSONObject().put("installedVersion", installed).put("catalog", catalog == null ? "" : catalog);
         try {
             boolean newerCatalog = catalog != null && !catalog.isEmpty() && c.compare(catalog, installed) > 0;
             JSONArray details = new JSONArray();
-            String firstFixed = null;          // la piu' alta fra le prime versioni corrette
-            String upTo = null;                  // un "<=": vulnerabile fino a questa compresa
+            String firstFixed = null;          // the highest among the first fixed versions
+            String upTo = null;                  // a "<=": vulnerable up to and including this one
             boolean withoutLimit = false, unreadable = false, onlyThis = false;
             List<String> stillOpenInCatalog = new ArrayList<>();
             for (int i = 0; issues != null && i < issues.length(); i++) {
@@ -1014,13 +1020,13 @@ public final class PackagePlan {
     }
 
     /**
-     * Per ogni pacchetto vulnerabile: se e dove esiste la correzione. Legge il database delle
-     * vulnerabilita' gia' scaricato (chi chiama decide se riscaricarlo prima) e il catalogo.
+     * For each vulnerable package: whether and where the fix exists. It reads the vulnerability
+     * database already downloaded (the caller decides whether to download it again first) and the catalogue.
      */
     public static JSONObject fixes() {
         Shell.Result a = Shell.runShell(Duration.ofSeconds(180), "pkg audit -Rjson 2>/dev/null");
-        // pkg audit esce con 0 senza vulnerabilita' e con un codice diverso quando ne trova:
-        // conta se il JSON c'e', non il codice.
+        // pkg audit exits with 0 without vulnerabilities and with a different code when it finds some:
+        // what matters is whether the JSON is there, not the code.
         String out = a.output();
         if (out == null || out.indexOf('{') < 0)
             return new JSONObject().put("success", false)
@@ -1040,7 +1046,7 @@ public final class PackagePlan {
                 String x = line.trim();
                 if (!validVersion(x)) continue;
                 try { if (catalog.isEmpty() || c.compare(x, catalog) > 0) catalog = x; }
-                catch (RuntimeException ignore) { /* resta quella che c'era */ }
+                catch (RuntimeException ignore) { /* the one that was there stays */ }
             }
             per.put(name, assessFix(v.getString("version"), catalog, v.getJSONArray("issues"), c));
         }
@@ -1049,14 +1055,14 @@ public final class PackagePlan {
 
     // ===================== utilita' =====================
 
-    // ===================== il quadro dei pacchetti =====================
+    // ===================== the package overview =====================
 
     private static final Pattern TO_UPDATE = Pattern.compile("^(\\S+)-([^\\s-]+)\\s+<\\s.*\\(remote has ([^)]+)\\)\\s*$");
 
     /**
-     * Le righe "<" di {@code pkg version -U -vRL=}: nome -> versione del catalogo. Le altre
-     * ("?" fuori catalogo, ">" piu' nuovo del catalogo, "!" non confrontabile) non sono
-     * aggiornamenti disponibili e restano fuori.
+     * The "<" lines of {@code pkg version -U -vRL=}: name -> catalogue version. The others
+     * ("?" not in the catalogue, ">" newer than the catalogue, "!" not comparable) are not
+     * available upgrades and are left out.
      */
     public static Map<String, String> toUpdate(String output) {
         Map<String, String> r = new java.util.TreeMap<>();
@@ -1067,7 +1073,7 @@ public final class PackagePlan {
         return r;
     }
 
-    /** Da {@code pkg query '%n\t%v\t%k'}: nome -> {versione, "1" se bloccato}. */
+    /** From {@code pkg query '%n\t%v\t%k'}: name -> {version, "1" if locked}. */
     public static Map<String, String[]> installed(String output) {
         Map<String, String[]> r = new java.util.TreeMap<>();
         for (String line : (output == null ? "" : output).split("\n")) {
@@ -1078,12 +1084,12 @@ public final class PackagePlan {
         return r;
     }
 
-    /** I pacchetti installati, letti adesso. */
+    /** The installed packages, read now. */
     public static Map<String, String[]> installed() {
         return installed(Shell.runShell(Duration.ofSeconds(60), "pkg query '%n\t%v\t%k' 2>/dev/null").output());
     }
 
-    /** Gli aggiornamenti disponibili nel catalogo gia' scaricato: -U, nessuna rete. */
+    /** The upgrades available in the catalogue already downloaded: -U, no network. */
     public static Shell.Result readToUpdate() {
         return Shell.runShell(Duration.ofSeconds(180), "pkg version -U -vRL= 2>&1");
     }

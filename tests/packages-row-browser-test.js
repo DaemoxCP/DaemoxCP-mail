@@ -1,4 +1,4 @@
-// The packages on the Updates page of the real panel of the TEST VM (reperto 202): ONE row in "Update the server", with
+// The packages on the Updates page of the real panel of the TEST VM (finding 202): ONE row in "Update the server", with
 // the list one by one closed under it, and no separate Packages card. Only reads: no update, no lock, no unlock.
 //
 //  1. The row says, in words, what there is to do for the packages (or that all is up to date), with at most one

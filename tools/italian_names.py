@@ -1,9 +1,8 @@
-"""Quali parti di un nome sono italiane.
+"""Which parts of a name are Italian.
 
-Corpus italiano: i testi di it.json e i commenti del codice (sono in italiano per regola).
-Corpus inglese: i testi di en.json, piu' le parole tecniche. Una parte e' italiana se compare nel
-corpus italiano e non in quello inglese, oppure se non e' nel dizionario inglese (come prima).
-"""
+Italian corpus: the texts of it.json and the comments of the code (they are in Italian by rule).
+English corpus: the texts of en.json, plus the technical words. A part is Italian if it appears in
+the Italian corpus and not in the English one, or if it is not in the English dictionary (as before)."""
 import re, json, glob, os, sys
 ROOT = sys.argv[1]
 def words_of(s): return set(w.lower() for w in re.findall(r"[A-Za-zÀ-ÿ']+", s) for w in w.split("'") if w)
@@ -16,7 +15,7 @@ for f in glob.glob(f"{ROOT}/src/main/java/**/*.java", recursive=True) + glob.glo
     for c in re.findall(r"(?m)//[^\n]*|/\*[\s\S]*?\*/|^\s*#[^\n]*", t): IT_WORDS |= words_of(c)
 DICT = set(w.strip().lower() for w in open("/usr/share/dict/words", encoding="utf-8", errors="ignore"))
 TECH = set(open(os.path.join(os.path.dirname(__file__), "technical-words.txt")).read().split()) if os.path.exists(os.path.join(os.path.dirname(__file__), "technical-words.txt")) else set()
-# parole che stanno in entrambi i corpus ma qui sono italiane (o viceversa) si decidono a mano
+# words that are in both corpora but here are Italian (or vice versa) are decided by hand
 def parts(name):
     s = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name)
     s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", s)

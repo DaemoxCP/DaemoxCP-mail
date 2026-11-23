@@ -10,25 +10,25 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 /**
- * Setup automatico di Fail2ban per il mail panel al boot.
+ * Automatic Fail2ban setup for the mail panel at boot.
  *
- * Operazioni (TUTTE idempotenti, fail-safe):
- *   1. Crea /var/log/daemoxcp-mail-auth.log con perms 640 root:wheel
- *   2. Scrive il filter Fail2ban in /usr/local/etc/fail2ban/filter.d/daemoxcp-mail-auth.conf
- *   3. Aggiunge la jail [daemoxcp-mail-auth] a /usr/local/etc/fail2ban/jail.local
- *      (solo se non esiste già — non sovrascrive customizzazioni)
- *   4. Aggiunge log rotation in /usr/local/etc/newsyslog.conf.d/
+ * Operations (ALL idempotent, fail-safe):
+ *   1. Creates /var/log/daemoxcp-mail-auth.log with perms 640 root:wheel
+ *   2. Writes the Fail2ban filter in /usr/local/etc/fail2ban/filter.d/daemoxcp-mail-auth.conf
+ *   3. Adds the jail [daemoxcp-mail-auth] to /usr/local/etc/fail2ban/jail.local
+ *      (only if it does not exist already -- it does not overwrite customizations)
+ *   4. Adds log rotation in /usr/local/etc/newsyslog.conf.d/
  *   5. Reload Fail2ban
  *
- * Tutti i passi sono best-effort: se uno fallisce (permessi, fail2ban non
- * installato, ecc.) viene loggato un warning ma il pannello continua.
+ * All steps are best-effort: if one fails (permissions, fail2ban not
+ * installed, etc.) a warning is logged but the panel keeps going.
  *
- * Da chiamare UNA VOLTA al boot dopo l'inizializzazione del Fail2banManager.
+ * To be called ONCE at boot after the Fail2banManager has been initialized.
  */
 public final class Fail2banAutoSetup {
     private static final Logger LOGGER = Logger.getLogger(Fail2banAutoSetup.class.getName());
 
-    /** La jail degli accessi al pannello, col nome del prodotto (prima mail-panel-auth: AuthJailRename). */
+    /** The jail for logins to the panel, with the product name (formerly mail-panel-auth: AuthJailRename). */
     public static final String AUTH_JAIL         = org.daemoxcp.mail.system.Product.SLUG + "-auth";
     public static final String LOG_FILE          = "/var/log/" + AUTH_JAIL + ".log";
     private static final String FILTER_DIR        = "/usr/local/etc/fail2ban/filter.d";
@@ -41,7 +41,7 @@ public final class Fail2banAutoSetup {
 
     private static final String JAIL_MARKER = "[" + AUTH_JAIL + "]";
 
-    /** Avvia il setup. Idempotente: chiamabile più volte senza danni. */
+    /** Starts the setup. Idempotent: can be called several times without harm. */
     public static void run() {
         try {
             // 1. Log file
@@ -54,26 +54,26 @@ public final class Fail2banAutoSetup {
             writeNewsyslogIfMissing();
             // 5. Permaban setup (file + pf anchor)
             ensurePermanentBanSetup();
-            // 6. Reload Fail2ban se abbiamo cambiato qualcosa
+            // 6. Reload Fail2ban if we changed something
             if (filterChanged || jailChanged) {
                 reloadFail2ban();
             }
-            // 7. Le jail dei servizi di posta, se mancano
+            // 7. The jails of the mail services, if missing
             ensureMailJailsIfMissing();
-            // 8. Se un blocco non fermerebbe niente, dirlo: un pannello non protetto non deve
-            //    sembrare a posto.
+            // 8. If a block would stop nothing, say so: an unprotected panel must not
+            //    look fine.
             warnIfBansWouldNotBite();
         } catch (Throwable t) {
-            // Non propagare mai — il setup non deve far crashare il pannello
+            // Never propagate -- the setup must not crash the panel
             LOGGER.warning("[Fail2banAutoSetup] Setup failed: " + t.getMessage());
         }
     }
 
     /**
-     * Setup della feature permaban:
-     *  1. Crea /var/db/daemoxcp-mail/permaban.list se manca
-     *  2. Aggiunge a /etc/pf.conf (se esiste): table <permaban> persist + block rule
-     *  3. Ricarica pf e popola la tabella runtime dal file
+     * Setup of the permaban feature:
+     *  1. Creates /var/db/daemoxcp-mail/permaban.list if missing
+     *  2. Adds to /etc/pf.conf (if it exists): table <permaban> persist + block rule
+     *  3. Reloads pf and fills the runtime table from the file
      */
     private static void ensurePermanentBanSetup() {
         try {
@@ -110,20 +110,20 @@ public final class Fail2banAutoSetup {
                         additions.append("block in quick from <permaban>\n");
                     }
                     if (!hasF2bAnchor) {
-                        // L'anchor di fail2ban. La jail [daemoxcp-mail-auth] ha
-                        // "action = pf[...]", e l'azione pf di fail2ban mette le sue regole
-                        // dentro l'anchor "f2b/<nome>". Un anchor che pf.conf non nomina non
-                        // viene MAI guardato: fail2ban annota il blocco, lo scrive nel suo
-                        // registro, dice di averlo fatto, e il pacchetto passa lo stesso.
-                        // Il pannello sapeva aggiungerlo, ma solo dalla pagina Firewall, a
-                        // pulsante premuto: all'avvio no. Le regole dell'anchor hanno
-                        // "quick", quindi valgono anche messe in fondo.
+                        // The fail2ban anchor. The jail [daemoxcp-mail-auth] has
+                        // "action = pf[...]", and fail2ban's pf action puts its rules
+                        // inside the anchor "f2b/<name>". An anchor that pf.conf does not
+                        // name is NEVER looked at: fail2ban records the block, writes it
+                        // in its log, says it has done it, and the packet gets through
+                        // anyway. The panel knew how to add it, but only from the Firewall
+                        // page, with a button pressed: not at boot. The anchor's rules
+                        // have "quick", so they apply even when placed at the end.
                         additions.append("anchor \"f2b/*\"\n");
                     }
-                    // Append (regole con 'quick' funzionano anche se piazzate in fondo)
+                    // Append (rules with 'quick' work even if placed at the end)
                     String newContent = content + (content.endsWith("\n") ? "" : "\n") + additions.toString();
 
-                    // Pre-flight syntax check con file temporaneo
+                    // Pre-flight syntax check with a temporary file
                     Path tmp = Files.createTempFile("pf-permaban-", ".conf");
                     Files.writeString(tmp, newContent);
                     // TODO: migrate to Shell.run when touched
@@ -137,13 +137,13 @@ public final class Fail2banAutoSetup {
                         LOGGER.warning("[Fail2banAutoSetup] pf.conf permaban check failed, NOT applied: " + testOut);
                         Files.deleteIfExists(tmp);
                     } else {
-                        // La copia di sicurezza si fa ADESSO, non prima: fatta prima, un
-                        // controllo di sintassi fallito lasciava un .bak.<timestamp> di
-                        // troppo a ogni avvio, cioe' un file in piu' ogni volta che la
-                        // riparazione NON e' avvenuta.
+                        // The backup copy is made NOW, not before: made before, a
+                        // failed syntax check left one .bak.<timestamp> too many
+                        // at every boot, i.e. one more file every time the
+                        // repair did NOT happen.
                         org.daemoxcp.mail.system.ConfigBackups.copy(pfConf);
                         Files.move(tmp, pfConf, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                        // Ricarica live
+                        // Live reload
                         try {
                             // TODO: migrate to Shell.run when touched
                             ProcessBuilder loadPb = new ProcessBuilder("/sbin/pfctl", "-f", "/etc/pf.conf");
@@ -157,7 +157,7 @@ public final class Fail2banAutoSetup {
                 }
             }
 
-            // 3. Ricarica la tabella runtime dal file (se pf è attivo)
+            // 3. Reload the runtime table from the file (if pf is active)
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", Fail2banManager.PERMABAN_TABLE,
@@ -173,17 +173,17 @@ public final class Fail2banAutoSetup {
         }
     }
 
-    // ================== le jail dei servizi di posta ==================
+    // ================== the jails of the mail services ==================
 
     private static final String MAIL_JAILS = JAIL_D + "/mail.local";
 
     /**
-     * C'e' davvero un server di posta su questa macchina?
+     * Is there really a mail server on this machine?
      *
-     * <p>Si guardano i file di configurazione, non il conto che il pannello tiene in SQLite:
-     * quelle righe dicono che cosa il pannello <em>crede</em> di aver installato, e una jail
-     * per un servizio che non c'e' fail2ban non la carica — fa solo rumore nel registro e un
-     * rosso nella pagina Firewall.
+     * <p>The configuration files are checked, not the record the panel keeps in SQLite:
+     * those rows say what the panel <em>believes</em> it has installed, and fail2ban does not
+     * load a jail for a service that is not there -- it only makes noise in the log and a
+     * red mark on the Firewall page.
      */
     static boolean mailStackPresent() {
         return Files.exists(Paths.get("/usr/local/etc/postfix/main.cf"))
@@ -191,28 +191,28 @@ public final class Fail2banAutoSetup {
     }
 
     /**
-     * Le jail di Postfix, Dovecot, Rspamd e Roundcube: si scrivono se mancano.
+     * The jails of Postfix, Dovecot, Rspamd and Roundcube: they are written if missing.
      *
-     * <p>Prima esistevano solo a <strong>pulsante premuto</strong>, dalla pagina Firewall: su
-     * una macchina appena installata i servizi di posta stavano su porte pubbliche senza
-     * niente che fermasse chi provava le credenziali a raffica, e nulla diceva che mancasse
-     * qualcosa. La jail del pannello invece l'avvio la scriveva gia': non c'era un motivo per
-     * cui quelle della posta dovessero essere diverse.
+     * <p>Before, they existed only <strong>with a button pressed</strong>, from the Firewall page: on
+     * a freshly installed machine the mail services sat on public ports with
+     * nothing stopping whoever tried credentials in bursts, and nothing said that something
+     * was missing. The panel's jail, instead, was already written at boot: there was no reason
+     * why the mail ones should be different.
      *
-     * <p>Solo se mancano. Il lavoro vero lo fa {@code Fail2banManager.installMailJails()} --
-     * che scrive il file, crea i filtri propri, accende il registro degli accessi di Roundcube
-     * (altrimenti fail2ban rifiuta la jail roundcube-auth) e ricarica -- ma quel metodo
-     * sovrascrive {@code mail.local} senza guardare, e all'avvio vorrebbe dire cancellare a
-     * ogni riavvio i parametri che un amministratore ha cambiato. Il file c'e' gia': non si
-     * tocca, come per il filtro del pannello.
+     * <p>Only if missing. The real work is done by {@code Fail2banManager.installMailJails()} --
+     * which writes the file, creates its own filters, turns on Roundcube's login log
+     * (otherwise fail2ban rejects the roundcube-auth jail) and reloads -- but that method
+     * overwrites {@code mail.local} without looking, and at boot that would mean erasing at
+     * every restart the parameters an administrator has changed. If the file is already there
+     * it is not touched, as for the panel's filter.
      */
     private static void ensureMailJailsIfMissing() {
         try {
             if (!Files.isDirectory(Paths.get(JAIL_D))
                     && !Files.isDirectory(Paths.get(FILTER_DIR))) {
-                return;                                   // fail2ban non installato
+                return;                                   // fail2ban not installed
             }
-            if (Files.exists(Paths.get(MAIL_JAILS))) return;      // gia' li', anche se ritoccate
+            if (Files.exists(Paths.get(MAIL_JAILS))) return;      // already there, even if tweaked
             if (!mailStackPresent()) {
                 LOGGER.info("[Fail2banAutoSetup] no mail server here yet: mail jails skipped");
                 return;
@@ -226,24 +226,24 @@ public final class Fail2banAutoSetup {
         }
     }
 
-    // ================== pf: i blocchi fermano davvero un pacchetto? ==================
+    // ================== pf: do the blocks really stop a packet? ==================
 
     /**
-     * Perche' un blocco di fail2ban non fermerebbe niente, o stringa vuota se lo ferma.
+     * Why a fail2ban block would stop nothing, or an empty string if it does stop it.
      *
-     * <p>Quattro pezzi devono esserci <strong>insieme</strong>, e l'ordine conta perche' il
-     * primo che manca rende inutile guardare i successivi: il modulo pf nel kernel (senza,
-     * {@code pfctl} non parla nemmeno con il kernel e risponde
-     * {@code /dev/pf: No such file or directory}), il file {@code /etc/pf.conf}, la riga
-     * {@code anchor "f2b/*"} dentro quel file, e pf acceso.
+     * <p>Four pieces must be there <strong>together</strong>, and the order matters because the
+     * first one missing makes it pointless to look at the following ones: the pf module in the
+     * kernel (without it, {@code pfctl} cannot even talk to the kernel and answers
+     * {@code /dev/pf: No such file or directory}), the file {@code /etc/pf.conf}, the line
+     * {@code anchor "f2b/*"} inside that file, and pf turned on.
      *
-     * <p>Misurato su una FreeBSD 15.1 appena installata, col pannello mail installato e
-     * acceso: {@code fail2ban-client} dichiara bloccato l'indirizzo, e in pf non c'e' niente
-     * perche' pf.conf non esiste e il modulo non e' caricato. "Blocca e dice di aver
-     * bloccato" e' il caso peggiore: non lascia tracce da cui accorgersi.
+     * <p>Measured on a freshly installed FreeBSD 15.1, with the mail panel installed and
+     * running: {@code fail2ban-client} declares the address blocked, and in pf there is nothing
+     * because pf.conf does not exist and the module is not loaded. "Blocks and says it has
+     * blocked" is the worst case: it leaves no trace from which to notice.
      *
-     * <p>Funzione pura, perche' questa e' la cosa da provare: le quattro letture dal sistema
-     * stanno nei metodi qui sotto.
+     * <p>Pure function, because this is the thing to test: the four readings from the system
+     * are in the methods below.
      */
     public static String whyBansWouldNotBite(boolean moduleLoaded, boolean confExists,
                                              boolean anchorPresent, boolean pfEnabled) {
@@ -259,28 +259,28 @@ public final class Fail2banAutoSetup {
         return "";
     }
 
-    /** Il modulo pf nel kernel. */
+    /** The pf module in the kernel. */
     public static boolean pfModuleLoaded() {
         return runSaying("/sbin/kldstat").contains("pf.ko");
     }
 
     /**
-     * pf acceso.
+     * pf turned on.
      *
-     * <p>Si legge "Status: Enabled", non il codice d'uscita: {@code pfctl -s info} esce
-     * <strong>0 anche a pf spento</strong>, stampando "Status: Disabled". Chiedere solo se il
-     * comando riesce vuol dire scrivere "pf acceso" accanto a un firewall spento.
+     * <p>"Status: Enabled" is read, not the exit code: {@code pfctl -s info} exits
+     * <strong>0 even with pf off</strong>, printing "Status: Disabled". Asking only whether the
+     * command succeeds means writing "pf on" next to a firewall that is off.
      */
     public static boolean pfEnabled() {
         return runSaying("/sbin/pfctl", "-s", "info").contains("Status: Enabled");
     }
 
-    /** Dentro una jail di FreeBSD non si caricano moduli: non e' un guasto, e' un ambiente. */
+    /** Inside a FreeBSD jail modules cannot be loaded: it is not a fault, it is an environment. */
     public static boolean insideFreebsdJail() {
         return runSaying("/sbin/sysctl", "-n", "security.jail.jailed").trim().equals("1");
     }
 
-    /** Quello che un comando dice, stderr compreso; stringa vuota se non si e' potuto lanciare. */
+    /** What a command says, stderr included; empty string if it could not be launched. */
     private static String runSaying(String... command) {
         try {
             ProcessBuilder pb = new ProcessBuilder(command);
@@ -297,21 +297,21 @@ public final class Fail2banAutoSetup {
     }
 
     /**
-     * All'avvio: se un blocco non fermerebbe niente, lo dice.
+     * At boot: if a block would stop nothing, it says so.
      *
-     * <p>Non accende pf e non scrive {@code /etc/pf.conf}: l'avvio ricorre a ogni riavvio, su
-     * una macchina che nel frattempo puo' aver cambiato configurazione per mano di qualcun
-     * altro, e accendere un firewall li' sarebbe cambiare una macchina viva alle spalle di chi
-     * la amministra. Lo fa l'<em>installazione</em>, che e' un'azione esplicita, e la pagina
-     * Firewall, che e' un pulsante premuto da una persona.
+     * <p>It does not turn pf on and does not write {@code /etc/pf.conf}: the boot recurs at every
+     * restart, on a machine whose configuration may meanwhile have been changed by someone
+     * else, and turning on a firewall there would mean changing a live machine behind the back
+     * of whoever administers it. The <em>installation</em> does it, which is an explicit action,
+     * and so does the Firewall page, which is a button pressed by a person.
      *
-     * <p>Quello che l'avvio deve fare e' non far sembrare a posto un pannello che non e'
-     * protetto: prima non diceva niente, e la pagina di accesso stava su una porta pubblica
-     * con fail2ban che annotava blocchi senza effetto.
+     * <p>What the boot must do is not make a panel that is not protected look fine:
+     * before, it said nothing, and the login page sat on a public port
+     * with fail2ban recording blocks that had no effect.
      */
     private static void warnIfBansWouldNotBite() {
         try {
-            if (insideFreebsdJail()) return;          // in una jail pf non e' una scelta di qui
+            if (insideFreebsdJail()) return;          // in a jail pf is not a choice made here
             boolean anchor = false;
             boolean conf = Files.exists(Paths.get("/etc/pf.conf"));
             if (conf) {
@@ -321,8 +321,8 @@ public final class Fail2banAutoSetup {
             }
             String why = whyBansWouldNotBite(pfModuleLoaded(), conf, anchor, pfEnabled());
             if (why.isEmpty()) return;
-            // Giallo e due righe: una dice che cosa non funziona, l'altra come si ripara. Il
-            // colore non e' l'unico veicolo (r9): il testo dice tutto da se'.
+            // Yellow and two lines: one says what does not work, the other how to fix it. The
+            // color is not the only carrier (r9): the text says everything on its own.
             System.out.println("\u001B[33mFail2ban can record bans but NOTHING WILL BE BLOCKED: "
                     + why + ".\u001B[0m");
             System.out.println("\u001B[33mFix it from the Firewall page ('fix all'), or run the"
@@ -334,14 +334,15 @@ public final class Fail2banAutoSetup {
     }
 
     /**
-     * Un filtro gia' sul disco: lo riscriviamo?
+     * A filter already on disk: do we rewrite it?
      *
-     * <p>Si', solo se e' ancora quello del pannello ed e' diverso da quello che il pannello
-     * scriverebbe oggi. Un file modificato a mano non si tocca, e si riconosce dal fatto che
-     * non comincia piu' con la firma. Vale anche la firma di prima (legacy-names.json): su un
-     * server installato prima il filtro si riscrive una volta, e prende quella di adesso.
+     * <p>Yes, only if it is still the panel's one and differs from what the panel
+     * would write today. A file modified by hand is not touched, and it is recognized by the
+     * fact that it no longer starts with the signature. The previous signature also counts
+     * (legacy-names.json): on a server installed earlier the filter is rewritten once, and
+     * takes the current one.
      */
-    /** Il filtro l'ha scritto il pannello: comincia con la sua firma, di adesso o di prima. */
+    /** The filter was written by the panel: it starts with its signature, the current or a previous one. */
     public static boolean ownFilter(String existing) {
         if (existing == null) return false;
         for (String f : org.daemoxcp.mail.system.PanelMarker.forms(MARKER_SECTION, MARKER))
@@ -358,11 +359,11 @@ public final class Fail2banAutoSetup {
     }
 
     /**
-     * In questo pf.conf c'e' gia' la riga che fa guardare a pf le regole di fail2ban?
+     * Does this pf.conf already have the line that makes pf look at fail2ban's rules?
      *
-     * <p>Si accettano le forme che pf accetta: col nome fra virgolette o senza. Non si guarda
-     * dentro i commenti, perche' una riga commentata non e' una regola — e quel file i
-     * commenti li contiene davvero, scritti dal pannello stesso.
+     * <p>The forms pf accepts are accepted: with the name in quotes or without. Comments are
+     * not looked into, because a commented-out line is not a rule -- and that file really does
+     * contain comments, written by the panel itself.
      */
     public static boolean hasF2bAnchor(String pfConf) {
         for (String line : pfConf.split("\n")) {
@@ -373,7 +374,7 @@ public final class Fail2banAutoSetup {
         return false;
     }
 
-    /** Crea il file di log con perms 640 root:wheel se non esiste. */
+    /** Creates the log file with perms 640 root:wheel if it does not exist. */
     private static void ensureLogFile() {
         try {
             Path logPath = Paths.get(LOG_FILE);
@@ -385,7 +386,7 @@ public final class Fail2banAutoSetup {
                 Files.createFile(logPath);
                 LOGGER.info("[Fail2banAutoSetup] Created " + LOG_FILE);
             }
-            // Setta sempre i perms (640 = rw-r-----)
+            // Always set the perms (640 = rw-r-----)
             try {
                 Set<PosixFilePermission> perms = new HashSet<>();
                 perms.add(PosixFilePermission.OWNER_READ);
@@ -393,7 +394,7 @@ public final class Fail2banAutoSetup {
                 perms.add(PosixFilePermission.GROUP_READ);
                 Files.setPosixFilePermissions(logPath, perms);
             } catch (UnsupportedOperationException ignored) {
-                // FS non POSIX — ignora
+                // Non-POSIX FS -- ignore
             }
         } catch (IOException e) {
             LOGGER.warning("[Fail2banAutoSetup] Cannot create " + LOG_FILE + ": " + e.getMessage());
@@ -401,13 +402,13 @@ public final class Fail2banAutoSetup {
     }
 
     /**
-     * Scrive il filter se manca, e lo riscrive se e' ancora quello del pannello ed e'
-     * vecchio. Ritorna true se ha scritto.
+     * Writes the filter if missing, and rewrites it if it is still the panel's one and is
+     * old. Returns true if it wrote.
      *
-     * <p>"Scrivi solo se manca" lasciava per sempre il filtro rotto a chi aveva gia' avviato
-     * il pannello una volta: il file c'era, quindi la correzione non sarebbe mai arrivata.
-     * Un filtro modificato da chi amministra la macchina invece non si tocca, e si riconosce
-     * dal fatto che la prima riga non e' piu' la firma del pannello.
+     * <p>"Write only if missing" left the broken filter forever for whoever had already started
+     * the panel once: the file was there, so the fix would never have arrived.
+     * A filter modified by whoever administers the machine, instead, is not touched, and is
+     * recognized by the fact that its first line is no longer the panel's signature.
      */
     private static boolean writeFilterIfMissing() {
         try {
@@ -437,7 +438,7 @@ public final class Fail2banAutoSetup {
         }
     }
 
-    /** Aggiunge la sezione [daemoxcp-mail-auth] a jail.local solo se manca. */
+    /** Adds the [daemoxcp-mail-auth] section to jail.local only if missing. */
     private static boolean appendJailIfMissing() {
         try {
             Path jailPath = Paths.get(JAIL_LOCAL);
@@ -446,14 +447,14 @@ public final class Fail2banAutoSetup {
                 : "";
 
             if (existing.contains(JAIL_MARKER)) {
-                return false; // jail già presente, rispetta customizzazioni
+                return false; // jail already present, respect customizations
             }
 
-            // Assicura newline finale prima di appendere
+            // Ensure a trailing newline before appending
             String prefix = existing.isEmpty() ? "" : (existing.endsWith("\n") ? "" : "\n");
             String toAppend = prefix + "\n" + JAIL_BLOCK;
 
-            // Crea jail.local se non esiste
+            // Create jail.local if it does not exist
             if (!Files.exists(jailPath)) {
                 Path parent = jailPath.getParent();
                 if (parent != null && !Files.exists(parent)) {
@@ -475,13 +476,13 @@ public final class Fail2banAutoSetup {
     }
 
     /**
-     * Scrive la conf di log rotation se manca.
+     * Writes the log rotation conf if missing.
      *
-     * <p>La cartella si <strong>crea</strong>, non si salta: su una FreeBSD appena installata
-     * {@code /usr/local/etc/newsyslog.conf.d} non esiste ancora, ma {@code /etc/newsyslog.conf}
-     * la include gia' (riga {@code <include> /usr/local/etc/newsyslog.conf.d/[!.]*.conf}).
-     * Saltare voleva dire proprio il caso normale: nessuna rotazione, e un registro di
-     * autenticazione che cresce senza fine.
+     * <p>The folder is <strong>created</strong>, not skipped: on a freshly installed FreeBSD
+     * {@code /usr/local/etc/newsyslog.conf.d} does not exist yet, but {@code /etc/newsyslog.conf}
+     * already includes it (line {@code <include> /usr/local/etc/newsyslog.conf.d/[!.]*.conf}).
+     * Skipping meant precisely the normal case: no rotation, and an authentication
+     * log that grows without end.
      */
     private static void writeNewsyslogIfMissing() {
         try {
@@ -490,10 +491,10 @@ public final class Fail2banAutoSetup {
             Path conf = Paths.get(NEWSYSLOG_CONF);
             String content = newsyslogText(logOwner());
             if (Files.exists(conf)) {
-                // Gia' presente. Si riscrive solo il file scritto dal pannello, e solo se il proprietario del
-                // registro e' cambiato: col pannello separato lo scrive la parte web (daemoxcp_mail), e il file
-                // che newsyslog ricrea a ogni rotazione deve restare suo, se no la web non scrive piu' e
-                // fail2ban non vede piu' i tentativi.
+                // Already present. Only the file written by the panel is rewritten, and only if the owner
+                // of the log has changed: with the panel separated the web part writes it (daemoxcp_mail),
+                // and the file that newsyslog recreates at every rotation must stay its own, otherwise the
+                // web part can no longer write and fail2ban no longer sees the attempts.
                 String now = Files.readString(conf, StandardCharsets.UTF_8);
                 if (now.equals(content) || !ownNewsyslog(now)) return;
                 Files.writeString(conf, content, StandardCharsets.UTF_8);
@@ -510,19 +511,19 @@ public final class Fail2banAutoSetup {
     static final String NEWSYSLOG_HEADER = "# Rotation of the " + org.daemoxcp.mail.system.Product.NAME + " sign-in log ("
             + org.daemoxcp.mail.system.PanelMarker.WRITTEN + ")\n";
 
-    /** Il file di newsyslog l'ha scritto il pannello: la riga di testa di adesso o una di prima ("newsyslogHeaders"). */
+    /** The newsyslog file was written by the panel: the current header line or a previous one ("newsyslogHeaders"). */
     public static boolean ownNewsyslog(String text) {
         for (String h : org.daemoxcp.mail.system.PanelMarker.forms("newsyslogHeaders", NEWSYSLOG_HEADER.strip()))
             if (text.startsWith(h + "\n")) return true;
         return false;
     }
 
-    /** La riga di newsyslog.conf(5): file, proprietario:gruppo, modo, copie, dimensione in KB, quando, flag. */
+    /** The newsyslog.conf(5) line: file, owner:group, mode, copies, size in KB, when, flags. */
     static String newsyslogText(String owner) {
         return NEWSYSLOG_HEADER + LOG_FILE + "    " + owner + "    640    7    1024    *    JC\n";
     }
 
-    /** Il proprietario del registro: daemoxcp_mail:wheel col pannello separato (PanelSeparation), se no root:wheel. */
+    /** The owner of the log: daemoxcp_mail:wheel with the panel separated (PanelSeparation), otherwise root:wheel. */
     static String logOwner() {
         try {
             String owner = Files.getOwner(Paths.get(LOG_FILE), java.nio.file.LinkOption.NOFOLLOW_LINKS).getName();
@@ -532,7 +533,7 @@ public final class Fail2banAutoSetup {
         }
     }
 
-    /** Reload Fail2ban con fail2ban-client se disponibile e in esecuzione. */
+    /** Reloads Fail2ban with fail2ban-client if available and running. */
     private static void reloadFail2ban() {
         try {
             if (!Files.isExecutable(Paths.get(FAIL2BAN_CLIENT))) {
@@ -563,7 +564,7 @@ public final class Fail2banAutoSetup {
 
     // ================== EMBEDDED CONFIG CONTENT ==================
 
-    /** La riga con cui il pannello firma i file che scrive lui: solo quelli li riscrive. */
+    /** The line with which the panel signs the files it writes itself: only those does it rewrite. */
     public static final String MARKER = "# Fail2ban filter for " + org.daemoxcp.mail.system.Product.NAME + " sign-ins ("
             + org.daemoxcp.mail.system.PanelMarker.WRITTEN + ")";
     public static final String MARKER_SECTION = "fail2banFilterSignature";
@@ -581,21 +582,21 @@ public final class Fail2banAutoSetup {
         + "|HOSTNAME_CHANGED|ROUNDCUBE_DOMAIN_CHANGED|ROUNDCUBE_SSL_UPDATED";
 
     /**
-     * Il filtro.
+     * The filter.
      *
-     * <p>Il {@code failregex} deve reggere <strong>due</strong> forme della stessa riga, perche'
-     * fail2ban, quando il {@code datepattern} prende, toglie la data dalla riga prima di
-     * cercarci dentro, e quando non prende la lascia. Prima era {@code ^\S+ \[}, cioe' scritto
-     * per la sola forma con la data: tolta la data resta uno spazio davanti alla parentesi, e
-     * {@code \S+} non puo' mangiarlo. Misurato con {@code fail2ban-regex}: funzionava per
-     * caso, perche' l'ora aveva i decimali e quei decimali facevano da {@code \S+}; delle 42
-     * righe di prova le due col secondo intero erano le sole che fail2ban si perdeva. Un
-     * filtro che non trova niente ha lo stesso aspetto di un sistema senza attacchi, quindi
-     * nessuno se ne sarebbe accorto.
+     * <p>The {@code failregex} must handle <strong>two</strong> forms of the same line, because
+     * fail2ban, when the {@code datepattern} matches, removes the date from the line before
+     * searching in it, and when it does not match it leaves it. Before it was {@code ^\S+ \[},
+     * i.e. written for the form with the date only: with the date removed a space remains in
+     * front of the bracket, and {@code \S+} cannot consume it. Measured with
+     * {@code fail2ban-regex}: it worked by chance, because the time had decimals and those
+     * decimals acted as {@code \S+}; of the 42 test lines the two with a whole second were the
+     * only ones fail2ban missed. A filter that finds nothing looks the same as a system without
+     * attacks, so nobody would have noticed.
      *
-     * <p>Il {@code %%z} in fondo al {@code datepattern} prende la Z dell'ora UTC. I due pezzi
-     * vanno insieme con il formato della riga ({@code SSLMailServer.auditLine}): cambiarne uno
-     * solo non rompe niente a vista, semplicemente smette di bloccare qualcuno.
+     * <p>The {@code %%z} at the end of the {@code datepattern} takes the Z of the UTC time. The
+     * two pieces go together with the line format ({@code SSLMailServer.auditLine}): changing
+     * only one of them breaks nothing visibly, it simply stops blocking anyone.
      */
     public static String filterContent() {
         return MARKER + "\n"

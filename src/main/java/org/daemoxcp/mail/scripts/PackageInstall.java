@@ -1,28 +1,28 @@
 package org.daemoxcp.mail.scripts;
 
 /**
- * Sorgente UNICA del modo in cui gli script installano i pacchetti: la funzione di shell
- * {@code install_packages}, da includere in uno script prima del suo primo uso.
+ * The SINGLE source of the way the scripts install packages: the shell function
+ * {@code install_packages}, to be included in a script before its first use.
  *
- * Perche' esiste: il codice d'uscita di {@code pkg install} non dice se i pacchetti chiesti
- * ci sono. Misurato il 24/10/2026 su FreeBSD 15.1, installazione da zero col jar di main: con
- * {@code pkg install -y dovecot-mysql dovecot-pigeonhole} il risolutore scopre, dopo aver
- * scaricato i pacchetti, che dovecot-pigeonhole vuole {@code dovecot}, il quale occupa
- * /usr/local/bin/doveadm come dovecot-mysql; scrive «Cannot solve problem using SAT solver,
- * trying another plan», toglie dal piano dovecot-mysql, installa il resto ed esce con 0.
- * L'installazione proseguiva, si dichiarava riuscita, e nessuna casella poteva entrare ne'
- * in IMAP ne' sulla 587.
+ * Why it exists: the exit code of {@code pkg install} does not say whether the requested packages
+ * are there. Measured on 2026-10-24 on FreeBSD 15.1, clean install with the main jar: with
+ * {@code pkg install -y dovecot-mysql dovecot-pigeonhole} the solver discovers, after
+ * downloading the packages, that dovecot-pigeonhole wants {@code dovecot}, which takes
+ * /usr/local/bin/doveadm just like dovecot-mysql; it writes "Cannot solve problem using SAT solver,
+ * trying another plan", drops dovecot-mysql from the plan, installs the rest and exits with 0.
+ * The installation went on, declared itself successful, and no mailbox could log in either
+ * over IMAP or on 587.
  *
- * QUALE dei pacchetti chiesti cada non e' fisso: lo stesso giorno, sullo stesso catalogo,
- * chiedendo a pkg il piano su un database vuoto e coi pacchetti gia' scaricati, il risolutore
- * ha tenuto dovecot-mysql e tolto dovecot-pigeonhole. Per questo non basta correggere quella
- * riga: si controlla ogni riga, ogni volta, pacchetto per pacchetto.
+ * WHICH of the requested packages gets dropped is not fixed: the same day, on the same catalogue,
+ * asking pkg for the plan on an empty database and with the packages already downloaded, the solver
+ * kept dovecot-mysql and dropped dovecot-pigeonhole. That is why fixing that line is not enough:
+ * every line is checked, every time, package by package.
  */
 public final class PackageInstall {
 
     private PackageInstall() {}
 
-    /** Il testo della funzione, gia' pronto da mettere in uno script. */
+    /** The text of the function, ready to be put into a script. */
     public static String shellFunction() {
         return FUNCTION;
     }

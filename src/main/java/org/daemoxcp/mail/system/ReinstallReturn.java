@@ -12,26 +12,26 @@ import java.util.function.Consumer;
 import java.util.logging.Logger;
 
 /**
- * Tornare al server com'era prima di una reinstallazione completa, senza perdere la posta arrivata
- * dopo. Lo usano il menu da console (voce 6) e la pagina Aggiornamenti (l'avviso della
- * reinstallazione interrotta), con lo stesso codice.
+ * Going back to the server as it was before a full reinstallation, without losing the mail that arrived
+ * afterwards. Used by the console menu (menu option 6) and by the Updates page (the warning about the
+ * interrupted reinstallation), with the same code.
  *
- * <p>Perche' esiste (reperto 169): la via di ritorno della reinstallazione e' un boot environment, e
- * /var/vmail ci sta dentro. Attivarlo e basta riportava la posta al momento in cui era stato creato:
- * i messaggi arrivati dopo si perdevano. E l'unico modo di sceglierla era leggere l'avviso e scrivere
- * bectl activate in una shell.
+ * <p>Why it exists (finding 169): the reinstallation's way back is a boot environment, and /var/vmail is
+ * inside it. Just activating it brought the mail back to the moment it was created: the messages that
+ * arrived afterwards were lost. And the only way to choose it was to read the warning and type
+ * bectl activate in a shell.
  *
- * <p>Qui, prima di attivarlo: Postfix e Dovecot si fermano (la posta non cambia mentre si copia), il
- * boot environment si monta, e i file della posta di adesso che li' MANCANO si aggiungono (tar -k: un
- * file che c'e' gia' non si tocca). Maildir e' un file per messaggio, quindi i messaggi di prima
- * restano e quelli nuovi si aggiungono; Dovecot li vede alla prima lettura. Non e' rollback-panel.sh,
- * che SOSTITUISCE la posta: dopo una reinstallazione la posta di adesso e' quella che la
- * reinstallazione ha svuotato, e sostituirla perderebbe proprio quella di prima. Poi bectl activate.
- * Non si riavvia qui: lo fa chi chiama, quando lo decide l'amministratore.
+ * <p>Here, before activating it: Postfix and Dovecot are stopped (the mail does not change while it is
+ * being copied), the boot environment is mounted, and the current mail files that are MISSING there are
+ * added (tar -k: a file that already exists is not touched). Maildir is one file per message, so the
+ * earlier messages stay and the new ones are added; Dovecot sees them on the first read. It is not
+ * rollback-panel.sh, which REPLACES the mail: after a reinstallation the current mail is the mail the
+ * reinstallation emptied, and replacing it would lose precisely the earlier mail. Then bectl activate.
+ * No reboot here: the caller does it, when the administrator decides.
  *
- * <p>Cosa NON torna in pari: il database MySQL e' quello di prima (caselle, domini, alias e
- * amministratori creati dopo vanno rifatti: dopo una reinstallazione e' comunque quello ricreato
- * vuoto); la coda di Postfix e' quella di prima (lo si dice se adesso non e' vuota).
+ * <p>What does NOT catch up: the MySQL database is the earlier one (mailboxes, domains, aliases and
+ * administrators created afterwards must be redone: after a reinstallation it is the recreated empty one
+ * anyway); the Postfix queue is the earlier one (this is said if it is not empty now).
  */
 public final class ReinstallReturn {
 
@@ -45,12 +45,12 @@ public final class ReinstallReturn {
         return Shell.runShell(Duration.ofSeconds(seconds), cmd);
     }
 
-    /** La via di ritorno della reinstallazione piu' recente, o "" se non ce n'e'. */
+    /** The way back of the most recent reinstallation, or "" if there is none. */
     public static String latest() {
         return PackageWayBack.newestReinstallWayBack();
     }
 
-    /** Quello che serve per decidere: nome, quando, se ci stanno posta e database, il boot environment in uso. */
+    /** What is needed to decide: name, when, whether mail and database are inside it, the boot environment in use. */
     public static JSONObject describe() {
         JSONObject r = new JSONObject().put("success", true);
         String name = latest();
@@ -62,8 +62,8 @@ public final class ReinstallReturn {
     }
 
     /**
-     * Torna a 'name': la posta di adesso fusa dentro, poi bectl activate. Se qualcosa va storto prima
-     * dell'attivazione, non e' cambiato niente e la posta riparte. Non riavvia.
+     * Goes back to 'name': the current mail merged in, then bectl activate. If something goes wrong before
+     * the activation, nothing has changed and the mail starts again. Does not reboot.
      */
     public static JSONObject goBack(String name, Consumer<String> log) {
         JSONObject r = new JSONObject();
@@ -79,8 +79,8 @@ public final class ReinstallReturn {
         if (state.contains("N"))
             return r.put("success", false).put("error", I18n.tr("server.wayBack.alreadyRunning", Map.of("name", name)));
 
-        // Il turno dei pacchetti: tornare indietro cambia pacchetti e configurazioni insieme, e un
-        // lavoro sui pacchetti a meta' (in questo processo o in un altro) ne verrebbe rotto.
+        // The package turn: going back changes packages and configurations together, and a
+        // package job halfway through (in this process or in another) would be broken by it.
         String refusal = PackageQueue.takeForLocks("way-back", I18n.tr("server.wayBack.turn"));
         if (refusal != null) return r.put("success", false).put("error", refusal);
         String mnt = "", mntDir = "";
@@ -108,7 +108,8 @@ public final class ReinstallReturn {
                 String parent = vmail.substring(0, vmail.lastIndexOf('/'));
                 String base = vmail.substring(vmail.lastIndexOf('/') + 1);
                 long before = count(mnt + vmail);
-                // -k: un file che nel boot environment c'e' gia' non si sovrascrive. -p: proprietari e permessi.
+                // -k: a file that already exists in the boot environment is not overwritten.
+                // -p: owners and permissions.
                 Shell.Result c = run("tar -cpf - -C " + parent + " " + base + " | tar -xpkf - -C " + mnt + parent + " 2>&1", 3600);
                 long after = count(mnt + vmail);
                 if (!c.success() || after < before) {
@@ -137,7 +138,8 @@ public final class ReinstallReturn {
         } finally {
             if (!mnt.isEmpty()) run("bectl umount " + name + " >/dev/null 2>&1", 120);
             if (!mntDir.isEmpty()) run("rmdir " + mntDir + " 2>/dev/null", 30);
-            // Fino all'attivazione niente e' cambiato: la posta riparte. Dopo, resta ferma fino al riavvio.
+            // Until the activation nothing has changed: the mail starts again. Afterwards, it stays
+            // stopped until the reboot.
             if (!activated) for (String svc : stopped) run("service " + svc + " start >/dev/null 2>&1", 120);
             PackageQueue.release("way-back");
         }

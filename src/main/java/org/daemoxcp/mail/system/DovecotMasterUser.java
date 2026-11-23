@@ -27,76 +27,76 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * L'utente master di Dovecot con cui il pannello apre la webmail («Apri webmail»): Roundcube entra
- * come "casella*admin" con la chiave di {@link #KEY_FILE}, che il pannello mette nel gettone
- * dell'SSO (RoundcubeSsoManager). Dovecot conosce solo l'hash della chiave, in {@link #MASTER_USERS}.
+ * The Dovecot master user with which the panel opens the webmail ("Open webmail"): Roundcube logs in
+ * as "mailbox*admin" with the key from {@link #KEY_FILE}, which the panel puts in the SSO token
+ * (RoundcubeSsoManager). Dovecot knows only the hash of the key, in {@link #MASTER_USERS}.
  *
- * <p>Il difetto, misurato sulla VM FreeBSD 15.1 il 05/11/2026 su tre installazioni su tre:
- * FullMailServerScript scriveva master-users PRIMA di dovecot.conf, l'hash lo chiedeva a "doveadm
- * pw", e doveadm senza configurazione esce con 75 («Fatal: Error reading configuration») senza
- * scrivere niente. Il file restava "admin:" con l'hash vuoto, Dovecot rifiutava l'utente master, e
- * il pulsante non funzionava da nessuna parte. FullMailStackScript l'hash lo scriveva, ma dava il
- * file a root:wheel: Dovecot lo legge col processo auth, che gira come dovecot, e quindi non poteva
- * aprirlo («Permission denied ... euid=143(dovecot)», misurato lo stesso giorno).
+ * <p>The defect, measured on the FreeBSD 15.1 VM on 2026-11-05 on three installations out of three:
+ * FullMailServerScript wrote master-users BEFORE dovecot.conf, it asked "doveadm pw" for the hash, and
+ * doveadm without a configuration exits with 75 ("Fatal: Error reading configuration") without writing
+ * anything. The file stayed "admin:" with an empty hash, Dovecot rejected the master user, and the
+ * button did not work anywhere. FullMailStackScript did write the hash, but gave the file to
+ * root:wheel: Dovecot reads it with the auth process, which runs as dovecot, and so could not open it
+ * ("Permission denied ... euid=143(dovecot)", measured the same day).
  *
- * <p>Gli script adesso usano tutti {@link #shell()}: "doveadm -O pw", che non legge la
- * configurazione, la password dallo standard input, l'hash controllato con "doveadm pw -t" contro
- * la chiave, il file root:dovecot 640.
+ * <p>The scripts now all use {@link #shell()}: "doveadm -O pw", which does not read the
+ * configuration, the password from standard input, the hash checked with "doveadm pw -t" against
+ * the key, the file root:dovecot 640.
  *
- * <p>All'avvio ({@link #ensureAtBoot()}) i server installati prima si riparano da soli, senza
- * scegliere per nessuno. Si tocca master-users solo se e' uno dei due file che scrivevano gli
- * script, riconoscibili dal contenuto:
+ * <p>At startup ({@link #ensureAtBoot()}) servers installed earlier repair themselves, without
+ * choosing for anyone. master-users is touched only if it is one of the two files that the
+ * scripts used to write, recognisable by their content:
  * <ul>
- *   <li>la riga "admin:" senza hash: si scrive l'hash della chiave (bcrypt, come per le caselle);</li>
- *   <li>la riga "admin:" con l'hash DELLA CHIAVE, ma con proprietario, gruppo o permessi diversi da
- *       root:dovecot 640: si mettono quelli.</li>
+ *   <li>the "admin:" line without a hash: the hash of the key is written (bcrypt, as for the mailboxes);</li>
+ *   <li>the "admin:" line with the hash OF THE KEY, but with owner, group or permissions other than
+ *       root:dovecot 640: those are set.</li>
  * </ul>
- * Prima di cambiare si guarda che Dovecot risponda (doveadm user di una casella attiva); dopo, che
- * l'utente master entri davvero (doveadm auth test "casella*admin", con la chiave dallo standard
- * input). Se non entra, il file torna com'era, byte per byte, con proprietario, gruppo e permessi,
- * e al prossimo avvio ci si riprova. Senza caselle attive non c'e' con chi entrare: l'hash si fa
- * verificare da Dovecot con "doveadm pw -t", e il log lo dice.
+ * Before changing anything it checks that Dovecot answers (doveadm user of an active mailbox);
+ * afterwards, that the master user really logs in (doveadm auth test "mailbox*admin", with the key
+ * from standard input). If it does not log in, the file goes back to how it was, byte for byte, with
+ * owner, group and permissions, and at the next startup it tries again. Without active mailboxes there
+ * is no one to log in as: the hash is verified by Dovecot with "doveadm pw -t", and the log says so.
  *
- * <p>Non si tocca: un master-users scritto a mano (altri utenti, altri schemi, commenti), un link,
- * un hash che non e' quello della chiave (lo si dice nel log: l'SSO non puo' entrare), un file senza
- * la chiave accanto. Nel log c'e' il numero della casella di prova, mai l'indirizzo ne' la chiave.
+ * <p>Not touched: a master-users written by hand (other users, other schemes, comments), a link,
+ * a hash that is not the key's (the log says so: the SSO cannot log in), a file without the key
+ * next to it. The log has the number of the test mailbox, never the address nor the key.
  */
 public final class DovecotMasterUser {
 
     private static final Logger LOGGER = Logger.getLogger(DovecotMasterUser.class.getName());
 
-    /** Il nome dell'utente master: lo stesso di RoundcubeSsoManager.MASTER_USER (la prova li confronta). */
+    /** The name of the master user: the same as RoundcubeSsoManager.MASTER_USER (the test compares them). */
     public static final String USER = "admin";
     public static final String MASTER_USERS = "/usr/local/etc/dovecot/master-users";
-    /** La chiave: lo stesso percorso di RoundcubeSsoManager.MASTER_PASSWORD_FILE (la prova li confronta). */
+    /** The key: the same path as RoundcubeSsoManager.MASTER_PASSWORD_FILE (the test compares them). */
     public static final String KEY_FILE = "/var/db/daemoxcp-mail/dovecot_master.key";
     public static final String OWNER = "root";
-    /** Il processo auth di Dovecot, che legge master-users, gira con questo utente. */
+    /** Dovecot's auth process, which reads master-users, runs as this user. */
     public static final String GROUP = "dovecot";
     static final Set<PosixFilePermission> MODE = PosixFilePermissions.fromString("rw-r-----");
-    /** Il costo di bcrypt delle password delle caselle (MailDatabase): Dovecot lo accetta, misurato. */
+    /** The bcrypt cost of the mailbox passwords (MailDatabase): Dovecot accepts it, measured. */
     static final int COST = 12;
 
-    /** Com'era dopo l'installazione: l'utente master senza hash. */
+    /** How it was after installation: the master user without a hash. */
     private static final Pattern WITHOUT_HASH = Pattern.compile("\\A" + USER + ":\\n?\\z");
-    /** Com'e' dopo l'installazione quando l'hash c'e': una riga sola, BLF-CRYPT come doveadm pw o jBCrypt. */
+    /** How it is after installation when the hash is there: a single line, BLF-CRYPT like doveadm pw or jBCrypt. */
     private static final Pattern WITH_HASH = Pattern.compile(
             "\\A" + USER + ":(\\{BLF-CRYPT\\}\\$2[aby]\\$[0-9]{2}\\$[./A-Za-z0-9]{53})\\n?\\z");
-    /** Una chiave: testo stampabile senza spazi, fino al limite di bcrypt. Gli script ne scrivono 24 lettere e cifre. */
+    /** A key: printable text without spaces, up to bcrypt's limit. The scripts write 24 letters and digits. */
     private static final Pattern KEY = Pattern.compile("[\\x21-\\x7E]{8,72}");
-    /** Un indirizzo che puo' andare fra gli argomenti di doveadm: niente "*" (il separatore del master). */
+    /** An address that can go among doveadm's arguments: no "*" (the master separator). */
     private static final Pattern MAILBOX = Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+");
 
     private DovecotMasterUser() {}
 
-    // ===================== il pezzo degli script d'installazione =====================
+    // ===================== the snippet of the installation scripts =====================
 
-    /** Il pezzo di shell di FullMailServerScript, FullMailStackScript e DovecotScript, coi percorsi veri. */
+    /** The shell snippet of FullMailServerScript, FullMailStackScript and DovecotScript, with the real paths. */
     public static String shell() {
         return shell(KEY_FILE, MASTER_USERS);
     }
 
-    /** Lo stesso, con altri percorsi: la prova lo esegue in una cartella sua, col doveadm vero. */
+    /** The same, with other paths: the test runs it in a folder of its own, with the real doveadm. */
     static String shell(String keyFile, String masterUsers) {
         return """
             # --- Dovecot's master user, for the panel's "Open webmail" (DovecotMasterUser.java) ---
@@ -139,7 +139,7 @@ public final class DovecotMasterUser {
             .replace("__GROUP__", GROUP);
     }
 
-    // ===================== la riparazione all'avvio =====================
+    // ===================== the boot repair =====================
 
     public enum Outcome { NOTHING, DONE, NOT_OURS, NO_KEY, MISMATCH, NOT_ANSWERING, ROLLED_BACK }
 
@@ -149,19 +149,19 @@ public final class DovecotMasterUser {
         static Places real() { return new Places(Path.of(MASTER_USERS), Path.of(KEY_FILE)); }
     }
 
-    /** La casella con cui provare l'accesso master: nel log va il numero, l'indirizzo no. */
+    /** The mailbox with which to test the master login: the number goes into the log, the address does not. */
     record Mailbox(int id, String email) {
         String who() { return "mailbox #" + id; }
     }
 
     interface Services {
-        /** Una casella attiva, la prima per numero; null se non ce n'e'. Eccezione se non si sa. */
+        /** An active mailbox, the first by number; null if there is none. An exception if it cannot be known. */
         Mailbox testMailbox() throws Exception;
-        /** doveadm user: Dovecot risponde e trova la casella. Prima di cambiare. */
+        /** doveadm user: Dovecot answers and finds the mailbox. Before changing anything. */
         Shell.Result lookup(String email);
-        /** doveadm auth test, con la password dallo standard input. */
+        /** doveadm auth test, with the password from standard input. */
         Shell.Result authTest(String login, String password);
-        /** doveadm -O pw -t, con la password dallo standard input: solo senza caselle. */
+        /** doveadm -O pw -t, with the password from standard input: only when there are no mailboxes. */
         Shell.Result verifyHash(String hash, String password);
     }
 
@@ -182,7 +182,7 @@ public final class DovecotMasterUser {
         if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return new Report(Outcome.NOTHING, "");
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
             return new Report(Outcome.NOT_OURS, file + " is not a regular file: nothing changed");
-        // Quello degli script e' una riga di un centinaio di byte: un file grande e' di qualcun altro.
+        // The scripts' file is a line of about a hundred bytes: a large file belongs to someone else.
         if (Files.size(file) > 4096)
             return new Report(Outcome.NOT_OURS, file + " is not the file the installer writes (too long): nothing changed");
         String content;
@@ -217,8 +217,8 @@ public final class DovecotMasterUser {
             hash = "{BLF-CRYPT}" + BCrypt.hashpw(key, BCrypt.gensalt(COST));
         }
 
-        // Prima di cambiare, Dovecot deve rispondere: altrimenti dopo non si saprebbe dire se l'accesso
-        // master non va per il file nuovo o per Dovecot.
+        // Before changing anything, Dovecot must answer: otherwise afterwards there would be no telling
+        // whether the master login fails because of the new file or because of Dovecot.
         Mailbox box;
         try {
             box = sv.testMailbox();
@@ -268,14 +268,14 @@ public final class DovecotMasterUser {
                                : "verified with doveadm pw -t only: there is no active mailbox for a real master login"));
     }
 
-    /** La chiave come la legge RoundcubeSsoManager (trim): null se manca, e' un link o non e' una chiave. */
+    /** The key as RoundcubeSsoManager reads it (trim): null if it is missing, is a link or is not a key. */
     static String readKey(Path p) throws IOException {
         if (!Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS) || Files.size(p) > 4096) return null;
         String k = new String(Files.readAllBytes(p), StandardCharsets.US_ASCII).trim();
         return KEY.matcher(k).matches() ? k : null;
     }
 
-    /** L'hash e' quello della chiave? jBCrypt conosce solo $2a$: bcryptPart traduce $2y$ e $2b$. */
+    /** Is the hash the key's? jBCrypt knows only $2a$: bcryptPart translates $2y$ and $2b$. */
     static boolean matches(String key, String hash) {
         String b = MailDatabase.bcryptPart(hash);
         try {
@@ -285,7 +285,7 @@ public final class DovecotMasterUser {
         }
     }
 
-    /** null se l'utente master entra con la chiave; se no il perche', senza indirizzi ne' chiave. */
+    /** null if the master user logs in with the key; if not, the reason, without addresses or key. */
     private static String verify(Services sv, Mailbox box, String hash, String key) {
         if (box != null) {
             Shell.Result r = sv.authTest(box.email() + "*" + USER, key);
@@ -313,8 +313,8 @@ public final class DovecotMasterUser {
     }
 
     /**
-     * Scrive al posto del file, in un colpo solo: un file temporaneo nella stessa cartella, gia' coi
-     * suoi proprietario, gruppo e permessi, poi rename. Dovecot vede il file di prima o quello nuovo.
+     * Writes in place of the file, in one go: a temporary file in the same folder, already with its
+     * owner, group and permissions, then rename. Dovecot sees either the previous file or the new one.
      */
     private static void write(Path file, byte[] content, UserPrincipal owner, GroupPrincipal group,
                               Set<PosixFilePermission> mode) throws IOException {
@@ -332,7 +332,7 @@ public final class DovecotMasterUser {
         }
     }
 
-    /** Il file com'era: contenuto, proprietario, gruppo e permessi. */
+    /** The file as it was: content, owner, group and permissions. */
     record Snapshot(Path path, byte[] content, UserPrincipal owner, GroupPrincipal group, Set<PosixFilePermission> mode) {
         static Snapshot of(Path p, PosixFileAttributes a) throws IOException {
             return new Snapshot(p, Files.readAllBytes(p), a.owner(), a.group(), a.permissions());
@@ -342,7 +342,7 @@ public final class DovecotMasterUser {
         }
     }
 
-    // ===================== i servizi veri =====================
+    // ===================== the real services =====================
 
     private static final class RealServices implements Services {
         private static final Duration SHORT = Duration.ofSeconds(20);

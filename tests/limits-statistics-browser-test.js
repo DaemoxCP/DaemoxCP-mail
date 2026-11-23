@@ -107,7 +107,7 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     const errors = [];
     page.on('pageerror', e => errors.push(String(e)));
     csp.watch(page, errors);
-    // Confirmations are the panel's window (reperto 198): a browser dialog is a fault, counted and closed.
+    // Confirmations are the panel's window (finding 198): a browser dialog is a fault, counted and closed.
     const dialogs = [];
     page.on('dialog', async d => { dialogs.push(d.message()); await d.dismiss(); });
     const answer = async (accept) => {

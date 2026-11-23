@@ -7,9 +7,9 @@ import org.daemoxcp.mail.scripts.PostfixScript;
 import java.util.regex.Pattern;
 
 /**
- * inet_protocols written in main.cf (reperto 207). The install script of every postfix update writes
+ * inet_protocols written in main.cf (finding 207). The install script of every postfix update writes
  * "inet_protocols = ipv4" when main.cf does not say it, and at the restart postfix stops listening on IPv6
- * (reperto 42): in the rehearsal of "Update everything" on the VM the chain stopped at postfix-mysql for this.
+ * (finding 42): in the rehearsal of "Update everything" on the VM the chain stopped at postfix-mysql for this.
  *  - at boot: written with the value in use, only when main.cf does not say it; a value already written stays,
  *    and a value in use that is not one of Postfix's is left alone;
  *  - the three install scripts write it.

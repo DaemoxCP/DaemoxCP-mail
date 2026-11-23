@@ -9,7 +9,7 @@ import java.util.Map;
 
 /**
  * Postfix delivers to Dovecot through a socket in its own queue, 0600 postfix's, no longer through port 24 or the
- * 0666 socket in /var/run/dovecot (reperto 234). Against a fake Postfix and a fake Dovecot whose listeners are the
+ * 0666 socket in /var/run/dovecot (finding 234). Against a fake Postfix and a fake Dovecot whose listeners are the
  * ones its configuration declares:
  *  1. what the panel writes now (2.3 and 2.4) is exactly LmtpSocket.NEW, with no TCP listener; the installers set
  *     Postfix's transport to the socket; last_valid_uid/gid are added only to the panel's two lines;
@@ -21,7 +21,7 @@ import java.util.Map;
  *  5. a fault in the last step (Dovecot refuses closing port 24): INCOMPLETE, the middle state works (both ways),
  *     and the next run finishes;
  *  6. the process killed after step 1 and after step 2: the next run finishes, mail always had a way;
- *  7. a reload that takes effect a few seconds late, as Dovecot's does (reperto 240): the run waits for the listeners
+ *  7. a reload that takes effect a few seconds late, as Dovecot's does (finding 240): the run waits for the listeners
  *     and ends DONE, instead of probing in the middle of the change; listeners that never come within the wait still
  *     put everything back.
  *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.LmtpSocketTest
@@ -51,7 +51,7 @@ public class LmtpSocketTest {
         String kill;        // step to die at: "after-step1", "after-step2"
         int writes = 0, flushed = 0;
         // A reload takes effect only after this many pauses: until then the listeners of before, and a probe on the
-        // socket is reset in the middle of the change (reperto 240). 0: at once.
+        // socket is reset in the middle of the change (finding 240). 0: at once.
         int settle = 0, pending = 0, pauses = 0;
         boolean nextPort24, nextPostfixSocket, nextBaseOpen;
 

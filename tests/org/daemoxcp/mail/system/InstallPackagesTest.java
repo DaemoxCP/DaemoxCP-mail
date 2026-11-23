@@ -16,8 +16,8 @@ import java.util.Set;
 /**
  * The full installation really installs the packages it asks for, and stops if pkg removes one.
  *
- * The defect, measured on 24/10/2026 on FreeBSD 15.1 with an installation from scratch with the jar of
- * main (reperto 52):
+ * The defect, measured on 2026-10-24 on FreeBSD 15.1 with an installation from scratch with the jar of
+ * main (finding 52):
  *
  *   pkg install -y dovecot-mysql dovecot-pigeonhole
  *   - dovecot-2.3.21.1_3 conflicts with dovecot-mysql-2.3.21.1_3 on /usr/local/bin/doveadm
@@ -39,14 +39,14 @@ import java.util.Set;
  *  C. the REAL solver, on the real catalog: for every line of the script pkg is asked for the plan
  *     as on a freshly installed machine (empty package database, in a copy) and with the packages
  *     already downloaded, because pkg sees the conflicts on files only after downloading them
- *     (reperto 14). Every requested package must be in the final plan. It downloads ~180 MB into a
+ *     (finding 14). Every requested package must be in the final plan. It downloads ~180 MB into a
  *     temporary folder: it is switched on with -De2e.vm=yes, as root, on FreeBSD; it installs
  *     nothing and does not touch pkg's real database.
  *
  * Plus a part D on the updater's labels, because the installation now puts dovecot-mysql and
  * dovecot-pigeonhole-mysql instead of the packages without flavour.
  *
- * Since reperto 215 the Dovecot line is "install_packages $DOVECOT_PACKAGES": the script itself picks
+ * Since finding 215 the Dovecot line is "install_packages $DOVECOT_PACKAGES": the script itself picks
  * 2.4 (dovecot24-mysql) where the catalog offers it, else 2.3 (DovecotConfig.packagesShell). Part 0
  * reads the two choices from the script; A and B then run on the script as it runs with each of them,
  * C on the one this machine's catalog would pick.
@@ -365,7 +365,7 @@ public class InstallPackagesTest {
         String family = UpdateManager.familyOf("dovecot-mysql");
         check("dovecot-mysql and dovecot-pigeonhole-mysql move together (same family)",
                 family != null && family.equals(UpdateManager.familyOf("dovecot-pigeonhole-mysql")));
-        // Reperto 215: where the catalog offers 2.4, an installation from scratch puts in these two.
+        // Finding 215: where the catalog offers 2.4, an installation from scratch puts in these two.
         check("dovecot24-pigeonhole-mysql has the role of Sieve too",
                 sieve != null && sieve.equals(role.invoke(null, "dovecot24-pigeonhole-mysql")));
         check("updating dovecot24-mysql or dovecot24-pigeonhole-mysql restarts dovecot",
@@ -374,7 +374,7 @@ public class InstallPackagesTest {
         String family24 = UpdateManager.familyOf("dovecot24-mysql");
         check("dovecot24-mysql and dovecot24-pigeonhole-mysql move together (same family)",
                 family24 != null && family24.equals(UpdateManager.familyOf("dovecot24-pigeonhole-mysql")));
-        // Reperto 203: the overview hands the family to the page, which makes it ONE step of the Packages row. On the
+        // Finding 203: the overview hands the family to the page, which makes it ONE step of the Packages row. On the
         // real server 27 of the 30 mail server updates were php84 and its extensions.
         String php = UpdateManager.familyOf("php84");
         check("php84 and its extensions are one family (php84-ctype, php84-pdo_mysql)", php != null

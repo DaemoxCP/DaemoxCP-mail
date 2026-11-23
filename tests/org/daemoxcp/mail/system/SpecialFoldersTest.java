@@ -175,7 +175,7 @@ public class SpecialFoldersTest {
             for (String box : new String[] {"INBOX", "Junk"})
                 for (String id : new String[] {spamId, hamId})
                     sh("doveadm expunge -u " + user + " mailbox " + box + " header Message-ID '<" + id + ">'");
-            // La risposta automatica: consegnata a «other» (se c'e') o rimasta in coda; via in tutti e due i casi.
+            // The automatic reply: delivered to "other" (if there is one) or left in the queue; gone in both cases.
             if (other != null) sh("doveadm expunge -u " + other + " mailbox INBOX header Subject SpecialFoldersTest");
             sh("mailq | awk '/^[0-9A-F]+[*!]?[ ]/ {id=$1} /" + sender.replace(".", "\\.") + "/ {sub(/[*!]$/, \"\", id); print id}' | xargs -n1 postsuper -d 2>/dev/null");
         }

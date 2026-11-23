@@ -1,36 +1,36 @@
 package org.daemoxcp.mail.system;
 
 /**
- * Lo script di avvio del pannello in /usr/local/etc/rc.d, in un posto solo: lo scrivono la pagina «Avvio
- * automatico» (UpdateManager.panelRcScript) e il passaggio al nome nuovo (PanelServiceRename), e deve essere lo
- * stesso testo.
+ * The panel's startup script in /usr/local/etc/rc.d, in a single place: it is written by the "Automatic start"
+ * page (UpdateManager.panelRcScript) and by the switch to the new name (PanelServiceRename), and it must be the
+ * same text.
  *
- * <p>Il servizio si chiama come il prodotto dove il trattino non si puo' usare (Product.ID): rc.subr chiama le
- * variabili ${name}_enable, ${name}_jar e cosi' via, e un nome di variabile della shell non ha trattini. Il testo e'
- * in inglese, come tutto quello che il pannello scrive fuori dai file di lingua, e porta la firma del pannello
- * (PanelMarker.WRITTEN): RcScriptRepair tocca solo gli script che la portano.
+ * <p>The service is named like the product where the hyphen cannot be used (Product.ID): rc.subr calls the
+ * variables ${name}_enable, ${name}_jar and so on, and a shell variable name has no hyphens. The text is in
+ * English, like everything the panel writes outside the language files, and carries the panel's signature
+ * (PanelMarker.WRITTEN): RcScriptRepair touches only the scripts that carry it.
  */
 public final class PanelRcScript {
 
     public static final String NAME = Product.ID;
     public static final String PATH = "/usr/local/etc/rc.d/" + NAME;
     public static final String PIDFILE = "/var/run/" + NAME + ".pid";
-    /** Dove scrive daemon(8) quello che il pannello stampa (il registro del servizio). */
+    /** Where daemon(8) writes what the panel prints (the service log). */
     public static final String LOG = DataFolderRename.NEW + "/panel.log";
 
-    /** I due messaggi dello script (RcScriptRepair riconosce quelli di prima). */
+    /** The script's two messages (RcScriptRepair recognises the earlier ones). */
     static final String STARTING = "echo \"Starting ${name} (web only). Log: ${" + NAME + "_log}\"";
     static final String RUNNING = "echo \"${name}: already running (pid $(cat ${pidfile}))\"";
 
     private PanelRcScript() {}
 
     /**
-     * Il testo dello script. Puro.
+     * The script's text. Pure.
      *
-     * @param dir  la cartella da cui il pannello parte (database/, install_scripts/ sono relativi a lei)
-     * @param java la java con cui gira
-     * @param jar  il jar
-     * @param opts le opzioni della macchina virtuale
+     * @param dir  the folder the panel starts from (database/, install_scripts/ are relative to it)
+     * @param java the java it runs with
+     * @param jar  the jar
+     * @param opts the virtual machine's options
      */
     public static String text(String dir, String java, String jar, String opts) {
         String v = NAME;

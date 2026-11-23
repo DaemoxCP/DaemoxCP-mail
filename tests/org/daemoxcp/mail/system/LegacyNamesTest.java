@@ -12,14 +12,14 @@ import java.util.stream.Stream;
 
 /**
  * The Italian names that the older versions left on the servers live ONLY in the data file
- * legacy-names.json (the committente's choice, 30/10/2026): the code asks LegacyNames for them and
+ * legacy-names.json (the owner's choice, 2026-10-30): the code asks LegacyNames for them and
  * never writes them.
  *
  * First part: the file is read from the jar, it has every section the code asks for, and every pair
  * goes from one name to another. Second part: no old name appears in the sources, outside the
  * comments. A name shaped like a name (with dashes, dots, slashes, colons or spaces:
- * "mailpanel-pubblico", "servizi.txt") must not appear in any line of code, text blocks included,
- * of the panel or of the tests. A plain word ("attivo") must not be a whole string in the panel's
+ * `mailpanel-pubblico`, `servizi.txt`) must not appear in any line of code, text blocks included,
+ * of the panel or of the tests. A plain word (`attivo`, "active") must not be a whole string in the panel's
  * code: in the tests the same word may serve another purpose (english-pages-browser-test.js has a
  * list of Italian words on purpose, to catch them).
  *

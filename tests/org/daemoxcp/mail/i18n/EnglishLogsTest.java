@@ -12,17 +12,17 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * The panel's log lines are in English, the same for everyone (decided on 19/11/2026): only what a person reads in the
- * pages and the console is translated. Found on the real server the same evening: «Auto-apply firewall config al boot».
+ * The panel's log lines are in English, the same for everyone (decided on 2026-11-19): only what a person reads in the
+ * pages and the console is translated. Found on the real server the same evening: `Auto-apply firewall config al boot`.
  *
  *  1. The checks can fail: an Italian log line in a sample is found, an English one is not.
  *  2. The texts written in a log call (a java.util.logging logger: info, warning, severe, fine, config, log; and
  *     System.out / System.err, which go to the service's log) have no Italian word.
  *  3. The same for the message of an exception created in the code: it ends up in the log.
  *  4. No translated text reaches a logger (java.util.logging) through its arguments: no I18n.tr(...), and no job's
- *     description, which is written in the panel's language for the page (found on the VM on 22/11/2026: «Interrupted
- *     package job recorded …: aggiornamento di nginx-robust-probe» on an Italian panel). System.out is left out of this
- *     check: the console prints translated texts to the person in front of it.
+ *     description, which is written in the panel's language for the page (found on the VM on 2026-11-22:
+ *     `Interrupted package job recorded ...: aggiornamento di nginx-robust-probe` on an Italian panel). System.out is
+ *     left out of this check: the console prints translated texts to the person in front of it.
  *
  * Only the strings written in the code are read, never the comments (they stay in Italian) nor the translation keys
  * (al.sourceDomain is a name). An Italian word is one of a short list that English does not have (`al`, `della`,
@@ -158,7 +158,8 @@ public class EnglishLogsTest {
             String w = m.group().toLowerCase(Locale.ROOT);
             boolean apostrophe = w.endsWith("'");
             if (apostrophe) w = w.substring(0, w.length() - 1);
-            // «e'» is the old spelling of «è»: the apostrophe makes it Italian, a lone «e» alone could be anything.
+            // `e'` is the old spelling of the accented e (U+00E8): the apostrophe makes it Italian, a lone `e`
+            // could be anything.
             if (ITALIAN.contains(w) || (apostrophe && w.equals("e"))) out.add(w);
         }
         return out;

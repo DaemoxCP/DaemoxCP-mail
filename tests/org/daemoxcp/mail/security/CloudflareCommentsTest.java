@@ -12,8 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The comments of the DNS records the panel writes on Cloudflare, always in English (reperto 211). The owner, on
- * 09/11/2026: "when it adds a record, do not use Italian in the comments like «Creato dal pannello di posta» but always
+ * The comments of the DNS records the panel writes on Cloudflare, always in English (finding 211). The owner, on
+ * 2026-11-09: "when it adds a record, do not use Italian in the comments like `Creato dal pannello di posta` but always
  * English". Against a fake Cloudflare API on this machine (nothing real is touched):
  *  - the records the panel creates (CNAME, SRV, TXT) carry an English comment, and no payload has Italian in it;
  *  - the records with the Italian comment of before get the English one: only those, with exactly that text, and with

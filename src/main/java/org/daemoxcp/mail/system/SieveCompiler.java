@@ -23,50 +23,52 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * sievec di Pigeonhole senza root (reperto 218).
+ * Pigeonhole's sievec without root (finding 218).
  *
- * <p>Le regole Sieve del pannello stanno in /var/mail/sieve/dominio/nome/.dovecot.sieve, di root apposta (reperto 214):
- * Dovecot, che consegna come vmail, le legge e non le puo' riscrivere. Per la stessa ragione non puo' salvarne il
- * compilato accanto, e senza compilato le ricompila a ogni messaggio: la documentazione di Pigeonhole (2.3 e 2.4) dice
- * che gli script di tipo «before» li precompila l'amministratore con sievec. Fino al 10/11/2026 il pannello lanciava
- * sievec da root, e root analizzava un testo fatto di quello che un amministratore scrive nei filtri e nella risposta
- * automatica, che col pannello separato arriva da MySQL, dove scrive anche la parte web. A sievec root non serve (il
- * manuale: «performed manually by an authorized user»): serviva solo perche' il compilato finisce in una cartella di
- * root.
+ * <p>The panel's Sieve rules are in /var/mail/sieve/domain/name/.dovecot.sieve, owned by root on purpose (finding
+ * 214): Dovecot, which delivers as vmail, reads them and cannot rewrite them. For the same reason it cannot save
+ * their compiled file beside them, and without a compiled file it recompiles them for every message: the
+ * Pigeonhole documentation (2.3 and 2.4) says that "before" scripts are precompiled by the administrator with
+ * sievec. Until 2026-11-10 the panel launched sievec as root, and root parsed a text made of what an
+ * administrator writes in the filters and in the automatic reply, which with the separated panel comes from
+ * MySQL, where the web part also writes. sievec does not need root (the manual: "performed manually by an
+ * authorized user"): root was needed only because the compiled file ends up in a root folder.
  *
- * <p>Adesso:
+ * <p>Now:
  * <ul>
- *   <li>sievec gira con l'utente sievec (PanelUser: senza password, shell ne' casa, un gruppo suo e nessun altro
- *       dentro), con l'ambiente vuoto e una configurazione minima passata con -c. Quella di Dovecot contiene segreti e
- *       nessun utente qualunque la legge (misurato: doveconf si ferma su auth-sql.conf.ext). La minima ha solo le due
- *       righe di versione che la 2.4 pretende, prese da dovecot.conf; per la 2.3 e' vuota. Le estensioni restano
- *       quelle predefinite di Pigeonhole, che sono anche quelle della configurazione del pannello (nella 2.3 la sua
- *       riga sieve_extensions aggiunge con + solo estensioni gia' predefinite, nella 2.4 non c'e'). Misurato sulla
- *       VM: il compilato e' identico byte per byte a quello di root con la configurazione vera, sulla 2.3.21 e sulla
- *       2.4.5 (questa in un clone del boot environment, con la configurazione 2.4 del pannello). Nella 2.4 -c /dev/null
- *       e le righe date con -o non bastano («dovecot_storage_version setting must be set»): servono nel file; e
- *       doveconf, da un utente qualunque, scrive un suo file temporaneo in /tmp;</li>
- *   <li>non vmail: chi consegna potrebbe allora mettere le mani sul compilato che root installa, e riscrivere cosi'
- *       le regole del pannello, proprio quello che il reperto 214 gli toglie;</li>
- *   <li>sievec compila lo script al suo percorso vero, perche' il compilato lo porta scritto dentro («location», e la
- *       2.4 lo confronta), e lo salva in una cartella sua dentro una cartella di lavoro di root che lui non puo'
- *       cambiare;</li>
- *   <li>root il compilato non lo apre: lo legge sievec stesso con cat, cosi' un collegamento a un file che sievec non
- *       puo' leggere non diventa un compilato leggibile da tutti. Root lo scrive accanto allo script con proprietario,
- *       gruppo e permessi dello script, come li dava sievec di root salvando accanto allo script, e lo mette al suo
- *       posto con un rename, senza seguire collegamenti e solo se nessun altro puo' cambiare le cartelle da / allo
- *       script (RootOnlyPath, reperto 221). Il compilato nasce dopo lo script, quindi e' piu' nuovo, come Pigeonhole vuole (confronta
- *       i tempi al nanosecondo, e se sono uguali ricompila);</li>
- *   <li>se l'utente non si puo' avere, se sievec non legge lo script, o se dice 0 ma il compilato non c'e' (sievec
- *       esce 0 anche quando non riesce a salvarlo: misurato), il compilato non si installa: Dovecot ricompila a ogni
- *       consegna, lento ma giusto. Mai root al suo posto.</li>
+ *   <li>sievec runs as the sievec user (PanelUser: no password, shell or home, a group of its own with nobody
+ *       else in it), with an empty environment and a minimal configuration passed with -c. Dovecot's one contains
+ *       secrets and no ordinary user reads it (measured: doveconf stops on auth-sql.conf.ext). The minimal one has
+ *       only the two version lines that 2.4 requires, taken from dovecot.conf; for 2.3 it is empty. The extensions
+ *       stay Pigeonhole's default ones, which are also those of the panel's configuration (in 2.3 its
+ *       sieve_extensions line adds with + only extensions that are already default, in 2.4 it is not there).
+ *       Measured on the VM: the compiled file is identical byte for byte to root's one with the real
+ *       configuration, on 2.3.21 and on 2.4.5 (the latter in a clone of the boot environment, with the panel's 2.4
+ *       configuration). In 2.4 -c /dev/null and the lines given with -o are not enough ("dovecot_storage_version
+ *       setting must be set"): they are needed in the file; and doveconf, run by an ordinary user, writes a
+ *       temporary file of its own in /tmp;</li>
+ *   <li>not vmail: whoever delivers could then lay hands on the compiled file root installs, and so rewrite
+ *       the panel's rules, exactly what finding 214 takes away from it;</li>
+ *   <li>sievec compiles the script at its real path, because the compiled file carries it written inside
+ *       ("location", and 2.4 compares it), and saves it in a folder of its own inside a root work folder that
+ *       it cannot change;</li>
+ *   <li>root does not open the compiled file: sievec itself reads it with cat, so a link to a file that sievec
+ *       cannot read does not become a compiled file readable by everyone. Root writes it beside the script with
+ *       the owner, group and permissions of the script, as root's sievec gave them when saving beside the
+ *       script, and puts it in place with a rename, without following links and only if nobody else can change
+ *       the folders from / to the script (RootOnlyPath, finding 221). The compiled file is created after the
+ *       script, so it is newer, as Pigeonhole wants (it compares the times to the nanosecond, and if they are
+ *       equal it recompiles);</li>
+ *   <li>if the user cannot be obtained, if sievec does not read the script, or if it says 0 but the compiled
+ *       file is not there (sievec exits 0 even when it fails to save it: measured), the compiled file is not
+ *       installed: Dovecot recompiles at every delivery, slow but correct. Never root in its place.</li>
  * </ul>
  */
 public final class SieveCompiler {
 
     private static final Logger LOGGER = Logger.getLogger(SieveCompiler.class.getName());
 
-    /** L'utente e il gruppo con cui gira sievec. */
+    /** The user and the group sievec runs as. */
     public static final String USER = "sievec";
     static final PanelUser COMPILER_USER = new PanelUser(USER, Product.NAME + " Sieve compiler");
 
@@ -76,29 +78,36 @@ public final class SieveCompiler {
     static final List<String> SIEVEC_PLACES = List.of("/usr/local/bin/sievec", "/usr/bin/sievec", "/usr/local/libexec/dovecot/sievec");
     static final Path DOVECOT_CONF = Path.of("/usr/local/etc/dovecot/dovecot.conf");
     /**
-     * Dove nasce la cartella di lavoro: /tmp, non java.io.tmpdir. sievec deve poterci passare, e una java.io.tmpdir
-     * spostata con daemoxcp_mail_opts in una cartella chiusa fermerebbe ogni compilazione senza dire perche'.
+     * Where the work folder is created: /tmp, not java.io.tmpdir. sievec must be able to pass through it, and a
+     * java.io.tmpdir moved with daemoxcp_mail_opts to a closed folder would stop every compilation without saying
+     * why.
      */
     static final Path WORK_BASE = Path.of("/tmp");
 
-    /** Nella cartella di lavoro: la configurazione minima, lo script da validare, la cartella di sievec e il suo compilato. */
+    /**
+     * In the work folder: the minimal configuration, the script to validate, sievec's folder and its compiled
+     * file.
+     */
     static final String CONF = "dovecot.conf";
     static final String TEXT = "script.sieve";
     static final String OUT = "out";
     static final String BINARY = "compiled.svbin";
 
     static final Duration TIMEOUT = Duration.ofSeconds(60);
-    /** Un compilato piu' grande non e' delle regole del pannello (Pigeonhole rifiuta script oltre 1 MB). */
+    /** A bigger compiled file does not belong to the panel's rules (Pigeonhole rejects scripts over 1 MB). */
     static final int MAX_BINARY = 16 << 20;
     static final int MAX_TEXT = 64 << 10;
 
     private SieveCompiler() {}
 
-    /** COMPILED: fatto. REFUSED: lo script ha errori (sievec li dice riga per riga). NOT_COMPILED: non si e' potuto. */
-    /** UNCHANGED: compilato, ed era gia' uguale a quello accanto allo script (SieveBinaries, reperto 241). */
+    /**
+     * COMPILED: done. REFUSED: the script has errors (sievec reports them line by line). NOT_COMPILED: it could
+     * not be done.
+     */
+    /** UNCHANGED: compiled, and it was already equal to the one beside the script (SieveBinaries, finding 241). */
     public enum Status { COMPILED, UNCHANGED, REFUSED, NOT_COMPILED }
 
-    /** L'esito, col testo di sievec o il motivo. */
+    /** The result, with sievec's text or the reason. */
     public record Outcome(Status status, String message) {
         public boolean refused() { return status == Status.REFUSED; }
     }
@@ -107,39 +116,41 @@ public final class SieveCompiler {
         return new Outcome(Status.NOT_COMPILED, why);
     }
 
-    /** Dove sta sievec, o null se Pigeonhole non e' installato. */
+    /** Where sievec is, or null if Pigeonhole is not installed. */
     public static String sievec() {
         for (String p : SIEVEC_PLACES) if (Files.isExecutable(Path.of(p))) return p;
         return null;
     }
 
-    // ===================== Compilare e validare =====================
+    // ===================== Compiling and validating =====================
 
     /**
-     * Compila lo script al suo percorso e installa il compilato accanto (nome.sieve -> nome.svbin), come lo farebbe
-     * sievec di root, ma con sievec che gira come {@link #USER}.
+     * Compiles the script at its path and installs the compiled file beside it (name.sieve -> name.svbin), as
+     * root's sievec would do, but with sievec running as {@link #USER}.
      */
     public static Outcome compile(Path script) {
         return compile(script, false, List.of());
     }
 
     /**
-     * Come {@link #compile(Path)}, con opzioni di sievec prima dello script: per gli script che usano estensioni che
-     * sievec non carica da solo, come quelli di IMAPSieve (-P sieve_imapsieve -P sieve_extprograms -x "+vnd.dovecot.pipe
-     * +imapsieve": SpamLearning). Le opzioni sono costanti del pannello, mai testo che arriva da fuori.
+     * Like {@link #compile(Path)}, with sievec options before the script: for scripts that use extensions that
+     * sievec does not load by itself, like the IMAPSieve ones (-P sieve_imapsieve -P sieve_extprograms
+     * -x "+vnd.dovecot.pipe +imapsieve": SpamLearning). The options are panel constants, never text that comes
+     * from outside.
      */
     public static Outcome compile(Path script, List<String> options) {
         return compile(script, false, options);
     }
 
-    /** Come {@link #refresh(Path)}, con le opzioni di {@link #compile(Path, List)}. */
+    /** Like {@link #refresh(Path)}, with the options of {@link #compile(Path, List)}. */
     public static Outcome refresh(Path script, List<String> options) {
         return compile(script, true, options);
     }
 
     /**
-     * Come {@link #compile(Path)}, ma il compilato accanto allo script si sostituisce solo se e' diverso da quello che il
-     * sievec installato fa adesso: UNCHANGED se era gia' quello (reperto 241). Il compilato e' deterministico.
+     * Like {@link #compile(Path)}, but the compiled file beside the script is replaced only if it differs from
+     * what the installed sievec makes now: UNCHANGED if it was already that (finding 241). The compiled file is
+     * deterministic.
      */
     public static Outcome refresh(Path script) {
         return compile(script, true, List.of());
@@ -176,7 +187,8 @@ public final class SieveCompiler {
             Run cat = run(asCompiler(CAT, compiled.toString()), MAX_BINARY, false);
             if (cat.exit() != 0 || cat.out().length == 0)
                 return notCompiled("sievec saved no binary" + (c.text().isBlank() ? "" : ": " + c.text().strip()));
-            // La cartella e' solo di root (RootOnlyPath, sopra): il compilato che c'e' lo legge root senza seguire collegamenti.
+            // The folder belongs only to root (RootOnlyPath, above): root reads the existing compiled file without
+            // following links.
             if (onlyIfDifferent && Files.isRegularFile(binary, LinkOption.NOFOLLOW_LINKS)
                     && Files.size(binary) == cat.out().length && java.util.Arrays.equals(Files.readAllBytes(binary), cat.out()))
                 return new Outcome(Status.UNCHANGED, "");
@@ -189,7 +201,10 @@ public final class SieveCompiler {
         }
     }
 
-    /** Controlla un testo Sieve senza installare niente: sievec, come {@link #USER}, lo compila e butta il risultato. */
+    /**
+     * Checks a Sieve text without installing anything: sievec, as {@link #USER}, compiles it and throws away
+     * the result.
+     */
     public static Outcome validate(String text) {
         String sievec = sievec();
         if (sievec == null) return notCompiled("sievec is not installed");
@@ -201,7 +216,7 @@ public final class SieveCompiler {
             Path s = work.resolve(TEXT);
             Files.writeString(s, text, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
             Files.setPosixFilePermissions(s, PosixFilePermissions.fromString("rw-r--r--"));
-            // -d: invece del compilato, il suo dump; su /dev/null, cioe' niente su disco.
+            // -d: instead of the compiled file, its dump; to /dev/null, that is nothing on disk.
             Run c = run(asCompiler(sievec, "-c", work.resolve(CONF).toString(), "-d", s.toString(), "/dev/null"), MAX_TEXT, true);
             if (c.timedOut()) return notCompiled("sievec did not finish in " + TIMEOUT.toSeconds() + " s");
             return c.exit() == 0 ? new Outcome(Status.COMPILED, c.text().strip()) : failed(c.text());
@@ -212,7 +227,10 @@ public final class SieveCompiler {
         }
     }
 
-    /** Un errore a una riga dello script («nome: line 2: error: ...») e' un rifiuto; tutto il resto e' un impedimento. */
+    /**
+     * An error at a line of the script ("name: line 2: error: ...") is a rejection; everything else is an
+     * impediment.
+     */
     private static final Pattern SCRIPT_ERROR = Pattern.compile(": line \\d+: error: ");
 
     static Outcome failed(String text) {
@@ -220,9 +238,9 @@ public final class SieveCompiler {
         return new Outcome(SCRIPT_ERROR.matcher(t).find() ? Status.REFUSED : Status.NOT_COMPILED, t.isEmpty() ? "sievec failed" : t);
     }
 
-    // ===================== I pezzi =====================
+    // ===================== The pieces =====================
 
-    /** nome.sieve -> nome.svbin nella stessa cartella, come lo cerca Pigeonhole; null se non e' un .sieve. Pura. */
+    /** name.sieve -> name.svbin in the same folder, as Pigeonhole looks for it; null if it is not a .sieve. Pure. */
     static Path binaryFor(Path script) {
         Path name = script.getFileName();
         if (name == null || script.getParent() == null) return null;
@@ -231,7 +249,7 @@ public final class SieveCompiler {
         return script.resolveSibling(n.substring(0, n.length() - ".sieve".length()) + ".svbin");
     }
 
-    /** L'utente sievec, creato se manca; null se c'e' ed e' quello del pannello, altrimenti il motivo. */
+    /** The sievec user, created if missing; null if it exists and is the panel's one, otherwise the reason. */
     static String ensureUser() {
         PanelUser.Ensured e = COMPILER_USER.ensure();
         if (e.problem() != null) {
@@ -244,8 +262,9 @@ public final class SieveCompiler {
     }
 
     /**
-     * La configurazione minima di sievec: per la 2.4 le due righe di versione di dovecot.conf (la 2.4 non parte senza,
-     * e devono essere le prime), per la 2.3 niente. Solo numeri e punti: il resto non passa. Pura.
+     * The minimal sievec configuration: for 2.4 the two version lines of dovecot.conf (2.4 does not start without
+     * them, and they must be the first ones), for 2.3 nothing. Only digits and dots: anything else does not pass.
+     * Pure.
      */
     static String minimalConfig(String dovecotConf) {
         if (dovecotConf == null) return "";
@@ -261,8 +280,8 @@ public final class SieveCompiler {
     }
 
     /**
-     * La cartella di lavoro: di root, 0711 (sievec ci passa ma non la elenca ne' la cambia), con la configurazione
-     * minima di root 0644 e la cartella out di sievec, 0700, dove lui salva il compilato.
+     * The work folder: owned by root, 0711 (sievec passes through it but cannot list or change it), with the
+     * minimal configuration owned by root 0644 and sievec's out folder, 0700, where it saves the compiled file.
      */
     static Path workDir() throws IOException {
         Path work = Files.createTempDirectory(WORK_BASE, "sievec-");
@@ -291,9 +310,10 @@ public final class SieveCompiler {
     }
 
     /**
-     * Il compilato accanto allo script, con proprietario, gruppo e permessi dello script: un file nuovo e poi rename sul
-     * nome vero, che chi consegna vede tutto o niente, senza mai seguire un collegamento e solo se nessun altro puo'
-     * cambiare le cartelle da / fin li' (RootOnlyPath, reperto 221; prima si guardava solo la cartella dello script).
+     * The compiled file beside the script, with the owner, group and permissions of the script: a new file and
+     * then a rename onto the real name, so that whoever delivers sees all or nothing, never following a link and
+     * only if nobody else can change the folders from / down to there (RootOnlyPath, finding 221; before, only the
+     * script's folder was checked).
      */
     static void install(Path binary, byte[] bytes, PosixFileAttributes like) throws IOException {
         org.daemoxcp.mail.security.RootOnlyPath.replace(binary.getParent(), binary.getFileName().toString(), bytes,
@@ -301,9 +321,9 @@ public final class SieveCompiler {
     }
 
     /**
-     * Via la cartella di lavoro. Quello che c'e' nella cartella di sievec lo toglie sievec stesso (find -delete non segue
-     * i collegamenti): root non scende in una cartella che un altro utente controlla. Poi root toglie la cartella vuota
-     * e i suoi file; se sievec vi ha lasciato qualcosa, la cartella resta e lo si dice.
+     * Remove the work folder. What is in sievec's folder is removed by sievec itself (find -delete does not
+     * follow links): root does not descend into a folder that another user controls. Then root removes the empty
+     * folder and its files; if sievec left something there, the folder stays and that is reported.
      */
     static void cleanUp(Path work) {
         Path out = work.resolve(OUT);
@@ -321,8 +341,9 @@ public final class SieveCompiler {
     }
 
     /**
-     * Un comando come sievec: chroot(8) con radice /, senza shell ne' PAM, e solo il gruppo sievec (-G: senza, il
-     * comando terrebbe i gruppi aggiuntivi di root, wheel e operator; misurato per daemoxcp_mail il 07/11/2026). Pura.
+     * A command as sievec: chroot(8) with root /, without shell or PAM, and only the sievec group (-G: without
+     * it, the command would keep root's additional groups, wheel and operator; measured for daemoxcp_mail on
+     * 2026-11-07). Pure.
      */
     static List<String> asCompiler(String... cmd) {
         List<String> c = new ArrayList<>(List.of(CHROOT, "-u", USER, "-g", USER, "-G", USER, "/"));
@@ -330,19 +351,19 @@ public final class SieveCompiler {
         return c;
     }
 
-    /** L'ambiente di sievec: niente di quello di root, solo questo. */
+    /** sievec's environment: nothing of root's, only this. */
     static final Map<String, String> ENVIRONMENT = Map.of("PATH", "/usr/bin:/bin:/usr/local/bin", "HOME", PanelUser.HOME,
             "USER", USER, "LOGNAME", USER);
 
-    /** Com'e' andato un comando: uscita, quello che ha scritto (fino a un limite), se e' scaduto il tempo. */
+    /** How a command went: exit code, what it wrote (up to a limit), whether the time ran out. */
     record Run(int exit, byte[] out, boolean timedOut) {
         String text() { return new String(out, StandardCharsets.UTF_8); }
     }
 
     /**
-     * Lancia il comando con l'ambiente di sievec e lo standard input chiuso. Con merge l'errore va insieme all'uscita
-     * (testo per l'amministratore); senza, l'uscita sono i byte del compilato e l'errore si butta. Oltre limit byte
-     * l'uscita conta come fallita.
+     * Launches the command with sievec's environment and standard input closed. With merge the error goes
+     * together with the output (text for the administrator); without it, the output is the bytes of the compiled
+     * file and the error is thrown away. Beyond limit bytes the output counts as failed.
      */
     static Run run(List<String> cmd, int limit, boolean merge) throws IOException {
         ProcessBuilder pb = new ProcessBuilder(cmd);
@@ -362,7 +383,7 @@ public final class SieveCompiler {
                     buf.write(b, 0, n);
                 }
             } catch (IOException ignored) {
-                // il processo e' finito o e' stato fermato
+                // the process has finished or has been stopped
             }
         });
         try {

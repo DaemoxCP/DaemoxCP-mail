@@ -13,23 +13,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Tutto quello che serve a un dominio, con un pulsante.
+ * Everything a domain needs, with one button.
  *
- * Perche' esiste. Un dominio appena aggiunto ha bisogno di otto cose: le chiavi DKIM e il
- * loro record, SPF, una cassetta per i rapporti, DMARC, il nome per la configurazione
- * automatica dei client, i due SRV, il nome per MTA-STS, e un certificato che copra quei
- * nomi. Farle a mano una per una, ogni volta, significa dimenticarne una — e quale si e'
- * dimenticata non si scopre subito: si scopre quando la posta comincia a finire nello spam.
+ * Why it exists. A newly added domain needs eight things: the DKIM keys and their
+ * record, SPF, a mailbox for the reports, DMARC, the name for the clients' automatic
+ * configuration, the two SRVs, the name for MTA-STS, and a certificate covering those
+ * names. Doing them by hand one by one, every time, means forgetting one -- and which one was
+ * forgotten is not discovered right away: it is discovered when mail starts ending up in spam.
  *
- * Ogni passo qui dentro NON sovrascrive mai niente. E' la ragione per cui questa sequenza si
- * puo' lanciare senza paura anche su un dominio gia' configurato a meta': trova cio' che c'e'
- * gia', lo lascia dov'e', e aggiunge solo cio' che manca. Su un dominio usato altrove — un
- * sito con la sua posta gestita da un altro fornitore — non tocca l'SPF esistente, lo mostra
- * e si ferma su quella riga.
+ * Every step in here NEVER overwrites anything. That is why this sequence can be launched
+ * without fear even on a domain already half configured: it finds what is already there,
+ * leaves it where it is, and adds only what is missing. On a domain used elsewhere -- a
+ * website with its mail managed by another provider -- it does not touch the existing SPF, it
+ * shows it and stops on that line.
  *
- * La destinazione dei rapporti DMARC non viene chiesta: si copia da un altro dominio gia'
- * configurato. Chi ha gia' deciso dove vuole i rapporti non deve deciderlo di nuovo a ogni
- * dominio; e se non c'e' un precedente da cui copiare, quel passo si salta dicendolo.
+ * The destination of the DMARC reports is not asked for: it is copied from another domain
+ * already configured. Whoever has already decided where they want the reports should not have
+ * to decide again for every domain; and if there is no precedent to copy from, that step is
+ * skipped, saying so.
  */
 public class DomainSetup {
 
@@ -38,12 +39,12 @@ public class DomainSetup {
     public static JSONObject run(int domainId) { return run(domainId, null); }
 
     /**
-     * @param job dove scrivere l'avanzamento mentre accade.
+     * @param job where to write the progress as it happens.
      *
-     * Serve perche' questa sequenza include l'attesa della propagazione DNS e puo' durare
-     * minuti. Tenendo aperta la richiesta HTTP, il browser riceverebbe la pagina di errore
-     * del proxy mentre sul server il lavoro continua — e uno stato sconosciuto su un
-     * certificato di produzione e' l'anticamera del danno.
+     * It is needed because this sequence includes waiting for DNS propagation and can last
+     * minutes. If the HTTP request were kept open, the browser would receive the proxy's error
+     * page while on the server the job carries on -- and an unknown state on a
+     * production certificate is the antechamber of damage.
      */
     public static JSONObject run(int domainId, UpdateManager.Job job) {
         JSONObject r = new JSONObject();
@@ -56,8 +57,8 @@ public class DomainSetup {
 
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
 
-            // Ogni passo anche come riga del registro, col suo motivo: prima stavano solo nel JSON in fondo, e il
-            // registro di un lavoro andato a meta' diceva soltanto quanti passi erano in ordine (reperto 250).
+            // Every step also as a log line, with its reason: before, they were only in the JSON at the end, and the
+            // log of a job that stopped halfway said only how many steps were in order (finding 250).
             final UpdateManager.Job log = job;
             java.util.function.Consumer<JSONObject> put = e -> {
                 steps.put(e);
@@ -66,13 +67,13 @@ public class DomainSetup {
                         + " \u2014 " + e.optString("messageText"));
             };
 
-            // 1. DKIM: la chiave e il suo record.
+            // 1. DKIM: the key and its record.
             put.accept(dkim(d));
 
             // 2. SPF.
             put.accept(reduce("SPF", auto.create(domainId, "spf", "")));
 
-            // 3. La cassetta dei rapporti, con la destinazione copiata da un altro dominio.
+            // 3. The reports mailbox, with the destination copied from another domain.
             String target = existingReportDestination();
             JSONObject deliveryState = auto.reportDelivery(d);
             if (deliveryState.optBoolean("exists", false))
@@ -83,35 +84,35 @@ public class DomainSetup {
             else
                 put.accept(reduce(I18n.tr("server.cfgdom.reportBox"), auto.createReportAlias(domainId, target)));
 
-            // 4. DMARC, sempre in osservazione: si stringe dopo aver letto i rapporti.
+            // 4. DMARC, always in monitoring mode: it is tightened after reading the reports.
             put.accept(reduce("DMARC (p=none)", auto.create(domainId, "dmarc", "none")));
 
-            // 5. I record che aiutano i client.
+            // 5. The records that help the clients.
             for (String[] o : new String[][] {
                     {"autoconfig", "Autoconfig (Thunderbird)"},
                     {"srv_imaps", "server.cfgdom.srvIn"},
                     {"srv_submission", "server.cfgdom.srvOut"} })
                 put.accept(reduce(I18n.tr(o[1]), auto.createOptional(domainId, o[0])));
 
-            // 6. MTA-STS: tutta la catena, per questo dominio, dall'include di nginx al
-            //    record TXT.
+            // 6. MTA-STS: the whole chain, for this domain, from the nginx include to the
+            //    TXT record.
             //
-            // Qui prima c'erano tre passi scritti a parte — il nome mta-sts, il certificato,
-            // il record TXT — ed era una seconda versione della stessa sequenza. Aveva gia'
-            // divergito, in tre punti che nell'originale erano corretti:
+            // Here there used to be three steps written separately -- the mta-sts name, the
+            // certificate, the TXT record -- and it was a second version of the same sequence. It
+            // had already diverged, in three points that were correct in the original:
             //
-            //   - il certificato veniva RIEMESSO a ogni pressione, senza guardare se i nomi
-            //     fossero gia' coperti: un'emissione Let's Encrypt bruciata ogni volta, su
-            //     cinque concesse a settimana per lo stesso insieme di nomi;
-            //   - il proxy Cloudflare non veniva mai spento, quindi il nome poteva restare
-            //     dietro la nuvola arancione e rispondere 526;
-            //   - la politica veniva provata un istante dopo aver creato il CNAME, quando
-            //     nessun resolver puo' ancora saperlo: il record TXT non si pubblicava mai.
+            //   - the certificate was RE-ISSUED at every press, without checking whether the names
+            //     were already covered: a Let's Encrypt issuance burned every time, out of the
+            //     five allowed per week for the same set of names;
+            //   - the Cloudflare proxy was never turned off, so the name could stay
+            //     behind the orange cloud and answer 526;
+            //   - the policy was tested an instant after creating the CNAME, when
+            //     no resolver can know it yet: the TXT record was never published.
             //
-            // DNS, nginx e certificato non funzionano separatamente se si vuole MTA-STS: e'
-            // una catena sola e va eseguita da un posto solo. Due implementazioni della
-            // stessa cosa divergono sempre, e quella che si preme di rado resta indietro
-            // senza che nessuno se ne accorga.
+            // DNS, nginx and certificate do not work separately if you want MTA-STS: it is
+            // a single chain and must be run from a single place. Two implementations of the
+            // same thing always diverge, and the one that is pressed rarely falls behind
+            // without anyone noticing.
             if (job != null) job.write("--- MTA-STS: " + I18n.tr("server.cfgdom.stsChain") + " ---");
             JSONArray mtasts = MtaStsSetup.asEntries(MtaStsSetup.run(job, d.domain));
             for (int i = 0; i < mtasts.length(); i++) steps.put(mtasts.get(i));
@@ -129,24 +130,26 @@ public class DomainSetup {
         }
     }
 
-    /* ===================================================================
-     * Prima di cominciare: l'account Cloudflare del dominio
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Before starting: the domain's Cloudflare account
+     * ===================================================================
+     */
 
     /**
-     * Pronto, o perche' no; e l'account assegnato qui, se il dominio non ne aveva uno.
+     * Ready, or why not; and the account assigned here, if the domain did not have one.
      *
-     * Senza un account Cloudflare che veda la zona del dominio «Set up everything» non pubblica niente: prima partiva
-     * lo stesso, generava la chiave DKIM, cambiava nginx, si fermava a meta' e finiva in verde, «Setup completed» con un
-     * passo su dieci (reperto 250, sulla VM pulita seguendo la guida). Ora si controlla prima di toccare qualunque cosa.
-     * E il collegamento fra dominio e account, che la guida non nominava, si fa da solo quando un solo account del
-     * pannello vede la zona: e' il caso di chi segue la guida, un account e i suoi domini.
+     * Without a Cloudflare account that sees the domain's zone, "Set up everything" publishes nothing: before, it
+     * started anyway, generated the DKIM key, changed nginx, stopped halfway and ended in green, "Setup completed" with
+     * one step out of ten (finding 250, on the clean VM following the guide). Now it is checked before touching
+     * anything. And the link between domain and account, which the guide did not mention, is made automatically when
+     * only one panel account sees the zone: that is the case of whoever follows the guide, one account and its domains.
      */
     public record CloudflareChoice(boolean ready, String error, MailDatabase.CloudflareAccount assigned) {
         static CloudflareChoice no(String error) { return new CloudflareChoice(false, error, null); }
     }
 
-    /** La zona che il token di un account vede per il dominio (CloudflareManager.findZone, o una prova). */
+    /** The zone that an account's token sees for the domain (CloudflareManager.findZone, or a test). */
     interface ZoneCheck { CloudflareManager.ZoneLookup find(MailDatabase.CloudflareAccount a); }
 
     static CloudflareChoice choose(String domain, MailDatabase.CloudflareAccount current,
@@ -174,14 +177,17 @@ public class DomainSetup {
         return CloudflareChoice.no(I18n.tr("server.cfgdom.cfSeveral", java.util.Map.of("d", domain, "list", String.join(", ", which))));
     }
 
-    /** Il motivo senza il punto finale: la frase che lo contiene ne mette uno suo («... after.. On Cloudflare»). */
+    /** The reason without the final full stop: the sentence that contains it adds its own ("... after.. On Cloudflare"). */
     static String withoutFinalStop(String reason) {
         String r = String.valueOf(reason).trim();
         while (r.endsWith(".")) r = r.substring(0, r.length() - 1);
         return r;
     }
 
-    /** Il controllo vero: account del dominio, account del pannello, e la zona chiesta a Cloudflare col token di ognuno. */
+    /**
+     * The real check: the domain's account, the panel's accounts, and the zone requested from Cloudflare with
+     * the token of each one.
+     */
     public static CloudflareChoice cloudflareFor(int domainId) {
         try {
             MailDatabase.Domain d = find(domainId);
@@ -197,11 +203,13 @@ public class DomainSetup {
         }
     }
 
-    /* ===================================================================
-     * I singoli passi
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The individual steps
+     * ===================================================================
+     */
 
-    /** La chiave DKIM e il suo record, firmando solo con una chiave pubblicata: DkimManager.ensurePublished. */
+    /** The DKIM key and its record, signing only with a published key: DkimManager.ensurePublished. */
     private static JSONObject dkim(MailDatabase.Domain d) {
         try {
             CloudflareManager cf = new CloudflareManager(Main.mailDatabase);
@@ -214,7 +222,7 @@ public class DomainSetup {
 
             DkimManager dk = new DkimManager(Main.mailDatabase);
             dk.setCloudflareManager(cf);
-            // Una zona che non si legge lancia ZoneReadException: finisce nel catch, e non si crea niente.
+            // A zone that cannot be read throws ZoneReadException: it ends up in the catch, and nothing is created.
             DkimManager.RecordStep st = DkimManager.ensurePublished(cf, acct.apiToken, zl.zoneId, d.domain,
                     d.dkimSelector, d.dkimPublicKey, dk::newKey, k -> dk.install(d.id, d.domain, k));
             return entry("DKIM", st.ok(), st.message());
@@ -224,10 +232,10 @@ public class DomainSetup {
     }
 
     /**
-     * Dove finiscono i rapporti DMARC degli altri domini.
+     * Where the DMARC reports of the other domains end up.
      *
-     * Si guarda un alias dmarc@ gia' esistente e si riusa la sua destinazione: chi ha gia'
-     * deciso dove vuole i rapporti non deve deciderlo di nuovo a ogni dominio.
+     * We look at an existing dmarc@ alias and reuse its destination: whoever has already
+     * decided where they want the reports should not have to decide again for every domain.
      */
     public static String existingReportDestination() {
         try {
@@ -245,12 +253,12 @@ public class DomainSetup {
         return null;
     }
 
-    /** Riduce l'esito di un'operazione a una riga leggibile. */
+    /** Reduces the outcome of an operation to a readable line. */
     private static JSONObject reduce(String title, JSONObject e) {
         boolean ok = e.optBoolean("success", false);
         String msg = ok ? e.optString("note", I18n.tr("server.cfgdom.done"))
                         : e.optString("error", I18n.tr("server.cfgdom.failed"));
-        // "Esiste gia'" non e' un fallimento: e' la regola che protegge cio' che c'era.
+        // "Already exists" is not a failure: it is the rule that protects what was there.
         if (!ok && (e.optBoolean("alreadyExists", false) || e.optBoolean("unchanged", false)))
             return entry(title, true, msg);
         return entry(title, ok, msg);

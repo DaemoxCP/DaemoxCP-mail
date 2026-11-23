@@ -16,7 +16,7 @@ import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
 /**
- * The text of an exception that reaches a page (reperto 231): only the panel's own messages pass; for any other
+ * The text of an exception that reaches a page (finding 231): only the panel's own messages pass; for any other
  * exception the page reads a generic text and the panel log gets the exception.
  *
  * <p>Before, the routes put {@code e.getMessage()} of any exception in the answer: a duplicate in MySQL showed the

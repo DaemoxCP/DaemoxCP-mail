@@ -1,20 +1,19 @@
-"""Rinomina le chiavi JSON italiane in tutte le parti che le usano, nello stesso passo.
+"""Renames the Italian JSON keys in all the parts that use them, in the same step.
 
-Una chiave JSON e' una stringa: nessun compilatore la risolve, quindi la rinomina si fa solo
-nei contesti in cui la stringa e' certamente una chiave, e il resto si elenca per una revisione
-a mano. Le garanzie vere vengono dopo, dalle reti che confrontano chi scrive e chi legge
-(check_response.py, check_api.py) e dalle prove da browser.
+A JSON key is a string: no compiler resolves it, so the rename is done only in the contexts
+where the string is certainly a key, and the rest is listed for a review by hand. The real
+guarantees come afterwards, from the nets that compare who writes and who reads
+(check_response.py, check_api.py) and from the browser tests.
 
-Contesti in cui si cambia:
-  Java    primo argomento letterale di put/accumulate/append/opt*/get*/has/remove/isNull;
-          dentro le stringhe Java, il JavaScript che ci sta scritto (regole qui sotto).
-  JS      .chiave e ?.chiave non seguite da "(";  ['chiave'] e ["chiave"];
-          chiave di un oggetto letterale preceduta da "{" o "," e seguita da ":".
-Si elencano senza cambiarle: le stringhe sciolte 'chiave' nel JavaScript e le proprieta'
-abbreviate { chiave } / , chiave } / { chiave, .
+Contexts where it changes:
+  Java    first literal argument of put/accumulate/append/opt*/get*/has/remove/isNull;
+          inside the Java strings, the JavaScript written there (rules below).
+  JS      .key and ?.key not followed by "(";  ['key'] and ["key"];
+          key of an object literal preceded by "{" or "," and followed by ":".
+Listed without being changed: the loose strings 'key' in the JavaScript and the shorthand
+properties { key } / , key } / { key, .
 
-Uso: python3 jsonkeys.py <radice> <mappa.txt> [--dry]
-"""
+Usage: python3 jsonkeys.py <root> <map.txt> [--dry]"""
 import re
 import sys
 import glob
@@ -38,8 +37,8 @@ JS_SHORT = re.compile(r"[{,]\s*(" + alt + r")\s*(?=[,}])")
 
 import json as _json
 I18N_KEYS = set(_json.load(open(f"{root}/src/main/resources/lang/it.json", encoding="utf-8")))
-# Le chiavi di traduzione citate nel codice ('pkgs.m.nome', {{t:acc.nome}}) hanno punti dentro:
-# .nome li' non e' una proprieta'. Si mascherano prima delle regole e si rimettono dopo.
+# The translation keys quoted in the code ('pkgs.m.nome', {{t:acc.nome}}) have dots inside:
+# .nome there is not a property. They are masked before the rules and put back afterwards.
 MASKABLE = re.compile(r"""(\\?['"])([A-Za-z][\w-]*(?:\.[\w-]+)+)\1|\{\{t:[^}]+\}\}""")
 
 
@@ -59,7 +58,7 @@ def unmask(text, saved):
 
 
 def js_rename(text, where):
-    """Le regole del JavaScript su un pezzo di testo. Restituisce il testo nuovo."""
+    """The rules of the JavaScript on a piece of text. Returns the new text."""
     text, saved = mask(text)
     text = _js_rename(text, where)
     return unmask(text, saved)
@@ -93,7 +92,7 @@ I18N_CALL = re.compile(r"""\b(?:t|tn|tNodes)\(\s*\\?['"][^'"]+\\?['"]\s*,\s*(?:[
 
 
 def i18n_object_ranges(text):
-    """Gli oggetti dei segnaposto: dall'apertura della graffa alla sua chiusura."""
+    """The objects of the placeholders: from the opening of the brace to its closing."""
     out = []
     for m in I18N_CALL.finditer(text):
         i, depth = m.end() - 1, 0
@@ -115,7 +114,7 @@ def note_review(text, path, offset_line=0):
 
 
 def string_ranges(t):
-    """Le stringhe di un sorgente Java (anche i text block), come intervalli."""
+    """The strings of a Java source (text blocks too), as ranges."""
     out, i, n = [], 0, len(t)
     while i < n:
         if t.startswith('"""', i):
@@ -145,17 +144,17 @@ changed = 0
 for path in sorted(glob.glob(f"{root}/src/main/java/**/*.java", recursive=True) + glob.glob(f"{root}/tests/**/*.java", recursive=True)):
     t = open(path, encoding="utf-8").read()
     rel = path[len(root) + 1:]
-    # 1. le chiamate dell'API JSON
+    # 1. the JSON API calls
     def r_call(m):
         counts["java call"] += 1
         return m.group(1) + '"' + mp[m.group(2)] + '"'
     t2 = JAVA_CALL.sub(r_call, t)
-    # 2. il JavaScript scritto dentro le stringhe Java (pagine, card, script inline)
+    # 2. the JavaScript written inside the Java strings (pages, cards, inline scripts)
     parts, last = [], 0
     for a, b in string_ranges(t2):
         seg = t2[a:b]
-        # una stringa che e' solo una chiave usata come argomento e' gia' passata dal punto 1;
-        # le altre si trattano come JavaScript solo se ne hanno l'aria
+        # a string that is only a key used as an argument has already gone through point 1;
+        # the others are treated as JavaScript only if they look like it
         if re.search(r"[{}();=]|\.\w", seg) and len(seg) > 6:
             new = js_rename(seg, "in java")
             if new != seg:

@@ -14,20 +14,22 @@ import java.time.Duration;
 import java.util.logging.Logger;
 
 /**
- * Il socket di clamd solo del gruppo clamav, 0660, e rspamd in quel gruppo (reperto 237).
+ * The clamd socket for the clamav group only, 0660, and rspamd in that group (finding 237).
  *
- * <p>Il clamd.conf del pacchetto lascia LocalSocketMode commentato: «Default: disabled (socket is world accessible)», e
- * il socket nasceva 0666. Qualunque processo della macchina poteva far analizzare file a clamd (e tenerlo occupato) o
- * chiedergli SHUTDOWN. Il clamd.conf d'esempio di ClamAV propone LocalSocketGroup e LocalSocketMode 660; chi parla con
- * clamd e' solo rspamd (il modulo antivirus, sul socket), freshclam (che gira come clamav) e il pannello (root).
+ * <p>The package's clamd.conf leaves LocalSocketMode commented out: "Default: disabled (socket is world accessible)",
+ * and the socket was created 0666. Any process on the machine could have clamd scan files (and keep it busy) or ask
+ * it to SHUTDOWN. ClamAV's example clamd.conf suggests LocalSocketGroup and LocalSocketMode 660; the only ones that
+ * talk to clamd are rspamd (the antivirus module, on the socket), freshclam (which runs as clamav) and the panel
+ * (root).
  *
- * <p>Sui server installati prima, all'avvio: rspamd entra nel gruppo clamav e riparte (i gruppi di un processo si leggono
- * solo quando parte); poi clamd.conf con le due righe e clamd riparte (con le firme da ricaricare: fino a cinque minuti).
- * La prova e' un messaggio con EICAR fatto analizzare a rspamd prima e dopo: se prima rspamd lo riconosceva, dopo deve
- * riconoscerlo ancora. rspamd tiene in memoria il risultato dell'antivirus per contenuto dell'allegato (misurato sulla
- * VM il 16/11/2026: lo stesso allegato una seconda volta non arriva a clamd), quindi ogni prova ha in coda al file degli
- * spazi diversi, che EICAR ammette, e clamd lo analizza davvero. Un errore rimette tutto com'era. Si cambia solo se
- * clamd.conf non ha gia' LocalSocketGroup o LocalSocketMode attivi: una scelta fatta a mano resta.
+ * <p>On servers installed earlier, at startup: rspamd joins the clamav group and restarts (a process's groups are
+ * read only when it starts); then clamd.conf gets the two lines and clamd restarts (with the signatures to reload: up
+ * to five minutes). The test is a message with EICAR given to rspamd to scan before and after: if rspamd recognised it
+ * before, it must still recognise it afterwards. rspamd keeps the antivirus result in memory per attachment content
+ * (measured on the VM on 2026-11-16: the same attachment a second time does not reach clamd), so each test has
+ * different spaces at the end of the file, which EICAR allows, and clamd really scans it. An error puts everything
+ * back as it was. It is changed only if clamd.conf does not already have LocalSocketGroup or LocalSocketMode active:
+ * a choice made by hand stays.
  */
 public final class ClamdSocket {
 
@@ -43,22 +45,22 @@ public final class ClamdSocket {
     static final String MARK = "# daemoxcp-mail: clamd's socket only for the clamav group, which rspamd is in (finding 237)\n";
     public static final String BLOCK = MARK + "LocalSocketGroup clamav\nLocalSocketMode 660\n";
 
-    /** Quello che serve, per provarlo senza clamd e rspamd. */
+    /** What is needed, to test it without clamd and rspamd. */
     interface Services {
         String read(Path file) throws IOException;
         void write(Path file, String text) throws IOException;
         boolean isMember(String group, String user);
         boolean setMember(String group, String user, boolean member);
         boolean restartRspamd();
-        /** Riavvia clamd e aspetta il socket; vero se risponde. */
+        /** Restarts clamd and waits for the socket; true if it answers. */
         boolean restartClamd();
-        /** Il socket e' di clamav:clamav, 0660. */
+        /** The socket belongs to clamav:clamav, 0660. */
         boolean socketGroupOnly();
-        /** rspamd riconosce EICAR in un allegato mai visto prima (quindi clamd lo analizza davvero). */
+        /** rspamd recognises EICAR in an attachment never seen before (so clamd really scans it). */
         boolean rspamdFindsEicar();
-        /** clamd risponde a VERSION sul suo socket (a root). */
+        /** clamd answers VERSION on its socket (to root). */
         boolean clamdAnswers();
-        /** rspamd analizza un messaggio adesso. */
+        /** rspamd scans a message now. */
         boolean rspamdScans();
     }
 
@@ -66,7 +68,7 @@ public final class ClamdSocket {
 
     public record Result(Outcome outcome, String detail) {}
 
-    /** clamd.conf ha il socket del pannello e nessun LocalSocketGroup o LocalSocketMode attivo. Pura. */
+    /** clamd.conf has the panel's socket and no active LocalSocketGroup or LocalSocketMode. Pure. */
     static boolean packageLike(String conf) {
         boolean socket = false;
         for (String l : conf.split("\n")) {
@@ -82,16 +84,16 @@ public final class ClamdSocket {
         return socket;
     }
 
-    /** Il passaggio, puro rispetto a {@link Services}. */
+    /** The switchover, pure with respect to {@link Services}. */
     static Result run(Services sv, Path clamdConf) {
         String conf;
         try {
-        // Il blocco scritto in italiano dalle versioni di prima vale come quello di adesso (EnglishComments).
+        // The block written in Italian by earlier versions counts as the current one (EnglishComments).
             conf = EnglishComments.english(sv.read(clamdConf));
         } catch (IOException e) {
             return new Result(Outcome.LEFT, "clamd.conf cannot be read: " + e.getClass().getSimpleName());
         }
-        if (conf == null) return new Result(Outcome.NOTHING, "");   // ClamAV non c'e'
+        if (conf == null) return new Result(Outcome.NOTHING, "");   // ClamAV is not there
         boolean member = sv.isMember(GROUP, RSPAMD);
         boolean has = conf.contains(BLOCK);
         if (has && member && sv.socketGroupOnly()) return new Result(Outcome.NOTHING, "");
@@ -102,14 +104,14 @@ public final class ClamdSocket {
         if (!sv.rspamdScans()) return new Result(Outcome.LEFT, "rspamd does not scan a message now: nothing changed");
         boolean before = sv.rspamdFindsEicar();
         try {
-            // 1. rspamd nel gruppo clamav, e riavviato perche' lo sappia.
+            // 1. rspamd in the clamav group, and restarted so that it knows.
             if (!member) {
                 if (!sv.setMember(GROUP, RSPAMD, true))
                     return back(sv, clamdConf, conf, member, "rspamd could not be added to the group " + GROUP);
                 if (!sv.restartRspamd())
                     return back(sv, clamdConf, conf, member, "rspamd does not scan a message after joining the group " + GROUP);
             }
-            // 2. Il socket 0660 del gruppo clamav.
+            // 2. The 0660 socket of the clamav group.
             if (!has) sv.write(clamdConf, conf + (conf.endsWith("\n") ? "" : "\n") + "\n" + BLOCK);
             if (!sv.restartClamd() || !sv.socketGroupOnly())
                 return back(sv, clamdConf, conf, member, "clamd does not answer on " + SOCKET + " as clamav:clamav 0660");
@@ -138,13 +140,13 @@ public final class ClamdSocket {
                 why + (ok ? ": everything as it was" : "; and putting it back failed"));
     }
 
-    // ===================== Il server vero =====================
+    // ===================== The production server =====================
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
     /**
-     * Il file di prova EICAR, scritto al contrario: in chiaro nel jar o nei sorgenti un antivirus li metterebbe in
-     * quarantena. In coda da 1 a 40 spazi e tabulazioni a caso, che lo standard EICAR ammette.
+     * The EICAR test file, written backwards: in plain text in the jar or in the sources an antivirus would
+     * quarantine them. At the end, 1 to 40 random spaces and tabs, which the EICAR standard allows.
      */
     static String eicar() {
         String e = new StringBuilder("*H+H$!ELIF-TSET-SURIVITNA-DRADNATS-RACIE$}7)CC7)^P(45XZP\\4[PA@%P!O5X").reverse().toString();
@@ -187,7 +189,7 @@ public final class ClamdSocket {
             }
             @Override public boolean restartClamd() {
                 Shell.run(Duration.ofSeconds(300), "service", "clamav_clamd", "restart");
-                // Le firme si ricaricano: sulla VM 15 secondi, su un server piccolo di piu'.
+                // The signatures are reloaded: on the VM 15 seconds, on a small server longer.
                 for (int i = 0; i < 300; i++) {
                     if (SoftwareVersions.askClamd(Path.of(SOCKET)) != null) return true;
                     try {
@@ -221,7 +223,7 @@ public final class ClamdSocket {
         };
     }
 
-    /** All'avvio della parte root, dopo RspamdUser. */
+    /** At startup of the root part, after RspamdUser. */
     public static void ensureAtBoot() {
         try {
             if (!Files.isExecutable(Path.of("/usr/local/sbin/clamd")) || !Files.isExecutable(Path.of("/usr/local/bin/rspamd"))) return;

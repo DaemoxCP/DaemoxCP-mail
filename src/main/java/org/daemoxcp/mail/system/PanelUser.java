@@ -5,28 +5,28 @@ import org.daemoxcp.mail.util.Shell;
 import java.time.Duration;
 
 /**
- * Un utente di sistema che crea il pannello per far girare qualcosa senza root: nessuna password, nessuna shell, casa
- * /nonexistent, un gruppo suo con lo stesso nome e nessun altro membro. Se esiste gia' con un'altra forma non e' del
- * pannello, e non lo si usa.
+ * A system user that the panel creates to run something without root: no password, no shell, home
+ * /nonexistent, a group of its own with the same name and no other member. If it already exists in another form
+ * it does not belong to the panel, and is not used.
  *
- * Il controllo era in PanelSeparation per daemoxcp_mail; e' qui perche' ne serve un secondo, sievec (SieveCompiler,
- * reperto 218), e i due devono essere controllati allo stesso modo.
+ * The check was in PanelSeparation for daemoxcp_mail; it is here because a second one is needed, sievec
+ * (SieveCompiler, finding 218), and the two must be checked in the same way.
  *
- * @param name  il nome dell'utente, e del suo gruppo
- * @param gecos il commento con cui il pannello lo crea: un utente con quel nome e un altro commento non e' suo
+ * @param name  the name of the user, and of its group
+ * @param gecos the comment with which the panel creates it: a user with that name and another comment is not its own
  */
 public record PanelUser(String name, String gecos) {
 
     public static final String HOME = "/nonexistent";
     public static final String SHELL = "/usr/sbin/nologin";
 
-    /** Com'e' andata: null se l'utente c'e' ed e' quello del pannello, altrimenti il motivo; created se l'ha creato ora. */
+    /** How it went: null if the user exists and is the panel's, otherwise the reason; created if it was created now. */
     public record Ensured(String problem, boolean created) {}
 
     /**
-     * Crea gruppo e utente se mancano, poi li controlla. Il formato di pw usershow e' quello di master.passwd:
-     * nome:password:uid:gid:classe:cambio:scadenza:commento:cartella:shell (pw(8)); quello di pw groupshow e'
-     * nome:password:gid:membri.
+     * Creates the group and the user if missing, then checks them. The format of pw usershow is that of
+     * master.passwd: name:password:uid:gid:class:change:expire:gecos:home_dir:shell (pw(8)); that of pw groupshow
+     * is name:password:gid:members.
      */
     public Ensured ensure() {
         Duration t = Duration.ofSeconds(15);
@@ -44,7 +44,7 @@ public record PanelUser(String name, String gecos) {
                 Shell.run(t, "pw", "groupshow", name).outputTrim()), created);
     }
 
-    /** Null se le righe di pw sono quelle dell'utente creato dal pannello; altrimenti cosa non torna. Pura. */
+    /** Null if the lines from pw are those of the user created by the panel; otherwise what does not add up. Pure. */
     public String problem(String userLine, String groupLine) {
         String[] u = userLine.split(":", -1);
         String[] g = groupLine.split(":", -1);

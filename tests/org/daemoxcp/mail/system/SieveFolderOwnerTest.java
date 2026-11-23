@@ -23,12 +23,12 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * The folder of the panel's Sieve rules, /var/mail/sieve, stays root's (reperto 220).
+ * The folder of the panel's Sieve rules, /var/mail/sieve, stays root's (finding 220).
  *
- * Until 10/11/2026 the script of the Dovecot component (DovecotScript) ran "chown -R vmail:vmail /var/mail/sieve". Since
- * reperto 214 the panel's rules (/var/mail/sieve/domain/user/.dovecot.sieve) are root's on purpose: vmail, the user that
- * delivers, reads and runs them but must never rewrite them. With the folder above them owned by vmail, vmail could
- * rename a domain's folder (root's) and make its own in its place, with rules of its own.
+ * Until 2026-11-10 the script of the Dovecot component (DovecotScript) ran "chown -R vmail:vmail /var/mail/sieve".
+ * Since finding 214 the panel's rules (/var/mail/sieve/domain/user/.dovecot.sieve) are root's on purpose: vmail, the
+ * user that delivers, reads and runs them but must never rewrite them. With the folder above them owned by vmail,
+ * vmail could rename a domain's folder (root's) and make its own in its place, with rules of its own.
  *  1. Without a system: every line of the script that touches /var/mail/sieve gives it to root, and none gives write to
  *     group or others.
  *  2. With -De2e.vm=yes, as root on the VM: the script's own lines for /var/mail/sieve, run for real on a bench folder
@@ -317,7 +317,7 @@ public class SieveFolderOwnerTest {
 
     // ---------------------------------------------------------------- setting up and taking down
 
-    /** The mode of /var/mail before setUp gave it the panel's boot state (reperto 221): put back at the end. */
+    /** The mode of /var/mail before setUp gave it the panel's boot state (finding 221): put back at the end. */
     private static int spoolMode = -1;
 
     static void setUp() throws Exception {

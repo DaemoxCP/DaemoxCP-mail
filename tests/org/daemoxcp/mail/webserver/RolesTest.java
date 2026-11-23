@@ -174,7 +174,7 @@ public class RolesTest {
         Set<String> pub = new HashSet<>();
         routes.forEach((p, a) -> { if (a.kind() == Access.Kind.PUBLIC) pub.add(p); });
         check("public: only sign-in, setup, static files, dictionary, language, logout, autoconfig, MTA-STS and the webmail's own",
-                // /assets/ (reperto 178): the pages' scripts and styles as files. It is public like
+                // /assets/ (finding 178): the pages' scripts and styles as files. It is public like
                 // /vendor, but the handler gives those of the protected pages only to whoever signed
                 // in (LoginRoutesTest checks it).
                 pub.equals(Set.of("/autoconfig", "/mta-sts", "/fa", "/vendor", "/i18n/", "/assets/", "/api/language", "/", "/index", "/api/login",
@@ -246,7 +246,7 @@ public class RolesTest {
         check("admin cannot open Administrators", send("GET", "/admins", null, admin).statusCode() == 403);
         check("admin cannot export the vault key", refused(send("POST", "/api/admins", "{\"action\":\"vault_backup_key\"}", admin)));
         check("admin cannot change the firewall", refused(send("POST", "/api/firewall", "{\"action\":\"apply\"}", admin)));
-        // The "back to the server before the reinstallation" button (ReinstallReturn, reperto 170).
+        // The "back to the server before the reinstallation" button (ReinstallReturn, finding 170).
         check("viewer cannot go back to the server before a reinstallation", refused(send("POST", "/api/updates",
                 "{\"action\":\"reinstall_way_back\",\"name\":\"reinstall-before-2000-01-01-000000\",\"confirm\":\"GO BACK\"}", viewer)));
         check("admin cannot either (system.manage is superadmin's)", refused(send("POST", "/api/updates",

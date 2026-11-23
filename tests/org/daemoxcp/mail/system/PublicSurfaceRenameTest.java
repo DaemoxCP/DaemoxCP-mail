@@ -14,15 +14,16 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * The public surface moves from "mailpanel-pubblico" (and from "mailpanel-public", its name before DaemoxCP
- * Mail) to "daemoxcp-mail-public" on the servers already installed (PublicSurfaceRename.migrate), in temporary folders and with a fake nginx and fail2ban.
+ * The public surface moves from `mailpanel-pubblico` (and from `mailpanel-public`, its name before DaemoxCP
+ * Mail) to `daemoxcp-mail-public` on the servers already installed (PublicSurfaceRename.migrate), in temporary
+ * folders and with a fake nginx and fail2ban.
  * The fake fail2ban does what the real one does: it keeps the bans in a database by jail name, and at
  * every reload it activates the jails it finds in jail.d taking back each one's bans from the
  * database. A jail with the new name finds its bans again only if the state in the database moved
  * to it. It also counts the bans given by hand (the "Ban" lines the recidive jail counts): a rename
  * must give none. With the surface the folder of its files moves too (mta-sts.txt), which the nginx
- * file quotes by path: on the real server, on 31/10/2026, that path stayed the old one. The effect
- * on the real nginx, fail2ban and pf is measured by the test on the VM (reperti).
+ * file quotes by path: on the real server, on 2026-10-31, that path stayed the old one. The effect
+ * on the real nginx, fail2ban and pf is measured by the test on the VM (findings).
  *
  * It runs anywhere (it calls nothing):
  *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.PublicSurfaceRenameTest
@@ -44,7 +45,7 @@ public class PublicSurfaceRenameTest {
     static final String KEY = "/usr/local/etc/ssl/mail/privkey.pem";
 
     /**
-     * The old signatures, from the data file: the longer one ("... di posta") was in filter and
+     * The old signatures, from the data file: the longer one (`... di posta`) was in filter and
      * jail, the shorter one in the nginx file.
      */
     static final List<String> OLD_SIGNATURES = LegacyNames.oldNamesOf("panelSignature", PanelMarker.WRITTEN);

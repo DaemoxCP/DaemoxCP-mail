@@ -9,7 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The installation scripts on disk are always those of the running jar (InstallScripts, reperto 169).
+ * The installation scripts on disk are always those of the running jar (InstallScripts, finding 169).
  *
  *  1. Writing is all or nothing: whoever opened the old script (a script that is running) keeps
  *     reading its own; the new one is there whole, 700, with no temporary files left.

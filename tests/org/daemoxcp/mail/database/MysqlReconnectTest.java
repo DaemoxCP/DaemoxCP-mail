@@ -20,7 +20,7 @@ import java.util.List;
 
 /**
  * The running panel reconnects to MySQL with the password that is in the secrets file NOW, not with
- * the one it had at start. Reperto 156: a full reinstallation from the menu changes the password of
+ * the one it had at start. Finding 156: a full reinstallation from the menu changes the password of
  * the panel's MySQL user and restarts MySQL; the running --web service lost the connection and
  * retried forever with the old one ("Access denied").
  *

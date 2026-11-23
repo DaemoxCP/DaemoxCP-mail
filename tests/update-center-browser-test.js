@@ -1,32 +1,34 @@
-// Updating from the panel (reperti 185-187), in Chromium with a simulated server and the panel's CSP.
+// Updating from the panel (findings 185-187), in Chromium with a simulated server and the panel's CSP.
 //
 //  1. The restart banner at the top of every page (Updates and Home), with the reason and the button;
 //     on the Italian page the text is the one of it.json.
-//  2. "Update the server" (reperto 207): at the top "Update everything", the numbered list of what it will do, in order
-//     (the FreeBSD patches, the other packages in one plan, the mail server steps, Roundcube, the panel's Java last) and
-//     ONE button; below, the state of FreeBSD and of the packages without update buttons, no rows for Java and
-//     Roundcube, the restart with its button. The branch has its own card (reperto 205). In words, not only by color.
+//  2. "Update the server" (finding 207): at the top "Update everything", the numbered list of what it will do, in
+//     order (the FreeBSD patches, the other packages in one plan, the mail server steps, Roundcube, the panel's Java
+//     last) and ONE button; below, the state of FreeBSD and of the packages without update buttons, no rows for Java
+//     and Roundcube, the restart with its button. The branch has its own card (finding 205). In words, not only by
+//     color.
 //  3. "Update everything": the checks of every step, one confirmation with the numbered steps (the panel's window, not
 //     the browser's); cancelling starts nothing and the button stays; confirming sends ONE request with every step's
 //     signature and the changes shown; the outcome under the row; the card reads itself again (the restart left).
 //  4b. A new FreeBSD release, one step at a time: only when there is one; four steps, only the current one with its
 //     button; check and prepare with one confirmation, the command from SSH, the install, the final check by itself.
 //  4c. The checks stop the preparation: only the rows that stop it, and nothing starts.
-//  9. Diagnostics, check everything (reperto 199): one button, every read-only check in turn, first what needs a look
+//  9. Diagnostics, check everything (finding 199): one button, every read-only check in turn, first what needs a look
 //     (most important first), each with one button for its next step; what is fine closed below.
 //  4d. Roundcube is a step of "Update everything", before Java: its checks with the others, its signature in the job;
 //      when its checks stop it, it is left out with the reason and the rest still goes.
 //  5. The restart window: what stops, the chosen delay, the time, cancelling; Escape closes it.
 //  6. Reads queue up: two "System state" calls at once both answer.
 //  7. At 375 px: no horizontal scrolling, 44 px buttons.
-//  10. A restart scheduled (reperto 200): the strip says the time and that the panel only reads; a button of the page
+//  10. A restart scheduled (finding 200): the strip says the time and that the panel only reads; a button of the page
 //      does nothing and says why (once); a change the server refuses (409) makes the strip read again; cancelling
 //      unlocks the page. With a job running, the restart window says which and has no restart button.
-//  14. The move to Dovecot 2.4 (reperto 213): a row only when the separate package is offered, Prepare shows the checks,
-//      the exact plan and the tests; one confirmation; the job gets the word and the signature; the outcome stays.
-//  11. A job in progress started elsewhere (reperto 206): the card says what and since when, with its log closed below;
-//      the buttons of the steps and "Check for updates" wait, saying why; when it ends the line goes, the buttons come back
-//      and the card reads itself again.
+//  14. The move to Dovecot 2.4 (finding 213): a row only when the separate package is offered, Prepare shows the
+//      checks, the exact plan and the tests; one confirmation; the job gets the word and the signature; the outcome
+//      stays.
+//  11. A job in progress started elsewhere (finding 206): the card says what and since when, with its log closed
+//      below; the buttons of the steps and "Check for updates" wait, saying why; when it ends the line goes, the
+//      buttons come back and the card reads itself again.
 //
 // Usage (from the project root, with the pages of PageGenerator in $D, see csp-browser-test.js):
 //   NODE_PATH=$(npm root -g) node tests/update-center-browser-test.js $D [screenshot-folder]
@@ -50,7 +52,7 @@ function check(what, ok) {
 const PLAN = { measured: true, command: 'pkg upgrade -n', changes: [
     { type: 'upgrade', name: 'libX11', from: '1.8.12,1', to: '1.8.14,1', reason: 'CVE-2026-88806' },
     { type: 'upgrade', name: 'brotli', from: '1.1.0,1', to: '1.2.1,1' },
-    // On the VM the plan of the other packages also reinstalled cyrus-sasl: not an update (reperto 207).
+    // On the VM the plan of the other packages also reinstalled cyrus-sasl: not an update (finding 207).
     { type: 'reinstall', name: 'cyrus-sasl', from: '2.1.28_6', to: '2.1.28_6' }] };
 // st is the server's state for one page: what the actions so far have changed.
 function replies(o, st) {
@@ -96,7 +98,7 @@ function replies(o, st) {
         jump_continue: { success: true, jobId: 'jump-1' },
         jump_cancel: { success: true, note: 'Move cancelled.' },
         os_upgrade_verify: { success: true, allGood: true, checks: [{ label: 'Services', level: 'ok', detail: 'All up.' }], environments: { success: false } },
-        // After "Update everything" (st.allDone, reperto 207) nothing is left; before, the other packages, dovecot and Java.
+        // After "Update everything" (st.allDone, finding 207) nothing is left; before, the other packages, dovecot and Java.
         packages_overview: st.allDone ? { success: true, procedures: { java: false, roundcube: false, roundcubePackage: 'roundcube-php84', mysql84: false, python: false },
             summary: { updates: 0, stackUpdates: 0, vulnerable: 1, fixable: 0, locked: 39 }, others: [],
             packages: [{ name: 'postfix-mysql', role: 'SMTP', installed: '3.11.7', available: '', update: false, locked: true, stack: true }] }
@@ -120,15 +122,15 @@ function replies(o, st) {
         reboot_cancel: { success: true, existedBefore: true },
         updates_status: { success: true, plan: PLAN, signature: '0123456789abcdef', vulnerable: [], lockedUpdates: [] },
         updates_apply: { success: true, jobId: 'upd-1' },
-        // The checks of the steps of "Update everything" (reperto 207), and the job itself.
+        // The checks of the steps of "Update everything" (finding 207), and the job itself.
         package_preflight: { success: true, canProceed: true, signature: '1111222233334444', services: [{ name: 'dovecot', running: true }],
-            // A new library the new version needs, as lmdb0 for postfix-mysql on the real server (reperto 208).
+            // A new library the new version needs, as lmdb0 for postfix-mysql on the real server (finding 208).
             plan: { measured: true, changes: [{ type: 'upgrade', name: 'dovecot-mysql', from: '2.3.21.1_3', to: '2.3.21.1_4' },
                 { type: 'install', name: 'libsodium', from: '', to: '1.0.21' }] } },
         java_preflight: { success: true, canProceed: true, signature: 'aaaabbbbccccdddd',
             plan: { measured: true, changes: [{ type: 'upgrade', name: 'openjdk25', from: '25.0.4', to: '25.0.5' }] } },
         update_everything: { success: true, jobId: 'all-1' },
-        // The move to Dovecot 2.4 (reperto 213): the checks, the exact plan, the tests that will run, the job.
+        // The move to Dovecot 2.4 (finding 213): the checks, the exact plan, the tests that will run, the job.
         dovecot24_preflight: { success: true, canProceed: true, blocked: false, signature: '2424242424242424', testMailbox: 'info@example.test',
             remove: ['dovecot-mysql', 'dovecot-pigeonhole-mysql'], install: ['dovecot24-mysql', 'dovecot24-pigeonhole-mysql'],
             checks: [{ label: 'Dovecot installed', level: 'ok', detail: 'Installed: dovecot-mysql 2.3.21.1_3, dovecot-pigeonhole-mysql 0.5.21.1_1 (Dovecot 2.3).' },
@@ -142,8 +144,8 @@ function replies(o, st) {
                 { type: 'install', name: 'xapian-core', from: '', to: '2.1.0,1' }] } },
         dovecot24_move: { success: true, jobId: 'dc24-1' },
         updates_search: { success: true, jobId: 'srch-1' },
-        // The job in progress (reperto 206): with o.turn a search holds the turn for the first two reads, then ends.
-        // The update of the panel's Java, outside the panel (reperto 210): the turn says it, with the script's log.
+        // The job in progress (finding 206): with o.turn a search holds the turn for the first two reads, then ends.
+        // The update of the panel's Java, outside the panel (finding 210): the turn says it, with the script's log.
         package_turn: o.javaTurn ? { success: true, running: true, java: true, who: "the update of the panel's Java",
                 log: '[1/7] Packing the current JVM as a way back...\n[2/7] Downloading the new packages, with the panel still answering...' }
             : o.turn && st.turnCalls <= 2 ? { success: true, running: true, who: 'check for updates, just started', jobId: 'srch-9' }
@@ -180,7 +182,7 @@ async function open(ctx, name, lang, o = {}) {
         }
         if (p === '/api/updates') {
             const body = JSON.parse(req.postData() || '{}');
-            // The database restarting (reperto 209): the server refuses before doing anything, 503 with its header.
+            // The database restarting (finding 209): the server refuses before doing anything, 503 with its header.
             if (st.dbDown > 0) {
                 st.dbDown--;
                 st.dbRefused = (st.dbRefused || 0) + 1;
@@ -482,7 +484,7 @@ const allErrors = [], allDialogs = [];
             rspamd: { present: true, verdict: 'BEHAVIOR_DIFFS' }, mysql: { present: false }, webmail: { consistent: true } }),
         diagCompat({ dovecot: { scanned: true, compatible24: true, doveconfOk: true }, postfix: { verdict: 'ALIGNED' },
             rspamd: { present: true, verdict: 'NOTHING_TO_REPORT' }, mysql: { present: true, issues: [] }, webmail: { consistent: true } }),
-        // The real server on 09/11/2026: the installed dovecot is the last 2.3, and 2.4 is the separate dovecot24 (reperto 212).
+        // The real server on 09/11/2026: the installed dovecot is the last 2.3, and 2.4 is the separate dovecot24 (finding 212).
         diagCompat({ dovecot: { scanned: true, compatible24: false, doveconfOk: true, breakingUpgradeAvailable: false,
             repoPackages: [{ name: 'dovecot', version: '2.3.21.1_3' }, { name: 'dovecot24', version: '2.4.5_2' }] }, postfix: { verdict: 'ALIGNED' },
             rspamd: { present: true, verdict: 'NOTHING_TO_REPORT' }, mysql: { present: true, issues: [] }, webmail: { consistent: true } })]);
@@ -493,7 +495,7 @@ const allErrors = [], allDialogs = [];
     check('  all in order: fine', cmp[2][0] === 'ok');
     check('  Dovecot not ready for 2.4, which is only a separate package: to look at, not a problem, and it says mail keeps working',
         cmp[3][0] === 'warn' && /^Dovecot: the configuration is not ready for 2\.4 yet; 2\.4 is a separate package \(dovecot24\) that nothing installs by itself, so mail keeps working on 2\.3\. The move is guided in Updates \(Dovecot 2\.4\)\.$/.test(cmp[3][1]));
-    // The operation logs (reperto 212): an error that a later job of the same kind redid well is not to look at.
+    // The operation logs (finding 212): an error that a later job of the same kind redid well is not to look at.
     const jr = await dg.page.evaluate(() => {
         const v = DIAG_CHECKS.find(c => c.key === 'journal').verdict;
         return [v({ journals: [{ name: 'b', type: 'update_everything', status: 'completed', settled: false },

@@ -14,26 +14,27 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 /**
- * redis solo sul socket Unix, 0770 del gruppo redis, e rspamd in quel gruppo (reperto 235).
+ * redis only on the Unix socket, 0770 for the redis group, and rspamd in that group (finding 235).
  *
- * <p>Prima redis ascoltava su 127.0.0.1:6379 e ::1:6379 senza password, com'e' il redis.conf del pacchetto: qualunque
- * processo della macchina (la webmail, un servizio bucato) leggeva e scriveva i dati di rspamd, cioe' Bayes, greylist,
- * limiti e storico, e poteva cancellarli tutti. Lo dice redis.conf stesso: «port 0» e redis non ascolta su TCP;
- * «unixsocket» e «unixsocketperm» il socket e i suoi permessi. Per rspamd («Redis configuration») un server redis puo'
- * essere un socket: servers = "/var/run/redis/redis.sock". Il socket nasce di redis:redis; 0770 e rspamd nel gruppo
- * redis, e ci entrano solo loro due (e root).
+ * <p>Before, redis listened on 127.0.0.1:6379 and ::1:6379 without a password, as in the package's redis.conf: any
+ * process on the machine (the webmail, a compromised service) read and wrote rspamd's data, that is Bayes,
+ * greylist, limits and history, and could delete all of it. redis.conf itself says so: "port 0" and redis does not
+ * listen on TCP; "unixsocket" and "unixsocketperm" the socket and its permissions. For rspamd ("Redis
+ * configuration") a redis server can be a socket: servers = "/var/run/redis/redis.sock". The socket is created as
+ * redis:redis; 0770 and rspamd in the redis group, and only those two get in (and root).
  *
- * <p>Sui server installati prima, all'avvio, in tre tempi, perche' rspamd non resti mai senza redis:
+ * <p>On the servers installed earlier, at startup, in three stages, so that rspamd is never left without redis:
  * <ol>
- *   <li>redis apre anche il socket, tenendo la porta (riavviato: il socket c'e', di redis, 0770, risponde, i dati ci
- *       sono ancora), e rspamd entra nel gruppo redis;</li>
- *   <li>rspamd passa al socket (riavviato, perche' i gruppi di un processo si leggono solo quando parte: analizza un
- *       messaggio, e redis ha clienti sul socket oltre a chi glielo chiede);</li>
- *   <li>redis chiude la porta (port 0, riavviato: niente piu' 6379, e rspamd analizza e parla col socket).</li>
+ *   <li>redis also opens the socket, keeping the port (restarted: the socket is there, owned by redis, 0770, it
+ *       answers, the data is still there), and rspamd joins the redis group;</li>
+ *   <li>rspamd moves to the socket (restarted, because a process's groups are read only when it starts: it scans
+ *       a message, and redis has clients on the socket besides whoever is asking);</li>
+ *   <li>redis closes the port (port 0, restarted: no more 6379, and rspamd scans and talks to the socket).</li>
  * </ol>
- * Un errore nei primi due tempi rimette tutto com'era; nel terzo si torna allo stato di mezzo, che funziona, e il
- * prossimo avvio riprende da li'. Si cambia solo se redis.conf e' quello del pacchetto (una sola porta, la 6379, e
- * nessun socket) e il redis.conf di rspamd e' quello che scrive il pannello: una configurazione fatta a mano resta.
+ * An error in the first two stages puts everything back as it was; in the third it goes back to the in-between
+ * state, which works, and the next startup resumes from there. It changes only if redis.conf is the package's
+ * (a single port, 6379, and no socket) and rspamd's redis.conf is the one the panel writes: a configuration made
+ * by hand stays.
  */
 public final class RedisSocket {
 
@@ -47,35 +48,35 @@ public final class RedisSocket {
     static final String GROUP = "redis";
     static final String RSPAMD = "rspamd";
 
-    /** Le righe che il pannello aggiunge in fondo a redis.conf: in redis.conf vince l'ultima. */
+    /** The lines the panel adds at the end of redis.conf: in redis.conf the last one wins. */
     static final String MARK = "# daemoxcp-mail: redis only on the Unix socket, of the redis group, which rspamd is in (finding 235)\n";
     static final String SOCKET_LINES = "unixsocket " + SOCKET + "\nunixsocketperm 770\n";
     static final String MID = MARK + SOCKET_LINES;
     public static final String FINAL = MID + "port 0\n";
 
-    /** Il redis.conf di rspamd come lo scrivevano gli installatori (FullMailServerScript; FullMailStackScript e RspamdScript). */
+    /** rspamd's redis.conf as the installers wrote it (FullMailServerScript; FullMailStackScript and RspamdScript). */
     static final Set<String> OLD_RSPAMD = Set.of("servers = \"127.0.0.1\";\n", "servers = \"127.0.0.1:6379\";\n");
     static final String NEW_RSPAMD = "servers = \"" + SOCKET + "\";\n";
 
-    /** Quello che serve, per provarlo senza redis e rspamd. */
+    /** What is needed, so that it can be tested without redis and rspamd. */
     interface Services {
-        /** Il file, o null se non c'e'. */
+        /** The file, or null if it is not there. */
         String read(Path file) throws IOException;
         void write(Path file, String text) throws IOException;
         boolean isMember(String group, String user);
         boolean setMember(String group, String user, boolean member);
-        /** Riavvia redis; vero se risponde (sul socket, se redis.conf lo apre). */
+        /** Restarts redis; true if it answers (on the socket, if redis.conf opens it). */
         boolean restartRedis();
-        /** Il socket c'e', di redis, 0770, e risponde. */
+        /** The socket is there, owned by redis, 0770, and it answers. */
         boolean socketReady();
-        /** Le chiavi del database (DBSIZE), o -1 se redis non risponde. */
+        /** The keys of the database (DBSIZE), or -1 if redis does not answer. */
         long keys();
         boolean tcpListening();
-        /** Riavvia rspamd; vero se analizza un messaggio. */
+        /** Restarts rspamd; true if it scans a message. */
         boolean restartRspamd();
-        /** Dopo un messaggio analizzato, redis ha clienti sul socket oltre a chi glielo chiede. */
+        /** After a scanned message, redis has clients on the socket besides whoever is asking. */
         boolean rspamdOnSocket();
-        /** rspamd analizza un messaggio adesso. */
+        /** rspamd scans a message now. */
         boolean rspamdScans();
     }
 
@@ -83,7 +84,7 @@ public final class RedisSocket {
 
     public record Result(Outcome outcome, String detail) {}
 
-    /** redis.conf ha una sola porta attiva, la 6379, e nessun socket attivo: e' quello del pacchetto. Pura. */
+    /** redis.conf has a single active port, 6379, and no active socket: it is the package's one. Pure. */
     static boolean packageLike(String conf) {
         int ports = 0;
         boolean port6379 = false;
@@ -101,17 +102,17 @@ public final class RedisSocket {
         return ports == 1 && port6379;
     }
 
-    /** Il passaggio, puro rispetto a {@link Services}. */
+    /** The switchover, pure with respect to {@link Services}. */
     static Result run(Services sv, Path redisConf, Path rspamdRedis) {
         String conf, rs;
         try {
-        // Il blocco scritto in italiano dalle versioni di prima vale come quello di adesso (EnglishComments).
+        // The block written in Italian by the previous versions counts as the current one (EnglishComments).
             conf = EnglishComments.english(sv.read(redisConf));
             rs = sv.read(rspamdRedis);
         } catch (IOException e) {
             return new Result(Outcome.LEFT, "redis.conf cannot be read: " + e.getClass().getSimpleName());
         }
-        if (conf == null || rs == null) return new Result(Outcome.NOTHING, "");   // redis, o rspamd con redis, non c'e'
+        if (conf == null || rs == null) return new Result(Outcome.NOTHING, "");   // redis, or rspamd with redis, is not there
         boolean member = sv.isMember(GROUP, RSPAMD);
         boolean isFinal = conf.contains(FINAL), isMid = !isFinal && conf.contains(MID);
         if (isFinal && NEW_RSPAMD.equals(rs) && member) return new Result(Outcome.NOTHING, "");
@@ -125,7 +126,7 @@ public final class RedisSocket {
         if (before < 0) return new Result(Outcome.LEFT, "redis does not answer now: nothing changed");
         if (!sv.rspamdScans()) return new Result(Outcome.LEFT, "rspamd does not scan a message now: nothing changed");
         try {
-            // 1. redis anche sul socket; rspamd nel gruppo redis.
+            // 1. redis on the socket too; rspamd in the redis group.
             if (fromOld) {
                 sv.write(redisConf, conf + (conf.endsWith("\n") ? "" : "\n") + "\n" + MID);
                 if (!sv.restartRedis() || !sv.socketReady())
@@ -133,12 +134,12 @@ public final class RedisSocket {
                 if (before > 0 && sv.keys() == 0)
                     return back(sv, redisConf, conf, rspamdRedis, rs, member, "redis restarted without its data");
             } else if (!sv.socketReady() && (!sv.restartRedis() || !sv.socketReady())) {
-                // Il file aveva gia' il socket, ma redis non l'aveva aperto (un avvio interrotto a meta').
+                // The file already had the socket, but redis had not opened it (a startup interrupted halfway).
                 return back(sv, redisConf, conf, rspamdRedis, rs, member, "redis does not answer on " + SOCKET + " (redis, 0770)");
             }
             if (!member && !sv.setMember(GROUP, RSPAMD, true))
                 return back(sv, redisConf, conf, rspamdRedis, rs, member, "rspamd could not be added to the group " + GROUP);
-            // 2. rspamd sul socket.
+            // 2. rspamd on the socket.
             if (!NEW_RSPAMD.equals(rs)) sv.write(rspamdRedis, NEW_RSPAMD);
             if (!sv.restartRspamd())
                 return back(sv, redisConf, conf, rspamdRedis, rs, member, "rspamd does not scan a message on the socket");
@@ -149,7 +150,7 @@ public final class RedisSocket {
         }
         if (isFinal && !sv.tcpListening())
             return new Result(Outcome.DONE, "rspamd talks to redis through " + SOCKET + " (redis, 0770; rspamd in the group redis)");
-        // 3. Via la porta. Da qui lo stato di mezzo funziona: un errore ci torna, l'avvio dopo riprende.
+        // 3. The port goes. From here on the in-between state works: an error returns to it, the next startup resumes.
         String withMid;
         try {
             withMid = EnglishComments.english(sv.read(redisConf));
@@ -188,15 +189,16 @@ public final class RedisSocket {
                 why + (ok ? ": everything as it was" : "; and putting it back failed"));
     }
 
-    // ===================== Il server vero =====================
+    // ===================== The production server =====================
 
     static final String REDIS_CLI = "/usr/local/bin/redis-cli";
 
     /**
-     * I clienti di redis collegati dal socket, dall'uscita di CLIENT LIST: una riga per cliente, e il campo addr col
-     * percorso del socket. Il campo si cerca col suo nome intero: ogni riga ha anche laddr, che per un cliente del
-     * socket e' lo stesso percorso, e cercando solo «addr=...» la sola connessione di chi chiede contava due volte
-     * (misurato sulla VM il 16/11/2026: col guasto vero, rspamd respinto con «Permission denied», la prova passava). Pura.
+     * The redis clients connected through the socket, from the output of CLIENT LIST: one line per client, and the
+     * addr field with the socket path. The field is looked up by its whole name: every line also has laddr, which
+     * for a socket client is the same path, and looking up just "addr=..." counted the single connection of the
+     * one asking twice (measured on the VM on 2026-11-16: with the real fault, rspamd rejected with "Permission
+     * denied", the test passed). Pure.
      */
     static int socketClients(String clientList) {
         int n = 0;
@@ -211,7 +213,7 @@ public final class RedisSocket {
         return n;
     }
 
-    /** Il comando per chiedere qualcosa a redis: dal socket se c'e', se no dalla porta di sempre. */
+    /** The command to ask redis something: through the socket if it exists, otherwise through the usual port. */
     static String cli() {
         return Files.exists(Path.of(SOCKET), LinkOption.NOFOLLOW_LINKS) ? REDIS_CLI + " -s " + SOCKET : REDIS_CLI;
     }
@@ -267,7 +269,8 @@ public final class RedisSocket {
                 }
             }
             @Override public boolean rspamdOnSocket() {
-                // Dopo un messaggio rspamd tiene aperte le sue connessioni; chi chiede la lista e' una di quelle sul socket.
+                // After a message rspamd keeps its connections open; whoever asks for the list is one
+                // of those on the socket.
                 for (int i = 0; i < 10; i++) {
                     RspamdUser.scan();
                     String list = Shell.run(Duration.ofSeconds(10), REDIS_CLI, "-s", SOCKET, "CLIENT", "LIST").outputTrim();
@@ -291,7 +294,7 @@ public final class RedisSocket {
         };
     }
 
-    /** All'avvio della parte root, dopo RspamdUser. */
+    /** At root part startup, after RspamdUser. */
     public static void ensureAtBoot() {
         try {
             if (!Files.isExecutable(Path.of(REDIS_CLI))) return;

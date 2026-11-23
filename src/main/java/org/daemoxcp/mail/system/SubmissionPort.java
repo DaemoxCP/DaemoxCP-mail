@@ -10,23 +10,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Rende la porta 465 una vera porta di sottomissione, aggiungendo a master.cf la riga che
- * rifiuta chi non si e' autenticato.
+ * Makes port 465 a real submission port, adding to master.cf the line that
+ * rejects whoever has not authenticated.
  *
- * Perche' serve, verificato sulle specifiche e non a intuito:
- *  - RFC 8314 §3.3: il servizio "submissions" sulla 465 da' accesso a un Message Submission
- *    Agent secondo RFC 6409, e le regole degli MSA valgono anche per quella porta.
- *  - RFC 6409 §4.3 ("Require Authentication"): l'MSA DEVE rifiutare il comando MAIL se la
- *    sessione non e' stata autenticata.
+ * Why it is needed, verified against the specifications and not by intuition:
+ *  - RFC 8314 Section 3.3: the "submissions" service on 465 gives access to a Message Submission
+ *    Agent according to RFC 6409, and the rules for MSAs apply to that port too.
+ *  - RFC 6409 Section 4.3 ("Require Authentication"): the MSA MUST reject the MAIL command if the
+ *    session has not been authenticated.
  *
- * Oggi la voce smtps ha smtpd_sasl_auth_enable=yes, che ABILITA l'autenticazione ma non la
- * RICHIEDE: chi non si autentica viene servito lo stesso, come sulla porta 25. La differenza
- * non si vede finche' qualcuno non se ne accorge.
+ * Today the smtps entry has smtpd_sasl_auth_enable=yes, which ENABLES authentication but does not
+ * REQUIRE it: whoever does not authenticate is served anyway, as on port 25. The difference
+ * goes unseen until someone notices it.
  *
- * Attenzione all'asimmetria: la stessa riga sulla porta 25 fermerebbe tutta la posta in
- * arrivo, perche' e' li' che i server del mondo consegnano senza autenticarsi. Per questo
- * qui si tocca UNA sola voce, individuata dal primo campo della riga e non cercando la
- * parola "smtps" nel file: quella parola compare anche dentro le opzioni (syslog_name).
+ * Beware of the asymmetry: the same line on port 25 would stop all incoming mail,
+ * because that is where the servers of the world deliver without authenticating. That is why
+ * only ONE entry is touched here, identified by the first field of the line and not by searching
+ * for the word "smtps" in the file: that word also appears inside the options (syslog_name).
  */
 public class SubmissionPort {
 
@@ -34,32 +34,34 @@ public class SubmissionPort {
     private static final String MASTER = "/usr/local/etc/postfix/master.cf";
     private static final String COPY = "/var/db/daemoxcp-mail/master.cf-before-465";
 
-    /** I nomi con cui la porta 465 puo' comparire in master.cf. */
+    /** The names under which port 465 can appear in master.cf. */
     private static final List<String> NAMES = List.of("smtps", "submissions");
 
     private SubmissionPort() {}
 
-    /* ===================================================================
-     * La parte che si puo' provare senza server
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The part that can be tested without a server
+     * ===================================================================
+     */
 
     public enum Outcome { ADDED, ALREADY_PRESENT, ENTRY_MISSING }
 
     public static class Change {
         public Outcome outcome;
-        public String content;   // il file nuovo, solo quando esito == ADDED
-        public String entry;        // il nome trovato: smtps oppure submissions
-        public int line;           // dove comincia la voce, per poterlo dire
-        public String already;         // la restrizione gia' presente, quando c'e'
+        public String content;   // the new file, only when outcome == ADDED
+        public String entry;        // the name found: smtps or submissions
+        public int line;           // where the entry starts, so it can be reported
+        public String already;         // the restriction already present, when there is one
     }
 
     /**
-     * Aggiunge la restrizione alla voce della 465, e a nessun'altra.
+     * Adds the restriction to the 465 entry, and to no other.
      *
-     * Il riconoscimento guarda il PRIMO CAMPO di una riga non indentata: in master.cf le
-     * righe che cominciano con uno spazio sono opzioni della voce precedente, e una riga che
-     * comincia con '#' e' commentata. Cercare la parola "smtps" nel testo prenderebbe anche
-     * "-o syslog_name=postfix/smtps", che e' un'opzione, non una voce.
+     * The recognition looks at the FIRST FIELD of a non-indented line: in master.cf the
+     * lines that start with a space are options of the previous entry, and a line that
+     * starts with '#' is commented out. Searching for the word "smtps" in the text would also catch
+     * "-o syslog_name=postfix/smtps", which is an option, not an entry.
      */
     public static Change addRestriction(String masterCf) {
         Change m = new Change();
@@ -70,23 +72,23 @@ public class SubmissionPort {
         for (int i = 0; i < lines.length; i++) {
             String r = lines[i];
             if (r.isEmpty() || Character.isWhitespace(r.charAt(0))) continue;  // opzione
-            if (r.startsWith("#")) continue;                                   // commentata
+            if (r.startsWith("#")) continue;                                   // commented out
             String first = r.trim().split("\\s+")[0];
             if (NAMES.contains(first)) { start = i; m.entry = first; break; }
         }
         if (start < 0) { m.outcome = Outcome.ENTRY_MISSING; return m; }
         m.line = start + 1;
 
-        // Le opzioni della voce: le righe indentate che seguono, fino alla prossima voce.
+        // The options of the entry: the indented lines that follow, up to the next entry.
         int end = start + 1;
         while (end < lines.length && !lines[end].isEmpty()
                 && Character.isWhitespace(lines[end].charAt(0))) end++;
 
-        // Si accettano ENTRAMBE le forme. Dei due script di installazione del pannello, uno
-        // scrive "smtpd_recipient_restrictions=permit_sasl_authenticated,reject" su questa
-        // voce e l'altro non scrive niente: cercare solo la forma "client" avrebbe fatto
-        // aggiungere una riga ridondante a un server gia' a posto, e avrebbe fatto dire al
-        // pannello che la porta era aperta quando non lo era.
+        // BOTH forms are accepted. Of the panel's two installation scripts, one
+        // writes "smtpd_recipient_restrictions=permit_sasl_authenticated,reject" on this
+        // entry and the other writes nothing: looking only for the "client" form would have
+        // added a redundant line to a server that was already fine, and would have made the
+        // panel say that the port was open when it was not.
         for (int i = start; i < end; i++) {
             String compact = lines[i].replace(" ", "");
             if (compact.contains("smtpd_client_restrictions=")
@@ -107,11 +109,13 @@ public class SubmissionPort {
         return m;
     }
 
-    /* ===================================================================
-     * La parte che tocca il server
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The part that touches the server
+     * ===================================================================
+     */
 
-    /** Legge lo stato senza cambiare niente. */
+    /** Reads the state without changing anything. */
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
         try {
@@ -125,8 +129,8 @@ public class SubmissionPort {
              .put("state", m.outcome.name())
              .put("restriction", RESTRICTION);
 
-            // La verifica che non si da' per scontata: se le restrizioni venissero valutate
-            // PRIMA dell'autenticazione, la riga rifiuterebbe anche gli utenti legittimi.
+            // The check that is not taken for granted: if the restrictions were evaluated
+            // BEFORE authentication, the line would also reject legitimate users.
             RunResult d = run("postconf", "-h", "smtpd_delay_reject");
             String value = d.output.trim();
             r.put("delayReject", value).put("delayRejectRead", d.code == 0);
@@ -145,8 +149,8 @@ public class SubmissionPort {
     }
 
     /**
-     * Applica la modifica. Copia di sicurezza, scrittura, postfix check, reload, e se
-     * qualcosa non torna si rimette il file di prima e si ricarica di nuovo.
+     * Applies the change. Backup copy, write, postfix check, reload, and if
+     * something does not add up the previous file is put back and it reloads again.
      */
     public static JSONObject apply() {
         JSONObject r = new JSONObject();
@@ -161,8 +165,8 @@ public class SubmissionPort {
             if ("ENTRY_MISSING".equals(state))
                 return r.put("success", false).put("error", st.optString("note"));
 
-            // Il controllo che vale piu' di tutti: senza delay_reject a "yes" la riga
-            // rifiuterebbe anche chi si autentica, perche' verrebbe valutata prima dell'AUTH.
+            // The check that matters most of all: without delay_reject set to "yes" the line
+            // would also reject whoever authenticates, because it would be evaluated before AUTH.
             if (!st.optBoolean("safe", false))
                 return r.put("success", false)
                         .put("error", st.optBoolean("delayRejectRead", false)
@@ -197,7 +201,7 @@ public class SubmissionPort {
                         .put("error", I18n.tr("server.subm.reloadFailed", java.util.Map.of("out", String.valueOf(reload.output.trim()))));
             }
 
-            // Non basta che i comandi non abbiano protestato: si rilegge e si guarda.
+            // It is not enough that the commands did not complain: the file is read again and checked.
             Change after = addRestriction(Files.readString(p));
             if (after.outcome != Outcome.ALREADY_PRESENT)
                 return r.put("success", false)

@@ -1,8 +1,8 @@
-// The FreeBSD patches on the TEST VM panel, as a person would do them, one step at a time (reperto 196).
+// The FreeBSD patches on the TEST VM panel, as a person would do them, one step at a time (finding 196).
 //
 // Phase "install": sign in, Updates; if no patch is waiting, "Search for updates" at the top; the FreeBSD row then says
 // which patches are ready, without a button of its own: the patches are the first step of "Update everything", at the
-// top (reperto 207); the panel's confirmation; the progress in one line, the details closed; at the end the outcome
+// top (finding 207); the panel's confirmation; the progress in one line, the details closed; at the end the outcome
 // with what is installed and the restart left, and the FreeBSD row says it too, with the restart's button. Diagnostics,
 // Operation logs: Update everything, completed, with its log on disk. Then the restart from the panel's window, in one
 // minute. Other updates waiting on the VM go in the same job, after the patches.

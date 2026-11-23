@@ -12,24 +12,24 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * L'installazione completa su un server dove il pannello e' gia' partito: i pacchetti protetti
- * si sbloccano prima, con l'elenco salvato, e si riproteggono alla fine, anche se fallisce.
+ * The full installation on a server where the panel has already started: the locked packages
+ * are unlocked first, with the list saved, and locked again at the end, even if it fails.
  *
- * Perche' esiste: misurato il 05/11/2026 sulla VM FreeBSD 15.1 (reperto 126). All'avvio il
- * pannello protegge con pkg lock i pacchetti dello stack di posta (39 su quella macchina,
- * UpdateManager.applyLockPolicy). La reinstallazione dal menu lanciava lo script senza
- * toccarli: la fase 1 fermava dovecot, rspamd, clamav, redis, nginx e php-fpm e cancellava le
- * loro configurazioni, la fase 2 si fermava su «mysql84-server-8.4.11_4 is locked and may not be
- * modified», lo script usciva 1 e la posta restava spenta (dovecot e nginx non ripartivano
- * nemmeno a mano, senza configurazione). Rilanciata dopo pkg unlock -a -y, riusciva.
+ * Why it exists: measured on 2026-11-05 on the FreeBSD 15.1 VM (finding 126). At startup the
+ * panel locks the packages of the mail stack with pkg lock (39 on that machine,
+ * UpdateManager.applyLockPolicy). The reinstallation from the menu launched the script without
+ * touching them: phase 1 stopped dovecot, rspamd, clamav, redis, nginx and php-fpm and deleted
+ * their configurations, phase 2 stopped on "mysql84-server-8.4.11_4 is locked and may not be
+ * modified", the script exited 1 and mail stayed down (dovecot and nginx would not even restart
+ * by hand, without a configuration). Launched again after pkg unlock -a -y, it succeeded.
  *
- * Lo sblocco segue le regole dei lavori sui pacchetti (PackageQueue): il turno prima di tutto,
- * anche contro un altro processo del pannello; l'elenco su disco PRIMA di sbloccare, cosi' se il
- * processo muore a meta' il prossimo avvio riprotegge; e se qualcosa non va prima dello script
- * si rimette tutto com'era e non si ferma niente. Si sbloccano TUTTI i pacchetti protetti, non
- * solo quelli dello stack: pkg install puo' dover aggiornare anche una dipendenza, e una
- * dipendenza bloccata ferma la fase 2 nello stesso modo. Alla fine si riprotegge esattamente
- * quell'elenco, cioe' lo stato di prima, comprese le protezioni messe a mano.
+ * The unlocking follows the rules of package jobs (PackageQueue): the package turn before
+ * anything else, even against another panel process; the list on disk BEFORE unlocking, so that
+ * if the process dies halfway the next startup locks them again; and if something goes wrong
+ * before the script, everything is put back as it was and nothing is stopped. ALL the locked
+ * packages are unlocked, not only those of the stack: pkg install may need to upgrade a
+ * dependency too, and a locked dependency stops phase 2 in the same way. At the end exactly
+ * that list is locked again, that is the previous state, including locks set by hand.
  */
 public final class InstallLocks {
 
@@ -37,12 +37,12 @@ public final class InstallLocks {
 
     private InstallLocks() {}
 
-    /** Il prefisso del turno della reinstallazione completa, scritto nel record del lavoro (turnId). */
+    /** The prefix of the full reinstallation's turn, written in the job's record (turnId). */
     public static final String REINSTALL_TURN_PREFIX = "reinstall-";
 
-    /** I comandi di pkg che servono qui. Nelle prove un finto, per i guasti che pkg vero non da'. */
+    /** The pkg commands needed here. In tests a fake one, for the faults that the real pkg does not produce. */
     interface Pkg {
-        /** I pacchetti protetti, un nome-versione per riga ("" se nessuno), o null se pkg non risponde. */
+        /** The locked packages, one name-version per line ("" if none), or null if pkg does not answer. */
         String lockList();
         boolean unlock(String name);
         boolean lock(String name);
@@ -50,12 +50,12 @@ public final class InstallLocks {
     }
 
     /**
-     * La lettura dei protetti e' "pkg query -e '%k = 1' '%n-%v'", non "pkg lock -l -q".
-     * Misurato sulla VM il 05/11/2026 (pkg 2.8.4, su una copia del database): quando non c'e'
-     * nessun pacchetto protetto, "pkg lock -l -q" esce con 1 e non scrive niente, cioe' come un
-     * errore; la query esce 0 con l'elenco o vuota, e 1 solo col database rotto. Con lock -l, su
-     * un server senza protezioni (un'installazione da zero) la reinstallazione si sarebbe
-     * rifiutata dicendo che pkg non risponde.
+     * Reading the locked packages is "pkg query -e '%k = 1' '%n-%v'", not "pkg lock -l -q".
+     * Measured on the VM on 2026-11-05 (pkg 2.8.4, on a copy of the database): when there is
+     * no locked package, "pkg lock -l -q" exits with 1 and writes nothing, that is like an
+     * error; the query exits 0 with the list or empty, and 1 only with a broken database. With
+     * lock -l, on a server without locks (a clean install) the reinstallation would have
+     * refused, saying that pkg does not answer.
      */
     static Pkg real() {
         return new Pkg() {
@@ -71,8 +71,8 @@ public final class InstallLocks {
     }
 
     /**
-     * Il turno preso e i pacchetti sbloccati. Si chiude con {@link #finish}, sempre: e' li' che
-     * si riprotegge e si rilascia il turno.
+     * The turn taken and the unlocked packages. It is always closed with {@link #finish}: that is
+     * where the packages are locked again and the turn is released.
      */
     public static final class Held {
         final String turnId;
@@ -84,28 +84,28 @@ public final class InstallLocks {
             this.unlocked = List.copyOf(unlocked);
         }
 
-        /** I pacchetti sbloccati, da riproteggere alla fine. */
+        /** The unlocked packages, to lock again at the end. */
         public List<String> unlocked() { return unlocked; }
     }
 
     /**
-     * L'esito della preparazione: o il turno preso ({@code held} non null, e {@code report} dice
-     * che cosa e' stato sbloccato), o il rifiuto ({@code refusal} non null): in quel caso non e'
-     * stato cambiato niente, o e' stato rimesso com'era, e lo script non deve partire.
+     * The outcome of the preparation: either the turn taken ({@code held} not null, and {@code report}
+     * says what was unlocked), or the refusal ({@code refusal} not null): in that case nothing was
+     * changed, or it was put back as it was, and the script must not start.
      */
     public record Start(Held held, String refusal, String report) {}
 
-    /** Prende il turno e sblocca i pacchetti protetti, prima che lo script fermi qualcosa. */
+    /** Takes the turn and unlocks the locked packages, before the script stops anything. */
     public static Start prepare(String description) {
         return prepare(description, real(), () -> null);
     }
 
     /**
-     * Come {@link #prepare(String)}, con un passo in mezzo: {@code onTurn} gira col turno gia' preso
-     * e PRIMA di qualunque sblocco. E' il posto della via di ritorno (PackageWayBack): un boot
-     * environment fatto qui ha i pacchetti protetti com'erano e nessun elenco di sblocchi aperto,
-     * quindi ripartire da li' e' ripartire dal server di prima. Se {@code onTurn} restituisce un
-     * motivo, non si sblocca niente, il turno si rilascia e il motivo e' il rifiuto.
+     * Like {@link #prepare(String)}, with a step in the middle: {@code onTurn} runs with the turn already
+     * taken and BEFORE any unlocking. It is the place for the way back (PackageWayBack): a boot
+     * environment made here has the locked packages as they were and no open unlock list,
+     * so starting again from there is starting again from the previous server. If {@code onTurn}
+     * returns a reason, nothing is unlocked, the turn is released and the reason is the refusal.
      */
     public static Start prepare(String description, java.util.function.Supplier<String> onTurn) {
         return prepare(description, real(), onTurn);
@@ -116,12 +116,12 @@ public final class InstallLocks {
     }
 
     static Start prepare(String description, Pkg pkg, java.util.function.Supplier<String> onTurn) {
-        // "reinstall-": lo riconosce l'avviso di un lavoro interrotto (PackageRecovery), che per la
-        // reinstallazione dice anche che la posta puo' essere spenta e dov'e' la via di ritorno.
-        // "install-" lo usa gia' l'installazione di un pacchetto dalla pagina web.
+        // "reinstall-": it is recognised by the notice of an interrupted job (PackageRecovery), which for the
+        // reinstallation also says that mail may be down and where the way back is.
+        // "install-" is already used by the installation of a package from the web page.
         String id = REINSTALL_TURN_PREFIX + System.nanoTime();
-        // take, non takeForLocks: con l'elenco di un lavoro interrotto su disco i pacchetti
-        // potrebbero essere gia' sbloccati, e un elenco nuovo non si potrebbe nemmeno scrivere.
+        // take, not takeForLocks: with the list of an interrupted job on disk the packages
+        // might already be unlocked, and a new list could not even be written.
         String refusal = PackageQueue.take(id, description);
         if (refusal != null) return new Start(null, refusal, "");
         String notNow;
@@ -146,7 +146,7 @@ public final class InstallLocks {
             locked = new ArrayList<>(UpdateManager.lockedNames(before));
             if (locked.isEmpty()) return new Start(new Held(id, locked), null, I18n.tr("server.reinstall.noLocks"));
 
-            // Prima l'elenco su disco, poi lo sblocco: se l'elenco non si scrive, non si sblocca.
+            // First the list on disk, then the unlocking: if the list cannot be written, nothing is unlocked.
             String stateError = PackageQueue.writeState(locked);
             if (stateError != null) {
                 PackageQueue.release(id);
@@ -155,8 +155,8 @@ public final class InstallLocks {
             listWritten = true;
             for (String n : locked) pkg.unlock(n);
 
-            // L'uscita di pkg unlock non basta: si rilegge. Un pacchetto rimasto protetto
-            // fermerebbe la fase 2 a servizi gia' spenti, cioe' proprio il difetto da evitare.
+            // The output of pkg unlock is not enough: the locks are read again. A package left locked
+            // would stop phase 2 with the services already stopped, that is exactly the defect to avoid.
             String after = pkg.lockList();
             Set<String> still = after == null ? new TreeSet<>(locked) : stillAmong(locked, after);
             if (!still.isEmpty()) {
@@ -178,9 +178,9 @@ public final class InstallLocks {
     }
 
     /**
-     * Riprotegge i pacchetti sbloccati da {@link #prepare}, rimette in pari la traccia dei blocchi
-     * (la nota e le annotazioni: reinstallare un pacchetto gli cancella l'annotazione) e rilascia
-     * il turno. Da chiamare in un finally. Non lancia: restituisce cosa e' successo.
+     * Locks again the packages unlocked by {@link #prepare}, brings the lock tracking back in line
+     * (the note and the annotations: reinstalling a package deletes its annotation) and releases
+     * the turn. To be called in a finally. Does not throw: returns what happened.
      */
     public static String finish(Held held) {
         return finish(held, real(), true);
@@ -201,9 +201,9 @@ public final class InstallLocks {
     }
 
     /**
-     * Riprotegge 'names', poi rilegge le protezioni e chiude l'elenco su disco solo se ogni
-     * pacchetto ancora installato e' di nuovo protetto. Uno che l'installazione ha tolto non si
-     * puo' proteggere, e non tiene aperto l'elenco: lo stesso criterio del ripristino all'avvio.
+     * Locks 'names' again, then re-reads the locks and closes the list on disk only if every
+     * package still installed is locked again. One that the installation removed cannot be
+     * locked, and does not keep the list open: the same criterion as the recovery at startup.
      */
     static String relock(List<String> names, Pkg pkg) {
         List<String> gone = new ArrayList<>(), kept = new ArrayList<>();
@@ -228,7 +228,7 @@ public final class InstallLocks {
                         "n", String.valueOf(kept.size()), "list", String.join(", ", gone)));
     }
 
-    /** Quali di 'names' risultano ancora protetti nell'elenco dei protetti. */
+    /** Which of 'names' still show up as locked in the list of locked packages. */
     private static Set<String> stillAmong(List<String> names, String lockOutput) {
         Set<String> now = UpdateManager.lockedNames(lockOutput), r = new TreeSet<>();
         for (String n : names) if (now.contains(n)) r.add(n);

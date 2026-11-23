@@ -14,27 +14,27 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Postfix come MTA locale sui server installati PRIMA che l'installatore lo facesse.
+ * Postfix as the local MTA on servers installed BEFORE the installer did it.
  *
- * L'installatore lo fa dalla PR #60 (scripts/LocalMtaScript): un server installato prima ha
- * ancora /usr/local/etc/mail/mailer.conf assente, quindi la posta di sistema (cron, periodic,
- * il mail() di PHP) esce da dma, senza DKIM e senza TLS. All'avvio il pannello lo corregge, come
- * gia' fa con /etc/aliases (PostfixAliasesManager.ensureAtBoot, che gira prima di questo e quindi
- * lascia gia' costruito aliases.db).
+ * The installer does it since PR #60 (scripts/LocalMtaScript): a server installed before still
+ * has no /usr/local/etc/mail/mailer.conf, so system mail (cron, periodic, PHP's mail()) goes
+ * out through dma, without DKIM and without TLS. At startup the panel fixes it, as it already does
+ * with /etc/aliases (PostfixAliasesManager.ensureAtBoot, which runs before this one and so leaves
+ * aliases.db already built).
  *
- * L'ordine e' quello misurato nei reperti (punti 66-68), e conta: se si attiva mailer.conf
- * mentre gli indirizzi senza dominio diventano un dominio che non e' locale (myorigin =
- * $mydomain, il nome del server, con mydestination = localhost), Postfix spedisce "root" a se
- * stesso e lo rimbalza, rimbalzo compreso: la posta di sistema sparisce. Quindi:
- *  - se myorigin e' gia' locale, si attiva e basta;
- *  - se non lo e' ma localhost e' in mydestination, prima myorigin = localhost (con
- *    smtp_generic_maps per la posta che esce, se nessuno l'ha gia' impostato), poi si attiva;
- *  - se la consegna locale e' spenta (local_transport = error:, lo scriveva lo script «all») o
- *    non c'e' nessun dominio locale, NON si attiva: con dma la posta di sistema almeno arriva in
- *    /var/mail/root, con Postfix rimbalzerebbe. Lo si dice nel log, con il motivo.
- * Non si tocca mai mydestination: allargarla aprirebbe gli account di sistema a Internet.
+ * The order is the one measured in the findings (points 66-68), and it matters: if mailer.conf is
+ * activated while addresses without a domain become a domain that is not local (myorigin =
+ * $mydomain, the server name, with mydestination = localhost), Postfix sends "root" to itself
+ * and bounces it, bounce included: system mail disappears. Therefore:
+ *  - if myorigin is already local, it is simply activated;
+ *  - if it is not but localhost is in mydestination, first myorigin = localhost (with
+ *    smtp_generic_maps for outgoing mail, if nobody has set it already), then it is activated;
+ *  - if local delivery is off (local_transport = error:, written by the "all" script) or
+ *    there is no local domain, it is NOT activated: with dma system mail at least arrives in
+ *    /var/mail/root, with Postfix it would bounce. This is said in the log, with the reason.
+ * mydestination is never touched: widening it would open the system accounts to the Internet.
  *
- * Si puo' ripetere: con mailer.conf gia' giusto non fa niente.
+ * It can be repeated: with mailer.conf already right it does nothing.
  */
 public final class LocalMtaRepair {
 
@@ -55,8 +55,8 @@ public final class LocalMtaRepair {
     record Decision(Action action, String reason) {}
 
     /**
-     * Che cosa fare, a partire da quello che c'e'. Separata dal sistema per poterla provare:
-     * myorigin e mydestination arrivano gia' espansi (postconf -x).
+     * What to do, starting from what is there. Separate from the system so that it can be tested:
+     * myorigin and mydestination arrive already expanded (postconf -x).
      */
     static Decision decide(boolean postfixInstalled, String mailerConf,
                            String myorigin, String mydestination, String localTransport) {
@@ -82,7 +82,7 @@ public final class LocalMtaRepair {
                 + (mydestination == null ? "" : mydestination.trim()) + "): left on dma");
     }
 
-    /** All'avvio del pannello. Non lancia eccezioni: dice tutto nel log. */
+    /** At panel startup. It throws no exceptions: it says everything in the log. */
     public static void ensureAtBoot() {
         try {
             boolean installed = Files.isExecutable(Path.of(POSTFIX_SENDMAIL));

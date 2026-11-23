@@ -14,18 +14,20 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 /**
- * La politica MTA-STS la legge nginx, che gira come www: cartella 0755 e file 0644, scritti e non lasciati all'umask.
+ * The MTA-STS policy is read by nginx, which runs as www: folder 0755 and file 0644, set explicitly, not left
+ * to the umask.
  *
- * Il servizio del pannello gira con umask 077. Su un server installato da poco la cartella della politica nasceva 0700
- * e il file 0600, di root: nginx rispondeva 403 a /.well-known/mta-sts.txt, e «Set up everything» si fermava alla
- * configurazione della porta 443 dicendo solo che la politica non tornava (reperto 250, misurato sulla VM pulita il
- * 16/11/2026, seguendo la guida d'installazione). Il server vero non lo mostrava: la sua cartella era nata prima.
+ * The panel's service runs with umask 077. On a freshly installed server the policy folder was created 0700
+ * and the file 0600, owned by root: nginx answered 403 to /.well-known/mta-sts.txt, and "Set up everything"
+ * stopped at the configuration of port 443 saying only that the policy did not match (finding 250, measured on
+ * the clean VM on 2026-11-16, following the installation guide). The production server did not show it: its
+ * folder had been created earlier.
  *
- * Il contenuto e' pubblico per costruzione: lo legge chiunque su https://mta-sts.dominio/.well-known/mta-sts.txt, e
- * non contiene niente di segreto. La cartella resta di root: nessun altro ci scrive.
+ * The content is public by construction: anyone reads it at https://mta-sts.domain/.well-known/mta-sts.txt,
+ * and it contains nothing secret. The folder stays owned by root: nobody else writes in it.
  *
- * Mai attraverso un collegamento: i permessi si cambiano senza seguirli (un collegamento al posto della cartella o del
- * file si lascia com'e' e si dice), e il file si scrive accanto e si rinomina al suo posto.
+ * Never through a link: the permissions are changed without following links (a link in place of the folder or
+ * of the file is left as it is and reported), and the file is written alongside and renamed into place.
  */
 public final class PublicPolicyAccess {
 
@@ -40,7 +42,7 @@ public final class PublicPolicyAccess {
 
     private PublicPolicyAccess() {}
 
-    /** Scrive la politica: un file nuovo accanto, coi permessi giusti, poi rinominato al suo posto. */
+    /** Writes the policy: a new file alongside, with the right permissions, then renamed into place. */
     static void write(Path dir, Path file, String text) throws IOException {
         Files.createDirectories(dir);
         PosixFileAttributes d = attributes(dir);
@@ -55,8 +57,8 @@ public final class PublicPolicyAccess {
     }
 
     /**
-     * I server su cui la politica e' gia' stata scritta con l'umask del servizio: cartella e file ai permessi giusti.
-     * Niente da fare se mancano o sono gia' giusti.
+     * The servers on which the policy was already written with the service's umask: folder and file set to the
+     * right permissions. Nothing to do if they are missing or already right.
      */
     static Report repair(Path dir, Path file) throws IOException {
         PosixFileAttributes d = attributes(dir);
@@ -93,7 +95,7 @@ public final class PublicPolicyAccess {
         }
     }
 
-    /** Gli attributi senza seguire un collegamento, o null se il percorso non c'e'. */
+    /** The attributes without following a link, or null if the path does not exist. */
     private static PosixFileAttributes attributes(Path p) throws IOException {
         if (!Files.exists(p, LinkOption.NOFOLLOW_LINKS)) return null;
         return Files.readAttributes(p, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);

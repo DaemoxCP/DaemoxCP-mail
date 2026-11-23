@@ -8,7 +8,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 /**
- * The once-only change of the panel's MySQL password (reperto 232) against a REAL MySQL, the test one, as its root:
+ * The once-only change of the panel's MySQL password (finding 232) against a REAL MySQL, the test one, as its root:
  * the catalog statements (PDP_ACCOUNTS, PDP_RETAIN, PDP_SET, PDP_DISCARD) and the logins are MySQL's, not a fake's.
  * A test user with two local accounts (localhost and 127.0.0.1) and the same password, as the installer makes them.
  *

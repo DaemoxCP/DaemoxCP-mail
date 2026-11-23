@@ -22,7 +22,7 @@ import java.util.Map;
  * and the move to English every file must be identical byte for byte to today's, with the same
  * permissions; a second pass must find nothing; the administrator's lines, a file that is not there
  * and a damaged line that is not a comment stay as they are. The effect on the real files is
- * measured by the test on the VM (reperti).
+ * measured by the test on the VM (findings).
  *
  *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.CommentRepairTest
  */

@@ -10,19 +10,19 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * rspamd tutto con l'utente rspamd, anche il processo principale.
+ * rspamd entirely with the rspamd user, the main process too.
  *
- * Misurato il 07/11/2026 sul server vero: "rspamd: main process" gira da root, i worker come rspamd.
- * Dal sorgente di rspamd (src/rspamd.c, detect_priv; src/libserver/worker_util.c): da root il processo
- * principale apre le porte, prepara i log e cede i privilegi solo ai worker con -u/-g; avviato
- * direttamente da un utente qualunque gira con quello, e -u/-g non contano. Qui root non serve a niente:
- * le porte sono 11332-11334 (sopra la 1023), e pid, log e database (/var/run/rspamd, /var/log/rspamd,
- * /var/db/rspamd) sono gia' di rspamd. Lo script rc.d del port usa rc.subr, che con rspamd_user avvia il
- * comando come quell'utente (su -m): e' il modo previsto, senza toccare lo script.
+ * Measured on 2026-11-07 on the production server: "rspamd: main process" runs as root, the workers as rspamd.
+ * From the rspamd source (src/rspamd.c, detect_priv; src/libserver/worker_util.c): as root the main process
+ * opens the ports, prepares the logs and drops privileges only for the workers with -u/-g; started directly
+ * by any user it runs as that user, and -u/-g do not count. Here root is of no use: the ports are
+ * 11332-11334 (above 1023), and pid, logs and databases (/var/run/rspamd, /var/log/rspamd, /var/db/rspamd)
+ * already belong to rspamd. The port's rc.d script uses rc.subr, which with rspamd_user starts the command
+ * as that user (su -m): it is the intended way, without touching the script.
  *
- * Si cambia solo se il processo principale gira da root e rspamd_user non e' gia' scritto. Dopo il
- * riavvio: tutti i processi di rspamd sono suoi, le tre porte ascoltano, il controller risponde e una
- * scansione vera da' un'azione. Se no rspamd_user si toglie e rspamd riparte come prima.
+ * It is changed only if the main process runs as root and rspamd_user is not already written. After the
+ * restart: all of rspamd's processes are its own, the three ports listen, the controller answers and a
+ * real scan gives an action. Otherwise rspamd_user is removed and rspamd restarts as before.
  */
 public final class RspamdUser {
 
@@ -32,13 +32,13 @@ public final class RspamdUser {
     static final String USER = "rspamd";
     static final List<String> PORTS = List.of("127.0.0.1:11332", "127.0.0.1:11333", "127.0.0.1:11334");
 
-    /** Un messaggio qualunque da far analizzare: deve tornare un'azione, qualunque sia. */
+    /** Any message to have analysed: an action must come back, whatever it is. */
     static final String PROBE = "From: probe@daemoxcp-mail.invalid\nTo: probe@daemoxcp-mail.invalid\nSubject: daemoxcp-mail rspamd probe\n"
             + "Message-ID: <rspamd-probe@daemoxcp-mail.invalid>\n\nThis message only checks that rspamd answers.\n";
 
     private RspamdUser() {}
 
-    /** Gli utenti dei processi di rspamd: la riga del processo principale per prima, se c'e'. */
+    /** The users of the rspamd processes: the main process's line first, if there is one. */
     static List<String[]> processes() {
         List<String[]> out = new ArrayList<>();
         for (String l : Shell.run(Duration.ofSeconds(10), "ps", "-axww", "-o", "user=", "-o", "command=").outputTrim().split("\n")) {
@@ -56,7 +56,7 @@ public final class RspamdUser {
     public static void ensureAtBoot() {
         try {
             if (!Files.isExecutable(Path.of("/usr/local/bin/rspamd"))) return;
-            if (!"root".equals(mainUser())) return;   // spento, o gia' con il suo utente
+            if (!"root".equals(mainUser())) return;   // off, or already with its own user
             Shell.Result rcUser = Shell.run(Duration.ofSeconds(10), "sysrc", "-n", "rspamd_user");
             if (rcUser.success() && !rcUser.outputTrim().isEmpty()) {
                 LOGGER.info("[RspamdUser] rspamd_user is already set to '" + rcUser.outputTrim() + "' but the main process runs"
@@ -76,11 +76,11 @@ public final class RspamdUser {
             LOGGER.warning("[RspamdUser] rspamd does not scan a message before any change: left as it is");
             return false;
         }
-        // L'ordine conta. Con rspamd_user scritto, rc.subr manda anche i segnali di stop come quell'utente,
-        // e allora non riesce a fermare il processo principale che gira da root ("kill: No such process"),
-        // e l'avvio trova rspamd "already running". Misurato sulla VM il 07/11/2026. Quindi: si ferma
-        // con l'impostazione di prima, si scrive rspamd_user, si avvia; e per tornare indietro lo stesso
-        // al contrario.
+        // The order matters. With rspamd_user written, rc.subr also sends the stop signals as that user,
+        // and then it cannot stop the main process running as root ("kill: No such process"),
+        // and the start finds rspamd "already running". Measured on the VM on 2026-11-07. So: it is stopped
+        // with the previous setting, rspamd_user is written, it is started; and to go back the same
+        // in reverse.
         if (!stop()) {
             Shell.run(Duration.ofSeconds(120), "service", "rspamd", "start");
             LOGGER.warning("[RspamdUser] NOT_APPLIED: rspamd did not stop within 120 seconds; started again as it was");
@@ -103,7 +103,7 @@ public final class RspamdUser {
         return true;
     }
 
-    /** Ferma rspamd con l'impostazione di adesso e aspetta che il processo principale non ci sia piu'. */
+    /** Stops rspamd with the current setting and waits until the main process is gone. */
     static boolean stop() throws InterruptedException {
         Shell.run(Duration.ofSeconds(120), "service", "rspamd", "stop");
         for (int i = 0; i < 60; i++) {
@@ -113,7 +113,7 @@ public final class RspamdUser {
         return false;
     }
 
-    /** Dopo il riavvio: tutti i processi suoi, le porte aperte, una scansione vera. */
+    /** After the restart: all the processes its own, the ports open, a real scan. */
     static String verify() throws InterruptedException {
         for (int i = 0; i < 30; i++) {
             Thread.sleep(1000);
@@ -133,7 +133,7 @@ public final class RspamdUser {
         return "unreachable";
     }
 
-    /** Una scansione vera sul worker normale: l'azione che rspamd decide, o null. */
+    /** A real scan on the normal worker: the action rspamd decides, or null. */
     static String scan() {
         String out = symbols(PROBE);
         if (out == null) return null;
@@ -142,7 +142,7 @@ public final class RspamdUser {
         return null;
     }
 
-    /** Quello che rspamc dice di quel messaggio, analizzato dal worker normale; null se non si riesce a chiederlo. */
+    /** What rspamc says about that message, analysed by the normal worker; null if it cannot be asked. */
     static String symbols(String message) {
         try {
             Path f = Files.createTempFile(Path.of("/var/tmp"), "rspamd-probe-", ".eml");
@@ -158,8 +158,9 @@ public final class RspamdUser {
     }
 
     /**
-     * Riavvia rspamd con l'impostazione di adesso e aspetta, fino a un minuto, che analizzi un messaggio. Per chi gli
-     * cambia la configurazione o i gruppi: i gruppi di un processo si leggono solo quando parte (RedisSocket, ClamdSocket).
+     * Restarts rspamd with the current setting and waits, up to one minute, for it to analyse a message. For
+     * whoever changes its configuration or groups: a process's groups are read only when it starts (RedisSocket,
+     * ClamdSocket).
      */
     static boolean restart() throws InterruptedException {
         Shell.run(Duration.ofSeconds(180), "service", "rspamd", "restart");
@@ -170,7 +171,7 @@ public final class RspamdUser {
         return false;
     }
 
-    /** I membri di un gruppo, da /etc/group (pw groupshow); vuoto se il gruppo non c'e'. */
+    /** The members of a group, from /etc/group (pw groupshow); empty if the group does not exist. */
     static List<String> members(String group) {
         Shell.Result r = Shell.run(Duration.ofSeconds(10), "pw", "groupshow", group);
         if (!r.success()) return List.of();
@@ -179,7 +180,7 @@ public final class RspamdUser {
         return List.of(f[3].trim().split(","));
     }
 
-    /** Mette o toglie un utente da un gruppo (pw groupmod -m/-d); vero se adesso e' come chiesto. */
+    /** Adds a user to a group or removes it (pw groupmod -m/-d); true if it is now as requested. */
     static boolean setMember(String group, String user, boolean member) {
         Shell.run(Duration.ofSeconds(20), "pw", "groupmod", group, member ? "-m" : "-d", user);
         return members(group).contains(user) == member;

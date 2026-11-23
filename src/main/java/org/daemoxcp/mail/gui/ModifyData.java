@@ -35,7 +35,7 @@ public class ModifyData {
 
     // Hints
     private static final String PORT_HINT = "[0-9] (1-65535)";
-    // Nella lingua della console: si chiedono quando si mostrano, non quando si carica la classe.
+    // In the console language: they are looked up when they are shown, not when the class is loaded.
     private static String hostHint() { return org.daemoxcp.mail.i18n.I18n.tr("console.cfg.hostHint"); }
     private static String pemHint() { return org.daemoxcp.mail.i18n.I18n.tr("console.cfg.pemHint"); }
     private static String prefixHint() { return org.daemoxcp.mail.i18n.I18n.tr("console.cfg.prefixHint"); }
@@ -211,8 +211,8 @@ public class ModifyData {
             errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.certNeeded")).append("\n");
         }
 
-        // Certificato, chiave e catena: il PEM incollato, o letto dal file di cui si e' scritto il percorso; poi il
-        // controllo prima di salvare (reperto 243): leggibile, valido adesso, copre il nome, chiave sua.
+        // Certificate, key and chain: the pasted PEM, or read from the file whose path was written; then the
+        // check before saving (finding 243): readable, valid now, covers the name, its own key.
         resolvedCert = resolve(sslCert, org.daemoxcp.mail.i18n.I18n.tr("console.cfg.certName"), errors);
         resolvedKey = resolve(sslKey, org.daemoxcp.mail.i18n.I18n.tr("console.cfg.keyName"), errors);
         resolvedChain = resolve(panelSslChain.getText().trim(), org.daemoxcp.mail.i18n.I18n.tr("console.cfg.chainName"), errors);
@@ -228,7 +228,10 @@ public class ModifyData {
     private String resolvedCert = "", resolvedKey = "", resolvedChain = "";
     private PemTls.Check certCheck;
 
-    /** Il PEM del campo: com'e', o letto dal file se il campo e' un percorso. "" se vuoto; un errore se il file non va. */
+    /**
+     * The PEM of the field: as it is, or read from the file if the field is a path. "" if empty; an error if the
+     * file does not work.
+     */
     private static String resolve(String text, String what, StringBuilder errors) {
         if (text.isEmpty()) return "";
         if (!PemTls.isPath(text)) return text;

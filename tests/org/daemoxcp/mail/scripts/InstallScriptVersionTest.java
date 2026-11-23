@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * install_mail_server.sh started BY HAND checks that it belongs to the panel version the service
- * uses (InstallScripts, reperto 169), before changing anything.
+ * uses (InstallScripts, finding 169), before changing anything.
  *
  *  A. written by this jar, and the panel service uses another jar: it stops at once, saying so;
  *  B. the service uses this same jar (rc.conf daemoxcp_mail_jar): it passes the check and stops later,

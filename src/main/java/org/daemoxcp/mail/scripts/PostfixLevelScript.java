@@ -3,23 +3,23 @@ package org.daemoxcp.mail.scripts;
 import org.daemoxcp.mail.system.PostfixLevels;
 
 /**
- * Il livello di compatibilita' di Postfix all'installazione: quello che chiede il Postfix installato, se il pannello
- * lo ha esaminato. Lo usano i tre script che scrivono main.cf (FullMailServerScript, FullMailStackScript,
- * PostfixScript), dopo main.cf e prima dell'avvio.
+ * The Postfix compatibility level at installation: the one the installed Postfix asks for, if the panel
+ * has examined it. It is used by the three scripts that write main.cf (FullMailServerScript, FullMailStackScript,
+ * PostfixScript), after main.cf and before startup.
  *
- * main.cf nasce con compatibility_level = 3.6, un pavimento: sotto, mynetworks_style = subnet faceva di tutta la rete
- * del server un relay aperto. Ma il pacchetto installato era Postfix 3.11, che chiede 3.11: la Diagnostica avvisava
- * «Postfix: the level is behind» su un server appena installato dal pannello stesso (misurato sulla VM pulita il
- * 16/11/2026, seguendo la guida d'installazione).
+ * main.cf is created with compatibility_level = 3.6, a floor: below it, mynetworks_style = subnet made the whole
+ * network of the server an open relay. But the installed package was Postfix 3.11, which asks for 3.11: Diagnostics
+ * warned "Postfix: the level is behind" on a server just installed by the panel itself (measured on the clean VM on
+ * 2026-11-16, following the installation guide).
  *
- * Il livello lo dice Postfix: `postfix check` scrive «To disable backwards compatibility use "postconf
- * compatibility_level=N"». Si sale a N solo se N e' fra i livelli di PostfixLevels, dove per ognuno sta cosa cambia;
- * PostfixLevelTest controlla che ogni parametro che cambia sia deciso in main.cf da ciascuno dei tre script, o che non
- * conti (TLS-RPT spento). Cosi' salire non cambia il comportamento della posta: toglie solo la rete e l'avviso. Un
- * livello che il pannello non ha ancora esaminato resta com'e', e lo si dice: la Diagnostica lo mostra, e qualcuno
- * deve leggere cosa cambia prima di salire.
+ * The level is stated by Postfix: `postfix check` writes 'To disable backwards compatibility use "postconf
+ * compatibility_level=N"'. It goes up to N only if N is among the levels of PostfixLevels, where what changes is
+ * written down for each one; PostfixLevelTest checks that every parameter that changes is decided in main.cf by each
+ * of the three scripts, or that it does not matter (TLS-RPT off). So going up does not change how mail behaves: it
+ * only removes the network and the warning. A level that the panel has not examined yet stays as it is, and this is
+ * said: Diagnostics shows it, and someone has to read what changes before going up.
  *
- * PF_SBIN e' la cartella di postfix e postconf: /usr/local/sbin, o quella di una prova.
+ * PF_SBIN is the folder of postfix and postconf: /usr/local/sbin, or the one of a test.
  */
 public final class PostfixLevelScript {
 

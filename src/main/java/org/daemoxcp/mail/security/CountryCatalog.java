@@ -5,19 +5,19 @@ import java.util.*;
 import org.daemoxcp.mail.i18n.I18n;
 
 /**
- * Catalogo paesi ISO-3166-1 alpha-2 con flag emoji; i nomi stanno nei file di lingua (country.<codice>).
+ * ISO-3166-1 alpha-2 country catalog with emoji flags; the names are in the language files (country.<code>).
  *
- * Lista completa di ~250 paesi/territori. La proprieta' "common" indica
- * i paesi piu' frequentemente usati come whitelist per server europei
- * (mostrati in cima alla UI per comodita').
+ * Complete list of ~250 countries/territories. The "common" property indicates
+ * the countries most often used as a whitelist for European servers
+ * (shown at the top of the UI for convenience).
  *
- * Source: ISO-3166-1. I nomi italiani sono quelli scelti a mano (senza accenti, Repubblica Ceca);
- * quelli inglesi vengono da CLDR, come li mostrava la pagina prima che stessero nei file di lingua.
+ * Source: ISO-3166-1. The Italian names are the ones chosen by hand (without accents, `Repubblica Ceca`);
+ * the English ones come from CLDR, as the page showed them before they were in the language files.
  */
 public final class CountryCatalog {
 
     public record Country(String code, String flag, boolean common) {
-        /** Il nome nella lingua della richiesta, dai file di lingua (country.<codice>). */
+        /** The name in the language of the request, from the language files (country.<code>). */
         public String localName() {
             return I18n.tr("country." + code);
         }
@@ -32,7 +32,7 @@ public final class CountryCatalog {
     }
 
     private static final List<Country> COUNTRIES = List.of(
-        // ==== Paesi comuni in cima (Europa + grandi paesi) ====
+        // ==== Common countries at the top (Europe + large countries) ====
         new Country("it", "🇮🇹", true),
         new Country("fr", "🇫🇷", true),
         new Country("de", "🇩🇪", true),
@@ -57,7 +57,7 @@ public final class CountryCatalog {
         new Country("nz", "🇳🇿", true),
         new Country("jp", "🇯🇵", true),
 
-        // ==== Resto del mondo (alfabetico) ====
+        // ==== Rest of the world (alphabetical) ====
         new Country("ad", "🇦🇩", false),
         new Country("ae", "🇦🇪", false),
         new Country("af", "🇦🇫", false),
@@ -281,7 +281,7 @@ public final class CountryCatalog {
     );
 
     // ================================================================
-    // GRUPPI PRESET — selezione rapida di insiemi comuni
+    // PRESET GROUPS -- quick selection of common sets
     // ================================================================
     public record CountryGroup(String id, String label, String icon, List<String> codes,
                                 String description) {
@@ -305,14 +305,14 @@ public final class CountryCatalog {
     // EFTA: Svizzera, Norvegia, Islanda, Liechtenstein
     private static final List<String> EFTA = List.of("ch", "no", "is", "li");
 
-    // Schengen = EU 27 (esclusi IE/CY) + EFTA (escluso LI/PA differenze trascurabili)
-    // Per semplicità prendiamo EU+EFTA come "Europa allargata"
+    // Schengen = EU 27 (excluding IE/CY) + EFTA (excluding LI/PA, negligible differences)
+    // For simplicity we take EU+EFTA as "wider Europe"
     private static final List<String> EU_PLUS_EFTA = concat(EU27, EFTA);
 
     // G7
     private static final List<String> G7 = List.of("it", "fr", "de", "gb", "us", "ca", "jp");
 
-    // NATO (32 stati al 2024+)
+    // `NATO` (32 states as of 2024+)
     private static final List<String> NATO = List.of(
         "al", "be", "bg", "ca", "hr", "cz", "dk", "ee", "fi", "fr",
         "de", "gr", "hu", "is", "it", "lv", "lt", "lu", "me", "nl",
@@ -323,7 +323,7 @@ public final class CountryCatalog {
     // Nord America
     private static final List<String> NORTH_AMERICA = List.of("us", "ca", "mx");
 
-    // Solo USA (preset rapido)
+    // United States only (quick preset)
     private static final List<String> USA_ONLY = List.of("us");
 
     // Solo Italia

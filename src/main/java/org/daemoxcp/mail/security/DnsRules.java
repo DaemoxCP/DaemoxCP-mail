@@ -7,47 +7,49 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Le regole che i record SPF, DMARC e MTA-STS devono rispettare, prese dalle specifiche in
- * vigore e scritte come funzioni pure: nessuna rete, nessun processo, nessun database. Cosi'
- * si possono provare con dei valori a mano, che e' l'unico modo di sapere se dicono il vero.
+ * The rules that SPF, DMARC and MTA-STS records must follow, taken from the specifications in
+ * force and written as pure functions: no network, no process, no database. That way
+ * they can be tested with hand-made values, which is the only way to know whether they tell the truth.
  *
- * Fonti (verificate, non a memoria):
+ * Sources (verified, not from memory):
  *  - SPF:     RFC 7208
- *  - DMARC:   RFC 9989 (maggio 2026, sostituisce RFC 7489) e RFC 9990 per i rapporti
- *  - MTA-STS: RFC 8461 §3.1, confrontata con due mittenti veri (vedi onlyMtaSts)
+ *  - DMARC:   RFC 9989 (May 2026, replaces RFC 7489) and RFC 9990 for the reports
+ *  - MTA-STS: RFC 8461 Section 3.1, compared against two real senders (see onlyMtaSts)
  *
- * Tre regole valgono da sole tutto questo file, perche' descrivono guasti silenziosi:
+ * Three rules alone are worth this whole file, because they describe silent failures:
  *
- *  1. SPF, §4.5: se a un nome ci sono DUE record che cominciano per "v=spf1", il risultato
- *     non e' "vince il primo": e' "permerror". SPF smette di funzionare del tutto.
- *  2. DMARC, §4: se a un nome ci sono due record DMARC validi, vengono scartati TUTTI.
- *     La politica sparisce, e nessuno avvisa nessuno.
- *  3. MTA-STS, §3.1: se su _mta-sts ci sono due record v=STSv1, i mittenti fanno come se
- *     MTA-STS non ci fosse. La politica resta servita, e non la legge nessuno.
+ *  1. SPF, Section 4.5: if a name has TWO records starting with "v=spf1", the result
+ *     is not "the first one wins": it is "permerror". SPF stops working altogether.
+ *  2. DMARC, Section 4: if a name has two valid DMARC records, ALL of them are discarded.
+ *     The policy disappears, and nobody warns anybody.
+ *  3. MTA-STS, Section 3.1: if _mta-sts has two v=STSv1 records, senders act as if
+ *     MTA-STS were not there. The policy is still served, and nobody reads it.
  *
- * In tutti e tre i casi la posta continua a passare e chi guarda non vede niente di rotto:
- * con SPF e DMARC finche' un giorno comincia a finire nello spam, con MTA-STS mai, perche'
- * l'unico effetto e' che la posta in arrivo perde la protezione: chi sta in mezzo puo' di
- * nuovo toglierle il TLS. Per questo il pannello deve saperli riconoscere prima di creare un
- * record, non dopo.
+ * In all three cases mail keeps flowing and whoever looks sees nothing broken:
+ * with SPF and DMARC until one day it starts landing in spam, with MTA-STS never, because
+ * the only effect is that incoming mail loses the protection: whoever sits in the middle can
+ * again strip its TLS. That is why the panel must be able to recognize them before creating a
+ * record, not after.
  */
 public final class DnsRules {
 
     private DnsRules() {}
 
-    /* ===================================================================
-     * Record TXT grezzi
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Raw TXT records
+     * ===================================================================
+     */
 
     /**
-     * Trasforma l'uscita di {@code dig +short TXT <nome>} in un record per elemento.
+     * Turns the output of {@code dig +short TXT <name>} into one record per element.
      *
-     * Due dettagli che sembrano pignoleria e non lo sono:
-     *  - ogni RIGA e' un record distinto (a un nome possono essercene molti);
-     *  - dentro una riga, un record lungo e' spezzato in piu' stringhe fra virgolette, e
-     *    RFC 7208 §3.3 dice che vanno unite SENZA aggiungere spazi. Chi le unisce con uno
-     *    spazio rompe le chiavi DKIM lunghe e non se ne accorge, perche' il record continua
-     *    a "sembrare" giusto.
+     * Two details that look like nitpicking and are not:
+     *  - each LINE is a separate record (a name can have many);
+     *  - inside a line, a long record is split into several quoted strings, and
+     *    RFC 7208 Section 3.3 says they must be joined WITHOUT adding spaces. Whoever joins them
+     *    with a space breaks long DKIM keys and does not notice, because the record keeps
+     *    "looking" right.
      */
     public static List<String> recordTxt(String digOutput) {
         List<String> outside = new ArrayList<>();
@@ -70,17 +72,17 @@ public final class DnsRules {
     }
 
     /**
-     * Il contenuto di un record come lo restituisce l'API di Cloudflare, ridotto al valore
-     * vero. Cloudflare a volte consegna il TXT gia' nudo e a volte avvolto fra virgolette,
-     * a seconda di come e' stato creato.
+     * The content of a record as the Cloudflare API returns it, reduced to the real
+     * value. Cloudflare sometimes delivers the TXT already bare and sometimes wrapped in quotes,
+     * depending on how it was created.
      *
-     * Non e' un dettaglio estetico: se le virgolette restano, "\"v=spf1 ...\"" non comincia
-     * per "v=spf1", il pannello conclude che un SPF non c'e', e ne aggiunge un secondo.
-     * Due SPF sullo stesso nome danno "permerror": il controllo pensato per evitare il
-     * guasto lo avrebbe causato.
+     * It is not a cosmetic detail: if the quotes stay, "\"v=spf1 ...\"" does not start
+     * with "v=spf1", the panel concludes there is no SPF, and adds a second one.
+     * Two SPFs on the same name give "permerror": the check meant to prevent the
+     * failure would have caused it.
      *
-     * Si riusa recordTxt, che gia' sa unire le stringhe multiple e togliere le virgolette:
-     * due funzioni che fanno la stessa cosa sono due funzioni che un giorno divergono.
+     * recordTxt is reused, which already knows how to join multiple strings and remove the quotes:
+     * two functions that do the same thing are two functions that one day diverge.
      */
     public static String cloudflareContent(String raw) {
         List<String> l = recordTxt(raw);
@@ -92,14 +94,14 @@ public final class DnsRules {
      * =================================================================== */
 
     /**
-     * I soli record che contano come SPF. §4.5: il record deve cominciare con la sezione di
-     * versione esattamente "v=spf1", terminata da uno spazio o dalla fine del record.
-     * Quindi "v=spf10 ..." NON e' un record SPF e va scartato, non accettato per somiglianza.
+     * The only records that count as SPF. Section 4.5: the record must begin with the version
+     * section exactly "v=spf1", terminated by a space or by the end of the record.
+     * So "v=spf10 ..." is NOT an SPF record and must be discarded, not accepted for resemblance.
      *
-     * Il confronto e' insensibile alle maiuscole: l'ABNF di RFC 7208 usa stringhe letterali
-     * semplici, che in ABNF (RFC 5234) sono insensibili salvo prefisso %s. DMARC invece usa
-     * %s"DMARC1", ed e' per questo che piu' sotto il confronto e' sensibile: non e' una
-     * distrazione, e' la differenza fra le due specifiche.
+     * The comparison is case-insensitive: the ABNF of RFC 7208 uses simple literal strings,
+     * which in ABNF (RFC 5234) are case-insensitive unless prefixed with %s. DMARC instead uses
+     * %s"DMARC1", and that is why further down the comparison is case-sensitive: it is not
+     * carelessness, it is the difference between the two specifications.
      */
     public static List<String> onlySpf(List<String> record) {
         List<String> outside = new ArrayList<>();
@@ -113,7 +115,7 @@ public final class DnsRules {
         return outside;
     }
 
-    /** I termini di un record SPF, saltata la versione. */
+    /** The terms of an SPF record, with the version skipped. */
     public static List<String> terms(String spf) {
         List<String> outside = new ArrayList<>();
         if (spf == null) return outside;
@@ -126,14 +128,14 @@ public final class DnsRules {
         return outside;
     }
 
-    /** Toglie il qualificatore iniziale (+ - ~ ?), che non fa parte del nome. */
+    /** Removes the leading qualifier (+ - ~ ?), which is not part of the name. */
     public static String withoutQualifier(String term) {
         if (term == null || term.isEmpty()) return "";
         char q = term.charAt(0);
         return (q == '+' || q == '-' || q == '~' || q == '?') ? term.substring(1) : term;
     }
 
-    /** Il nome del meccanismo o modificatore: la parte prima di ':', '=' o '/'. */
+    /** The name of the mechanism or modifier: the part before ':', '=' or '/'. */
     public static String mechanismName(String term) {
         String t = withoutQualifier(term);
         for (int i = 0; i < t.length(); i++) {
@@ -143,7 +145,7 @@ public final class DnsRules {
         return t.toLowerCase(Locale.ROOT);
     }
 
-    /** Il valore dopo ':' o '=', vuoto se il termine non ne ha. */
+    /** The value after ':' or '=', empty if the term has none. */
     public static String mechanismValue(String term) {
         String t = withoutQualifier(term);
         for (int i = 0; i < t.length(); i++) {
@@ -153,20 +155,20 @@ public final class DnsRules {
         return "";
     }
 
-    /** I termini che costano una ricerca DNS, §4.6.4. */
+    /** The terms that cost a DNS lookup, Section 4.6.4. */
     private static boolean costsALookup(String name) {
         return name.equals("include") || name.equals("a") || name.equals("mx")
             || name.equals("ptr") || name.equals("exists") || name.equals("redirect");
     }
 
     /**
-     * Quante ricerche DNS costa QUESTO record, senza entrare negli "include".
+     * How many DNS lookups THIS record costs, without going into the "include"s.
      *
-     * Il nome dice "dirette" apposta: §4.6.4 fissa il limite di 10 sull'intera valutazione,
-     * e ogni "include" ne porta dentro altre che si conoscono solo risolvendole. Quindi
-     * questo numero e' un MINIMO, e va presentato come tale. Un conteggio che si spacciasse
-     * per totale direbbe "6 su 10, tutto bene" davanti a un record che in realta' e' gia'
-     * oltre il limite: una verifica che rassicura sul falso e' peggio di nessuna verifica.
+     * The name says "direct" on purpose: Section 4.6.4 sets the limit of 10 on the whole
+     * evaluation, and each "include" brings in others that can only be known by resolving them. So
+     * this number is a MINIMUM, and must be presented as such. A count passing itself off
+     * as a total would say "6 out of 10, all good" in front of a record that is actually already
+     * over the limit: a check that gives false reassurance is worse than no check.
      */
     public static int directDnsLookups(String spf) {
         int n = 0;
@@ -174,7 +176,7 @@ public final class DnsRules {
         return n;
     }
 
-    /** Quanti termini portano dentro altre ricerche non conoscibili da qui. */
+    /** How many terms bring in other lookups that cannot be known from here. */
     public static int includeCount(String spf) {
         int n = 0;
         for (String t : terms(spf)) {
@@ -184,13 +186,13 @@ public final class DnsRules {
         return n;
     }
 
-    /** Il meccanismo c'e' come termine vero, non come pezzo di un'altra parola. */
+    /** The mechanism is there as a real term, not as a piece of another word. */
     public static boolean hasMechanism(String spf, String name) {
         for (String t : terms(spf)) if (mechanismName(t).equals(name)) return true;
         return false;
     }
 
-    /** Come si chiude il record: "-all", "~all", "?all", "+all" o null se non si chiude. */
+    /** How the record ends: "-all", "~all", "?all", "+all" or null if it does not end. */
     public static String closing(String spf) {
         String found = null;
         for (String t : terms(spf)) {
@@ -203,9 +205,9 @@ public final class DnsRules {
     }
 
     /**
-     * L'indirizzo sta dentro la specifica ip4, tenendo conto del prefisso.
-     * Senza questo, "ip4:203.0.113.0/24" risulterebbe non contenere 203.0.113.7 e il
-     * pannello direbbe "SPF non autorizza il server" davanti a un SPF perfettamente giusto.
+     * The address falls within the ip4 spec, taking the prefix into account.
+     * Without this, "ip4:203.0.113.0/24" would turn out not to contain 203.0.113.7 and the
+     * panel would say "SPF does not authorize the server" in front of a perfectly correct SPF.
      */
     public static boolean ip4Covers(String spec, String ip) {
         if (spec == null || ip == null) return false;
@@ -237,7 +239,7 @@ public final class DnsRules {
         return v;
     }
 
-    /** L'SPF autorizza quell'IP con un ip4 esplicito (prefissi compresi). */
+    /** The SPF authorizes that IP with an explicit ip4 (prefixes included). */
     public static boolean authorizeIp4(String spf, String ip) {
         if (ip == null || ip.isBlank()) return false;
         for (String t : terms(spf)) {
@@ -304,19 +306,19 @@ public final class DnsRules {
      * =================================================================== */
 
     /**
-     * I record del nome _mta-sts che almeno un mittente conta come MTA-STS.
+     * The records of the _mta-sts name that at least one sender counts as MTA-STS.
      *
-     * §3.1: "records that do not begin with "v=STSv1;" are discarded. If the number of
+     * Section 3.1: "records that do not begin with "v=STSv1;" are discarded. If the number of
      * resulting records is not one [...] senders MUST assume the recipient domain does not
-     * have an available MTA-STS Policy". Con due record non vale il primo: per i mittenti
-     * MTA-STS non c'e', e la politica servita non la legge nessuno. E' lo stesso guasto
-     * silenzioso dei due SPF e dei due DMARC.
+     * have an available MTA-STS Policy". With two records the first does not win: for senders
+     * MTA-STS is not there, and nobody reads the policy served. It is the same silent
+     * failure as two SPFs and two DMARCs.
      *
-     * Il filtro e' il piu' largo fra quelli dei mittenti veri, che non contano allo stesso
-     * modo: postfix-mta-sts-resolver tiene i record che cominciano per "v=STSv1" con le
-     * maiuscole esatte; mailauth (Nodemailer) di norma ignora maiuscole e spazi ai bordi e
-     * vuole il ";". Un record che anche uno solo di loro conta, qui conta: se per qualche
-     * mittente i record sono due, il pannello non puo' dire che MTA-STS e' attivo.
+     * The filter is the widest among those of the real senders, which do not count in the same
+     * way: postfix-mta-sts-resolver keeps the records starting with "v=STSv1" with the exact
+     * case; mailauth (Nodemailer) normally ignores case and surrounding spaces and
+     * wants the ";". A record that even just one of them counts, counts here: if for some
+     * sender there are two records, the panel cannot say MTA-STS is active.
      */
     public static boolean eMtaSts(String r) {
         return r != null && r.trim().toLowerCase(Locale.ROOT).startsWith("v=stsv1");
@@ -329,17 +331,19 @@ public final class DnsRules {
         return outside;
     }
 
-    /* ===================================================================
-     * Nomi e record SRV
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Names and SRV records
+     * ===================================================================
+     */
 
     /**
-     * Due nomi DNS indicano lo stesso host.
+     * Two DNS names denote the same host.
      *
-     * Il confronto e' ESATTO, non per contenimento: "xmail.esempio.it".contains("mail.esempio.it")
-     * e' vero, e un controllo scritto cosi' promuove un record che punta altrove. E' lo stesso
-     * errore che sull'SPF faceva passare per buono un record che non autorizzava il server.
-     * Il punto finale del nome assoluto e le maiuscole non contano.
+     * The comparison is EXACT, not by containment: "xmail.esempio.it".contains("mail.esempio.it")
+     * is true, and a check written that way promotes a record that points elsewhere. It is the same
+     * mistake that on SPF let a record that did not authorize the server pass as good.
+     * The trailing dot of the absolute name and case do not matter.
      */
     public static boolean sameName(String a, String b) {
         if (a == null || b == null) return false;
@@ -348,13 +352,13 @@ public final class DnsRules {
         return !x.isEmpty() && x.equals(y);
     }
 
-    /** I quattro campi di un record SRV: priorita', peso, porta, destinazione. */
+    /** The four fields of an SRV record: priority, weight, port, target. */
     public static class Srv {
         public int priority, weight, port;
         public String destination;
     }
 
-    /** Legge "0 1 993 mail.esempio.it." Restituisce null se la riga non ha quella forma. */
+    /** Reads "0 1 993 mail.esempio.it." Returns null if the line does not have that shape. */
     public static Srv analyzeSrv(String line) {
         if (line == null) return null;
         String[] p = line.trim().split("\\s+");
@@ -375,18 +379,18 @@ public final class DnsRules {
      * DMARC - RFC 9989 / RFC 9990
      * =================================================================== */
 
-    /** Tag tolti da RFC 9989: se sono ancora nel record, non fanno piu' nulla. */
+    /** Tags removed by RFC 9989: if they are still in the record, they no longer do anything. */
     public static final String[] REMOVED_TAGS = { "pct", "ri", "rf" };
 
-    /** I tag che RFC 9989 definisce. Whitelist, non lista di cose vietate. */
+    /** The tags that RFC 9989 defines. A whitelist, not a list of forbidden things. */
     public static final String[] KNOWN_TAGS = {
         "v", "p", "sp", "np", "adkim", "aspf", "rua", "ruf", "fo", "psd", "t"
     };
 
     /**
-     * E' un record DMARC. §4: il tag "v" deve essere il PRIMO, e il suo valore e' sensibile
-     * alle maiuscole ("%s'DMARC1'" nell'ABNF). Se non e' primo, manca, o il valore e'
-     * diverso, l'intero record va ignorato.
+     * It is a DMARC record. Section 4: the "v" tag must be the FIRST one, and its value is
+     * case-sensitive ("%s'DMARC1'" in the ABNF). If it is not first, is missing, or the value is
+     * different, the whole record must be ignored.
      */
     public static boolean eDmarc(String r) {
         if (r == null) return false;
@@ -407,18 +411,18 @@ public final class DnsRules {
     }
 
     /**
-     * I tag di un record scritto come "nome=valore; nome=valore".
-     * La sintassi e' la stessa per DMARC e per le chiavi DKIM, quindi il parser e' uno solo:
-     * due parser identici sono due parser che un giorno si comportano diversamente.
+     * The tags of a record written as "name=value; name=value".
+     * The syntax is the same for DMARC and for DKIM keys, so there is only one parser:
+     * two identical parsers are two parsers that one day behave differently.
      */
     public static LinkedHashMap<String, String> tag(String r) {
         return tagDmarc(r);
     }
 
     /**
-     * I record che sono chiavi DKIM. Il criterio e' la presenza del tag "p=", che contiene la
-     * chiave: RFC 6376 §3.6.1 rende il tag "v=" soltanto RACCOMANDATO, con "DKIM1" come
-     * valore predefinito, quindi pretenderlo escluderebbe record validi.
+     * The records that are DKIM keys. The criterion is the presence of the "p=" tag, which contains
+     * the key: RFC 6376 Section 3.6.1 makes the "v=" tag only RECOMMENDED, with "DKIM1" as the
+     * default value, so requiring it would exclude valid records.
      */
     public static List<String> onlyDkim(List<String> record) {
         List<String> outside = new ArrayList<>();
@@ -431,13 +435,13 @@ public final class DnsRules {
         return outside;
     }
 
-    /** La chiave pubblica dichiarata nel record, senza spazi: alcuni server DNS ne inseriscono. */
+    /** The public key declared in the record, without spaces: some DNS servers insert them. */
     public static String dkimKey(String record) {
         String p = tagDmarc(record).get("p");
         return p == null ? null : p.replaceAll("\\s+", "");
     }
 
-    /** I tag del record, nell'ordine in cui compaiono. Nomi in minuscolo. */
+    /** The record's tags, in the order they appear. Names in lowercase. */
     public static LinkedHashMap<String, String> tagDmarc(String r) {
         LinkedHashMap<String, String> m = new LinkedHashMap<>();
         if (r == null) return m;
@@ -451,14 +455,14 @@ public final class DnsRules {
         return m;
     }
 
-    /** Gli indirizzi mailto: dichiarati in un tag rua o ruf, senza il limite di dimensione. */
+    /** The mailto: addresses declared in a rua or ruf tag, without the size limit. */
     public static List<String> reportAddresses(String tagValue) {
         List<String> outside = new ArrayList<>();
         if (tagValue == null) return outside;
         for (String u : tagValue.split(",")) {
             String s = u.trim();
             if (s.toLowerCase(Locale.ROOT).startsWith("mailto:")) s = s.substring(7);
-            int b = s.indexOf('!');            // "!10m": limite di dimensione, non fa parte dell'indirizzo
+            int b = s.indexOf('!');            // "!10m": size limit, not part of the address
             if (b >= 0) s = s.substring(0, b);
             s = s.trim();
             if (!s.isEmpty()) outside.add(s);
@@ -466,7 +470,7 @@ public final class DnsRules {
         return outside;
     }
 
-    /** La parte dopo la chiocciola. */
+    /** The part after the at sign. */
     public static String hostOf(String address) {
         if (address == null) return "";
         int a = address.lastIndexOf('@');
@@ -474,10 +478,10 @@ public final class DnsRules {
     }
 
     /**
-     * Il nome da interrogare per sapere se il dominio di destinazione accetta i rapporti di
-     * un altro dominio. RFC 9990 §4: si prende l'host di destinazione, gli si antepone
-     * "_report._dmarc", e davanti ancora il dominio che ha pubblicato la politica.
-     * Esempio della specifica: blue.example.com._report._dmarc.red.example.net
+     * The name to query to know whether the destination domain accepts reports for
+     * another domain. RFC 9990 Section 4: take the destination host, prepend
+     * "_report._dmarc" to it, and in front of that the domain that published the policy.
+     * Example from the specification: blue.example.com._report._dmarc.red.example.net
      */
     public static String reportAuthorizationName(String policyDomain, String destinationHost) {
         return policyDomain.toLowerCase(Locale.ROOT) + "._report._dmarc."
@@ -485,13 +489,13 @@ public final class DnsRules {
     }
 
     /**
-     * Serve l'autorizzazione esterna? RFC 9990 §4 la richiede quando il dominio della
-     * politica e quello dell'indirizzo NON coincidono. Qui si risponde "no" solo quando la
-     * coincidenza e' certa: stesso nome, o uno sottodominio dell'altro. Negli altri casi si
-     * risponde "si'", e il pannello va a controllare se il record c'e'.
+     * Is external authorization needed? RFC 9990 Section 4 requires it when the policy
+     * domain and the address domain do NOT match. Here we answer "no" only when the
+     * match is certain: same name, or one a subdomain of the other. In the other cases we
+     * answer "yes", and the panel goes to check whether the record is there.
      *
-     * La prudenza e' voluta: dire "non serve" quando invece serve significa lasciare che i
-     * rapporti non arrivino mai, senza che nessun controllo lo segnali.
+     * The caution is deliberate: saying "not needed" when it is in fact needed means letting
+     * the reports never arrive, without any check flagging it.
      */
     public static boolean needsAuthorization(String policyDomain, String destinationHost) {
         if (policyDomain == null || destinationHost == null) return true;
@@ -503,18 +507,18 @@ public final class DnsRules {
     }
 
     /**
-     * Cambia SOLO il valore del tag "p", lasciando intatto tutto il resto del record.
+     * Changes ONLY the value of the "p" tag, leaving all the rest of the record intact.
      *
-     * Non si ricostruisce il record da zero: se qualcuno ci ha aggiunto "sp=", "fo=" o un
-     * secondo indirizzo in "rua", riscrivendolo da capo quelle parti sparirebbero senza che
-     * nessuno se ne accorga. Qui si sostituisce un valore e basta, conservando anche la
-     * spaziatura originale, cosi' il confronto prima/dopo mostra una differenza sola.
+     * The record is not rebuilt from scratch: if someone added "sp=", "fo=" or a
+     * second address in "rua", rewriting it from the start would make those parts disappear
+     * without anyone noticing. Here one value is replaced and that is all, also preserving the
+     * original spacing, so the before/after comparison shows a single difference.
      *
-     * Se il tag "p" non c'e', viene inserito subito dopo "v=DMARC1", che e' il posto giusto:
-     * la specifica vuole "v" per primo, e non dice nulla sull'ordine degli altri.
+     * If the "p" tag is not there, it is inserted right after "v=DMARC1", which is the right place:
+     * the specification wants "v" first, and says nothing about the order of the others.
      *
-     * Restituisce null se il record non e' un DMARC valido: meglio non fare niente che
-     * produrre una stringa a caso.
+     * Returns null if the record is not a valid DMARC: better to do nothing than
+     * produce a random string.
      */
     public static String changePolicy(String record, String fresh) {
         if (record == null || fresh == null) return null;
@@ -528,16 +532,16 @@ public final class DnsRules {
             int eq = piece.indexOf('=');
             if (eq < 0) continue;
             if (!piece.substring(0, eq).trim().equalsIgnoreCase("p")) continue;
-            // Si conserva lo spazio che precede il tag, se c'era.
+            // The space preceding the tag is preserved, if there was one.
             String before = piece.substring(0, eq + 1);
             pieces[i] = before + n;
             return String.join(";", pieces);
         }
 
-        // Nessun tag "p": lo si aggiunge dopo la versione, imitando la spaziatura del record.
-        // Si imita la spaziatura del record se ce n'e' una da imitare; quando non c'e'
-        // nulla da cui dedurla si sceglie la forma leggibile, che e' quella che il pannello
-        // usa quando scrive un record da zero.
+        // No "p" tag: it is added after the version, imitating the record's spacing.
+        // The record's spacing is imitated if there is one to imitate; when there is
+        // nothing to deduce it from, the readable form is chosen, which is the one the panel
+        // uses when it writes a record from scratch.
         String separator = !record.contains(";") ? "; " : (record.contains("; ") ? "; " : ";");
         int endV = record.indexOf(';');
         if (endV < 0) return record.trim() + separator + "p=" + n;

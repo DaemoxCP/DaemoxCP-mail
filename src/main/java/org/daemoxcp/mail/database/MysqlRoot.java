@@ -20,37 +20,37 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
- * L'utente root di MySQL: come il pannello lo usa, e la sua password sui server installati prima.
+ * MySQL's root user: how the panel uses it, and its password on the servers installed before.
  *
- * Misurato il 07/11/2026 sul server vero (MySQL 8.4.11): root@localhost senza password, e nessuna
- * `mysql_root_password` nel file dei segreti. In mysql84-server di FreeBSD non c'e' auth_socket,
- * quindi "senza password" vuol dire che entra chiunque abbia un utente sulla macchina: da
- * `su -m nobody` si entrava come root sia dal socket sia da 127.0.0.1. Un difetto in Roundcube o
- * in rspamd valeva tutto MySQL, posta compresa. Le installazioni fatte dal pannello dal 17/10
- * impostano la password (FullMailServerScript); questa riparazione la imposta all'avvio sui server
- * installati prima.
+ * Measured on 2026-11-07 on the production server (MySQL 8.4.11): root@localhost without a password, and no
+ * `mysql_root_password` in the secrets file. In FreeBSD's mysql84-server there is no auth_socket,
+ * so "without a password" means that anyone with a user on the machine gets in: from
+ * `su -m nobody` you got in as root both from the socket and from 127.0.0.1. A flaw in Roundcube or
+ * in rspamd was worth all of MySQL, mail included. The installations done by the panel since 17 October
+ * set the password (FullMailServerScript); this repair sets it at startup on the servers
+ * installed before.
  *
- * L'ordine e' quello che non puo' chiudere fuori nessuno: prima la password nel file dei segreti
- * (scritta e riletta dal disco), poi ALTER USER. Se il pannello si fermasse a meta', al prossimo
- * avvio root entrerebbe ancora senza password e la riparazione ripartirebbe con la stessa password
- * del file. Una password messa a mano non si tocca mai: se root non entra senza password, non c'e'
- * niente da fare.
+ * The order is the one that cannot lock anyone out: first the password in the secrets file
+ * (written and read back from disk), then ALTER USER. If the panel stopped halfway, at the next
+ * start root would still get in without a password and the repair would start again with the same password
+ * from the file. A password set by hand is never touched: if root does not get in without a password, there is
+ * nothing to do.
  *
- * Tutte le domande come root passano di qui: la password in un file di opzioni 600 in una cartella
- * 700 che dura un comando, l'SQL nello standard input, mai sulla riga di comando che "ps" mostra a
- * tutti. Al client mysql vanno solo istruzioni fisse del catalogo (SqlCatalog), senza valori: lo
- * controlla CatalogGuard.allowed prima di scrivere il file. La sola istruzione con un valore, la
- * password di root, passa da JDBC come parametro ({@link #setPassword}).
+ * All the questions as root go through here: the password in a 600 options file in a 700
+ * folder that lasts one command, the SQL on standard input, never on the command line that "ps" shows to
+ * everyone. Only fixed statements from the catalog (SqlCatalog), without values, go to the mysql client: it
+ * is checked by CatalogGuard.allowed before writing the file. The only statement with a value, the
+ * root password, goes through JDBC as a parameter ({@link #setPassword}).
  */
 public final class MysqlRoot {
 
     private static final Logger LOGGER = Logger.getLogger(MysqlRoot.class.getName());
 
-    /** Il socket di MySQL; vuoto = quello predefinito del client. Le prove lo cambiano. */
+    /** MySQL's socket; empty = the client's default one. The tests change it. */
     static String socket = System.getProperty("daemoxcp.mail.mysql.socket", "");
-    /** La porta TCP su 127.0.0.1, per controllare che root non entri senza password nemmeno da li'. */
+    /** The TCP port on 127.0.0.1, to check that root does not get in without a password from there either. */
     static String port = System.getProperty("daemoxcp.mail.mysql.port", "3306");
-    /** Dove nascono le cartelle temporanee dei comandi. */
+    /** Where the commands' temporary folders are created. */
     static String workDir = System.getProperty("daemoxcp.mail.mysql.workdir", "/var/tmp");
 
     private static final Pattern HOST = Pattern.compile("[A-Za-z0-9._:%-]{1,255}");
@@ -58,7 +58,7 @@ public final class MysqlRoot {
 
     private MysqlRoot() {}
 
-    /** Il file di opzioni di root con la password, oppure senza password. */
+    /** Root's options file with the password, or without a password. */
     static String options(String password) {
         StringBuilder b = new StringBuilder("[client]\nuser=root\n");
         if (password != null) b.append("password=\"").append(password).append("\"\n");
@@ -67,19 +67,19 @@ public final class MysqlRoot {
         return b.toString();
     }
 
-    /** Come options, ma da 127.0.0.1 in TCP invece che dal socket. */
+    /** Like options, but from 127.0.0.1 over TCP instead of from the socket. */
     static String tcpOptions(String password) {
         return "[client]\nuser=root\npassword=" + (password == null ? "" : "\"" + password + "\"")
                 + "\nhost=127.0.0.1\nport=" + port + "\nprotocol=TCP\n";
     }
 
     /**
-     * Una domanda come root, con la password del file dei segreti se c'e' e funziona, altrimenti
-     * senza (un MySQL che non ce l'ha ancora). L'uscita, oppure "" se root non entra. Solo
-     * un'istruzione del catalogo: un altro testo e' rifiutato prima del client.
+     * A question as root, with the password from the secrets file if there is one and it works, otherwise
+     * without (a MySQL that does not have one yet). The output, or "" if root does not get in. Only
+     * a statement from the catalog: any other text is refused before the client.
      */
     public static String query(String sql) {
-        // Prima il testo, poi i segreti: un testo rifiutato non deve nemmeno far leggere la password.
+        // First the text, then the secrets: a refused text must not even cause the password to be read.
         if (!CatalogGuard.allowed(sql))
             throw new IllegalArgumentException("not a statement of the catalog: the mysql client gets only SqlCatalog's fixed statements");
         String password = PanelSecrets.text(PanelSecrets.MYSQL_ROOT_PASSWORD);
@@ -92,8 +92,8 @@ public final class MysqlRoot {
     }
 
     /**
-     * mysql col file di opzioni (--defaults-file: nessun altro file, nemmeno un ~/.my.cnf) e l'SQL
-     * nello standard input, in una cartella 700 che si cancella subito.
+     * mysql with the options file (--defaults-file: no other file, not even a ~/.my.cnf) and the SQL
+     * on standard input, in a 700 folder that is deleted at once.
      */
     static Shell.Result mysql(String options, String sql) {
         if (!CatalogGuard.allowed(sql))
@@ -132,7 +132,7 @@ public final class MysqlRoot {
                 try (var s = Files.walk(dir)) {
                     s.sorted(java.util.Comparator.reverseOrder()).forEach(f -> f.toFile().delete());
                 } catch (IOException ignored) {
-                    // una cartella 700 di root in /var/tmp: la toglie la pulizia del sistema
+                    // a 700 root folder in /var/tmp: the system cleanup removes it
                 }
             }
         }
@@ -143,7 +143,7 @@ public final class MysqlRoot {
         return r.success() && "1".equals(r.outputTrim());
     }
 
-    /** Gli account root senza password, dalla tabella degli account (solo user e host, nessun dato). */
+    /** The root accounts without a password, from the accounts table (only user and host, no data). */
     static List<String> emptyRootHosts() {
         Shell.Result r = mysql(options(null), SqlCatalog.MYSQL_ROOT_EMPTY_HOSTS);
         List<String> hosts = new ArrayList<>();
@@ -153,10 +153,10 @@ public final class MysqlRoot {
     }
 
     /**
-     * La password agli account root, da JDBC: root senza password da 127.0.0.1 (lo stesso account del socket,
-     * MySQL risolve 127.0.0.1 in localhost), host e password come parametri. Gli host passano prima da un
-     * elenco chiuso di caratteri. Null se e' andata; altrimenti il perche', e MySQL resta com'era per gli
-     * account che mancano.
+     * The password for the root accounts, via JDBC: root without a password from 127.0.0.1 (the same account
+     * as the socket, MySQL resolves 127.0.0.1 to localhost), host and password as parameters. The hosts first go
+     * through a closed list of characters. Null if it worked; otherwise the reason, and MySQL stays as it was
+     * for the accounts that are missing.
      */
     static String setPassword(List<String> hosts, String password) {
         for (String h : hosts)
@@ -177,10 +177,10 @@ public final class MysqlRoot {
     }
 
     /**
-     * Un'istruzione del catalogo da JDBC, con quell'utente su quel database (null: nessuno), i valori come
-     * parametri. L'uscita come la scriveva il client mysql (una riga per riga, le colonne separate da un tab, NULL
-     * per un valore vuoto), oppure uscita 1 col codice e il messaggio di MySQL. Host, porta e database devono essere
-     * gia' passati da una forma stretta: finiscono nell'URL.
+     * A catalog statement via JDBC, with that user on that database (null: none), the values as
+     * parameters. The output as the mysql client wrote it (one line per row, the columns separated by a tab, NULL
+     * for an empty value), or exit 1 with MySQL's code and message. Host, port and database must have
+     * already gone through a strict form: they end up in the URL.
      */
     public static Shell.Result jdbc(String host, String port, String db, String user, String password, String sql, Object... params) {
         String url = "jdbc:mysql://" + host + ":" + port + "/" + (db == null ? "" : db) + "?useSSL=true&requireSSL=false"
@@ -212,8 +212,8 @@ public final class MysqlRoot {
     }
 
     /**
-     * Lo stesso come root da 127.0.0.1 (MySQL la risolve in localhost: lo stesso account del socket), con la password
-     * del file dei segreti, o senza se MySQL non ce l'ha ancora.
+     * The same as root from 127.0.0.1 (MySQL resolves it to localhost: the same account as the socket), with the
+     * password from the secrets file, or without if MySQL does not have one yet.
      */
     public static Shell.Result rootJdbc(String db, String sql, Object... params) {
         String password = PanelSecrets.text(PanelSecrets.MYSQL_ROOT_PASSWORD);
@@ -224,7 +224,7 @@ public final class MysqlRoot {
         return jdbc("127.0.0.1", port, db, "root", "", sql, params);
     }
 
-    /** Il risultato della riparazione, per la prova e per il log. */
+    /** The result of the repair, for the test and for the log. */
     public enum Outcome { NOTHING, DONE, NOT_APPLIED, LOCKED_OUT }
 
     public static void ensureAtBoot() {
@@ -237,15 +237,16 @@ public final class MysqlRoot {
     }
 
     static Outcome repair() {
-        // Root entra senza password? Se no, o una password c'e' gia', o MySQL e' spento: niente da fare.
+        // Does root get in without a password? If not, either a password already exists, or MySQL is off: nothing
+        // to do.
         if (!entersWith(options(null))) return Outcome.NOTHING;
         List<String> hosts = emptyRootHosts();
         if (hosts.isEmpty()) {
             LOGGER.info("[MysqlRoot] root gets in without a password but no root account has an empty one: left as it is");
             return Outcome.NOTHING;
         }
-        // Prima nel file, poi in MySQL: e si rilegge dal disco, non dalla memoria. Se il file non si
-        // scrive, MySQL non si tocca: una password che esiste solo in MySQL chiuderebbe fuori tutti.
+        // First in the file, then in MySQL: and it is read back from disk, not from memory. If the file cannot
+        // be written, MySQL is not touched: a password that exists only in MySQL would lock everyone out.
         String password;
         String onDisk;
         try {

@@ -96,7 +96,7 @@ public class RootGateTest {
                 !passes("/api/ssl", "POST", null, new org.json.JSONObject().put("ssl_key", "-----BEGIN PRIVATE KEY-----\nAAAA\n").toString())
                 && !passes("/api/ssl", "POST", null, new org.json.JSONObject().put("ssl_cert", "just text").toString()));
 
-        // Reperto 204: one field name, three fingerprints. The SSH key's (Settings), and two the panel computes itself
+        // Finding 204: one field name, three fingerprints. The SSH key's (Settings), and two the panel computes itself
         // and the page sends back: the state of the package branch (16 hex, PkgBranch) and of an address before it is
         // turned into a mailbox (64 hex, AddressTransform). With the SSH shape alone, the branch change and "Turn into
         // mailbox" were refused on the separated panel.

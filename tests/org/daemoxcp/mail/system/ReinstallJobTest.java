@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The full reinstallation detached from the menu (ReinstallJob, reperto 163): the menu dies and it
+ * The full reinstallation detached from the menu (ReinstallJob, finding 163): the menu dies and it
  * goes on to the end.
  *
  *  J1. the menu killed with kill -9 halfway;
@@ -21,10 +21,10 @@ import java.util.List;
  *  J3. a menu killed halfway and a second menu opened while it works: the second follows the one
  *      running, it does not start another;
  *  J5. without daemon(8) (not FreeBSD): the menu runs it inside itself, as before, with the script
- *      rewritten from its jar (reperto 172);
+ *      rewritten from its jar (finding 172);
  *  J4. the reinstallation itself killed with kill -9: the menu says so and does not count it as
  *      succeeded, and a "service" running with the guardian (UpdateManager.startInterruptionWatch,
- *      reperto 166) locks the packages again by itself and writes the notice with the way back. The
+ *      finding 166) locks the packages again by itself and writes the notice with the way back. The
  *      same service stays on during J1-J3, and there it must touch nothing.
  * After each: the outcome, the end of the script, the packages locked again, the turn free.
  *
@@ -310,7 +310,7 @@ public class ReinstallJobTest {
                 if (Main.dbManager.check_tables() < 1) { Main.dbManager.create_tables(); Main.dbManager.insert_data_default(); }
                 Main.dbManager.update_mysql_config("127.0.0.1", "1", "e2e_nobody", "E2eNobody1", "e2e_nobody");
                 // An OLD script on disk: the reinstallation must rewrite it from its jar (here the
-                // shadow class of tests/planted) and not run this one (InstallScripts, reperto 169).
+                // shadow class of tests/planted) and not run this one (InstallScripts, finding 169).
                 Files.createDirectories(Path.of("install_scripts"));
                 Files.writeString(Path.of("install_scripts/install_mail_server.sh"),
                         "#!/bin/sh\n# a script from an older version\necho \"stale script ran\"\nexit 42\n");

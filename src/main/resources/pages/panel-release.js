@@ -1,10 +1,11 @@
 
-        // ---------- la versione del pannello e le release di GitHub (ReleaseCheck) ----------
-        // L'ultimo esito lo legge il server senza rete; «Controlla adesso» chiede a GitHub (al massimo una volta al
-        // minuto). Della release si mostrano solo versione e data, e il link lo costruisce il server dal tag.
-        // Gli istanti arrivano in UTC (r13) e si mostrano qui, nella lingua della pagina, col fuso accanto.
-        // Le chiamate vanno dirette (updSend), non in fila dietro i lavori lenti di pkg (updApi): leggere l'esito non tocca
-        // la rete, e il controllo ha il suo pulsante che non si ripreme mentre lavora.
+        // ---------- the panel version and the GitHub releases (ReleaseCheck) ----------
+        // The server reads the last outcome without the network; "Check now" asks GitHub (at most once a
+        // minute). Of the release only version and date are shown, and the server builds the link from the tag.
+        // The instants arrive in UTC (r13) and are shown here, in the page's language, with the time zone next
+        // to them. The calls go direct (updSend), not queued behind pkg's slow jobs (updApi): reading the
+        // outcome does not touch the network, and the check has its own button that cannot be pressed again
+        // while it works.
         function relLang() {
             return window.I18N_LANG || document.documentElement.lang || undefined;
         }
@@ -28,7 +29,7 @@
             return el;
         }
 
-        // Il link alla release: solo se e' davvero la pagina di una release del repository del pannello.
+        // The link to the release: only if it really is the page of a release of the panel's repository.
         function relLink(release, text) {
             const url = String(release && release.url || '');
             if (!/^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/releases\/tag\/[A-Za-z0-9._-]+$/.test(url)) return null;
@@ -38,7 +39,7 @@
             return a;
         }
 
-        // Ogni testo con la sua chiave scritta per intero: I18nTest le cerca cosi' in entrambe le lingue.
+        // Every text with its key written in full: that is how I18nTest finds them in both languages.
         function relReason(r) {
             const code = String(r.error || '');
             if (/^http_\d{3}$/.test(code)) return t('rel.err.http', { code: code.slice(5) });
@@ -108,7 +109,7 @@
             out.replaceChildren(relEl('p', 'small text-muted mb-2', t('rel.checking')));
             try {
                 const r = await updSend('panel_release_check');
-                // Senza repository la risposta non e' del controllo (un permesso che manca, la rete della pagina).
+                // Without a repository the response is not the check's (a missing permission, the page's network).
                 if (!r || !r.repository) { relError(r && r.error); return; }
                 relRender(r, r.justChecked ? t('rel.justChecked') : (!r.success ? relReason(r) : ''));
             } finally {

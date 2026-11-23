@@ -1,19 +1,19 @@
-        // ---------- le chiamate a /api/updates, comuni a ogni pagina che le usa ----------
-        // Updates, Diagnostica, e le schede spostate in DNS, Firewall e Impostazioni (reperto 193): una copia sola.
+        // ---------- the calls to /api/updates, shared by every page that uses them ----------
+        // Updates, Diagnostics, and the cards moved to DNS, Firewall and Settings (finding 193): a single copy.
         let updBusy = false;
 
-        // Le operazioni su pkg toccano la rete e durano decine di secondi, tenendo occupato
-        // un thread HTTP del pannello: due click o due schede bastano a saturarlo. La guardia
-        // sta qui, in un punto solo, invece che dentro ogni funzione.
+        // The pkg operations touch the network and last tens of seconds, keeping one of the panel's
+        // HTTP threads busy: two clicks or two tabs are enough to saturate it. The guard
+        // is here, in a single place, instead of inside every function.
         async function updApi(action, extra) {
-            // Le letture leggere non passano dalla guardia. Prima la guardia veniva prima di sapere se
-            // l'azione era lenta: al caricamento della pagina branch_status e packages_overview partono
-            // per primi, e interruption_status tornava «occupato» senza nemmeno chiedere. L'avviso di un
-            // lavoro interrotto (e il pulsante per tornare indietro) non compariva mai (reperto 176).
+            // Light reads do not go through the guard. Before, the guard came before knowing whether
+            // the action was slow: on page load branch_status and packages_overview start
+            // first, and interruption_status came back "busy" without even asking. The notice of an
+            // interrupted job (and the button to go back) never appeared (finding 176).
             const slow = action !== 'job_status' && action !== 'interruption_status';
-            // In fila, non rifiutate (reperto 185): «Stato del sistema» premuto mentre la pagina caricava
-            // i pacchetti rispondeva «Operazione già in corso» e la scheda restava vuota. Una richiesta
-            // aspetta che finisca quella prima; il server ha comunque i suoi turni per i lavori.
+            // Queued, not refused (finding 185): "System state" pressed while the page was loading
+            // the packages answered "An operation is already running" and the card stayed empty. A request
+            // waits for the one before to finish; the server has its own turns for jobs anyway.
             if (slow) {
                 const before = updQueue;
                 let done;
@@ -45,9 +45,10 @@
             }
         }
 
-        // La conferma: la finestra del pannello, con cosa succede e il pulsante che lo dice (reperto 197). Prima era la
-        // finestra del browser con una parola da scrivere: fuori dallo stile del pannello, e ferma la pagina. Al server
-        // la parola va comunque, nel codice di chi chiama; e le operazioni pericolose chiedono anche la conferma recente.
+        // The confirmation: the panel's window, with what happens and the button that says it (finding 197).
+        // Before, it was the browser's window with a word to type: outside the panel's style, and it blocks
+        // the page. The word still goes to the server, in the caller's code; and dangerous operations also
+        // ask for the recent confirmation.
         function updConfirm(textValue, keyword) {
             return panelAsk({ title: t('gd.confirmTitle'), text: textValue || t('gd.confirmText'), confirm: t('gd.confirmGo') });
         }

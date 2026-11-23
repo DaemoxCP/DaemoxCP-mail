@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """The names of the API parameters cross TWO parts: the page's JavaScript sends them, the route
 in SSLMailServer reads them. Renamed on one side only, the parameter arrives and nobody looks at
-it — and the function dies silently, without an error, without a warning, without the compiler
+it -- and the function dies silently, without an error, without a warning, without the compiler
 being able to say anything (they are strings inside a JSON).
 
-It is the same defect that on 17 October 2026 killed "Run now" in the Cron page (e.codice
+It is the same defect that on 17 October 2026 killed "Run now" in the Cron page (`e.codice`
 against exitCode), and the same risk that kept out of the review the signature of the update of
 the unprotected packages: passing a signature from the page to the API means writing the same
 name in two distant files.
@@ -17,14 +17,14 @@ Reported:
   1. a key the page sends and the server does NOT read anywhere: dead.
      It is the defect that matters, and the server cannot notice it.
   2. an action the page calls and no route handles.
-  3. (warning) a key read in another action: not necessarily a fault — some routes read the
-     parameters in shared methods — but worth a look.
-Only the keys at the top of the object sent are compared (reperto 230): the keys of the objects
+  3. (warning) a key read in another action: not necessarily a fault -- some routes read the
+     parameters in shared methods -- but worth a look.
+Only the keys at the top of the object sent are compared (finding 230): the keys of the objects
 nested in it are read by whoever the route hands them to, often another class. Before, every
 "key:" inside the braces counted, and update_everything was reported for "kind" and "to" of its
 steps and approved packages, which UpdateManager does read.
 
-The second part does the same for the plain calls, route by route (reperto 224):
+The second part does the same for the plain calls, route by route (finding 224):
   - from the page:   fetch('/api/route?key=' + ..., { body: JSON.stringify({ action: 'x', key: ... }) })
   - from the route:  context("/api/route", ..., this::handler), and in that handler (and in the
                      methods it hands the JSON to) extractParamFromQuery(..., "key"), case "x",
@@ -41,8 +41,7 @@ edited or deleted, and no forward deleted. Reported there:
 Calls whose route, body or action are computed cannot be attributed: they are counted.
 
 Run from the project root:  python3 tests/check_api.py
-It runs on the Mac: it reads two files of the repository and does not touch the system.
-"""
+It runs on the Mac: it reads two files of the repository and does not touch the system."""
 import os
 import re
 import sys
@@ -207,7 +206,7 @@ for m in CALL.finditer(page):
         continue
     # Only the keys at the top of the object: those are what the route reads from req. The keys of the objects
     # nested in it (update_everything: steps[].kind, approved[].to) are read by whoever the route hands the array
-    # to, often another class, and before they were reported as dead although they were read (reperto 230).
+    # to, often another class, and before they were reported as dead although they were read (finding 230).
     j = m.end()
     while j < len(page) and page[j] in " \t\r\n":
         j += 1

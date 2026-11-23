@@ -44,30 +44,30 @@ public class dataBaseManager {
     }
 
     /**
-     * Per la parte web del pannello separato: SQLite in sola lettura, niente permessi da sistemare ne'
-     * segreti da spostare (lo fa la root a ogni avvio, prima di avviarla).
+     * For the web part of the separated panel: SQLite read-only, no permissions to fix nor
+     * secrets to move (the root part does that at every startup, before starting it).
      */
     public static dataBaseManager readOnly() {
         return new dataBaseManager(true);
     }
 
-    /** Vero se il file e' del gruppo della parte web del pannello separato. */
+    /** True if the file belongs to the group of the web part of the separated panel. */
     private static boolean webGroup(java.nio.file.Path p) throws java.io.IOException {
         return org.daemoxcp.mail.system.PanelSeparation.GROUP.equals(java.nio.file.Files.readAttributes(p,
                 java.nio.file.attribute.PosixFileAttributes.class, java.nio.file.LinkOption.NOFOLLOW_LINKS).group().getName());
     }
 
-    // ========== Segreti: nel file dei segreti, non in SQLite ==========
+    // ========== Secrets: in the secrets file, not in SQLite ==========
 
     /*
-     * La password MySQL del pannello e la chiave privata TLS stanno nel file dei segreti
-     * (PanelSecrets, /usr/local/etc/daemoxcp-mail, 600), non nel database SQLite: chi copia
-     * database/daemoxcp-mail.db non porta via le chiavi. Le colonne restano (vuote) per le versioni
-     * di prima. Su un server gia' avviato lo spostamento avviene da solo al primo avvio della
-     * nuova versione (anche di un comando da console): se una colonna ha un valore, e' il piu'
-     * recente (le versioni nuove non ci scrivono piu') e va nel file; poi la colonna si svuota.
+     * The panel's MySQL password and the TLS private key are in the secrets file
+     * (PanelSecrets, /usr/local/etc/daemoxcp-mail, 600), not in the SQLite database: whoever copies
+     * database/daemoxcp-mail.db does not carry away the keys. The columns stay (empty) for the earlier
+     * versions. On a server already running the move happens by itself at the first startup of the
+     * new version (even of a console command): if a column has a value, it is the most
+     * recent one (the new versions no longer write there) and it goes into the file; then the column is emptied.
      */
-    /** Una colonna di un segreto: il nome, il segreto nel file, e le istruzioni fisse che la leggono e la svuotano. */
+    /** A secret's column: the name, the secret in the file, and the fixed statements that read it and empty it. */
     private record SecretColumn(String column, String secret, String read, String clear) {}
 
     private static final SecretColumn[] SECRET_COLUMNS = {
@@ -76,7 +76,7 @@ public class dataBaseManager {
             new SecretColumn("panel_ssl_cert_key", org.daemoxcp.mail.security.PanelSecrets.PANEL_TLS_KEY,
                     SqlCatalog.CONFIG_GET_PANEL_TLS_KEY, SqlCatalog.CONFIG_CLEAR_PANEL_TLS_KEY)};
 
-    /** Sposta nel file dei segreti quello che e' ancora in SQLite. Ritorna quanti valori ha spostato. */
+    /** Moves into the secrets file what is still in SQLite. Returns how many values it moved. */
     public int migrateSecrets() {
         int moved = 0;
         Connection c = this.database_.get(1).connection;
@@ -87,7 +87,7 @@ public class dataBaseManager {
                  ResultSet rs = ps.executeQuery()) {
                 value = rs.next() ? rs.getString(1) : null;
             } catch (SQLException e) {
-                return moved;       // tabella non ancora creata: niente da spostare
+                return moved;       // table not created yet: nothing to move
             }
             if (value == null || value.isEmpty()) continue;
             try {
@@ -106,16 +106,16 @@ public class dataBaseManager {
         return moved;
     }
 
-    /** La password MySQL del pannello: dal file dei segreti (o, se non si e' potuto spostarla, da SQLite). */
+    /** The panel's MySQL password: from the secrets file (or, if it could not be moved, from SQLite). */
     public String mysqlPassword() {
         return secret(0);
     }
 
     /**
-     * Da adesso il pannello entra in MySQL con questa password: nel file dei segreti, e la colonna di
-     * SQLite vuota (una colonna piena vincerebbe sul file). Se il file non e' scrivibile, nella colonna.
-     * La colonna si riscrive solo se cambia: col servizio --web acceso dalla stessa cartella SQLite e'
-     * occupato (SQLITE_BUSY, reperto 156), e di solito la colonna e' gia' vuota.
+     * From now on the panel logs in to MySQL with this password: in the secrets file, and the SQLite
+     * column empty (a filled column would win over the file). If the file is not writable, in the column.
+     * The column is rewritten only if it changes: with the --web service running from the same folder SQLite is
+     * busy (SQLITE_BUSY, finding 156), and usually the column is already empty.
      */
     public void setMysqlPassword(String password) {
         String inSqlite = storeSecret(0, password);
@@ -124,7 +124,7 @@ public class dataBaseManager {
              ResultSet rs = ps.executeQuery()) {
             column = rs.next() ? rs.getString(1) : null;
         } catch (SQLException e) {
-            // tabella non ancora creata
+            // table not created yet
         }
         if (column == null || column.equals(inSqlite)) return;
         try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_SET_MYSQL_PASSWORD)) {
@@ -135,19 +135,19 @@ public class dataBaseManager {
         }
     }
 
-    /** La chiave privata TLS (PEM) del pannello: dal file dei segreti (o, se non si e' potuto spostarla, da SQLite). */
+    /** The panel's TLS private key (PEM): from the secrets file (or, if it could not be moved, from SQLite). */
     public String panelTlsKey() {
         return secret(1);
     }
 
-    /** Una colonna non vuota e' il valore piu' recente (non ancora spostato): vince sul file. */
+    /** A non-empty column is the most recent value (not moved yet): it wins over the file. */
     private String secret(int i) {
         try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(SECRET_COLUMNS[i].read());
              ResultSet rs = ps.executeQuery()) {
             String v = rs.next() ? rs.getString(1) : null;
             if (v != null && !v.isEmpty()) return v;
         } catch (SQLException e) {
-            // tabella non ancora creata
+            // table not created yet
         }
         try {
             return org.daemoxcp.mail.security.PanelSecrets.text(SECRET_COLUMNS[i].secret());
@@ -157,7 +157,7 @@ public class dataBaseManager {
         }
     }
 
-    /** Scrive un segreto nel file; se il file non e' scrivibile resta in SQLite come prima. */
+    /** Writes a secret into the file; if the file is not writable it stays in SQLite as before. */
     private String storeSecret(int i, String value) {
         try {
             org.daemoxcp.mail.security.PanelSecrets.setText(SECRET_COLUMNS[i].secret(), value);
@@ -169,16 +169,16 @@ public class dataBaseManager {
     }
 
     /**
-     * La cartella database/ 700 e daemoxcp-mail.db 600 (anche i file -journal e -wal di SQLite):
-     * oltre ai segreti spostati, dentro ci sono certificato, impostazioni e stato dei servizi.
+     * The database/ folder 700 and daemoxcp-mail.db 600 (also SQLite's -journal and -wal files):
+     * besides the moved secrets, they hold the certificate, settings and state of the services.
      */
     static void restrictFiles() {
         java.nio.file.Path dir = java.nio.file.Paths.get("database");
         try {
             if (!java.nio.file.Files.isDirectory(dir)) java.nio.file.Files.createDirectories(dir);
-            // Col pannello separato la cartella e il database sono del gruppo della parte web, che li legge
-            // (PanelSeparation): quel gruppo continua a leggere, nessun altro. Chi gira da root senza sapere
-            // della separazione (il menu, un comando da console) la lasciava chiusa alla web.
+            // With the separated panel the folder and the database belong to the web part's group, which reads them
+            // (PanelSeparation): that group keeps reading, nobody else. Whoever runs as root without knowing
+            // about the separation (the menu, a console command) used to leave it closed to the web part.
             boolean web = webGroup(dir);
             java.nio.file.Files.setPosixFilePermissions(dir, java.nio.file.attribute.PosixFilePermissions.fromString(web ? "rwxr-x---" : "rwx------"));
             for (String f : new String[]{"daemoxcp-mail.db", "daemoxcp-mail.db-journal", "daemoxcp-mail.db-wal", "daemoxcp-mail.db-shm"}) {
@@ -188,7 +188,7 @@ public class dataBaseManager {
                             web && f.equals("daemoxcp-mail.db") && webGroup(p) ? "rw-r-----" : "rw-------"));
             }
         } catch (java.io.IOException | UnsupportedOperationException e) {
-            // File system senza permessi POSIX, o non nostri: restano come sono
+            // File system without POSIX permissions, or not ours: they stay as they are
         }
     }
 
@@ -214,7 +214,7 @@ public class dataBaseManager {
             preparedStatement.setString(1, host);
             preparedStatement.setString(2, port);
             preparedStatement.setString(3, sslCert);
-            preparedStatement.setString(4, storeSecret(1, sslKey));     // la chiave va nel file dei segreti
+            preparedStatement.setString(4, storeSecret(1, sslKey));     // the key goes into the secrets file
             preparedStatement.setString(5, sslChain);
             preparedStatement.setString(6, sessionPrefix);
 
@@ -226,7 +226,7 @@ public class dataBaseManager {
         }
     }
 
-    /** Il database e l'utente MySQL del pannello coi nomi di adesso (MysqlRename); la password non cambia. */
+    /** The panel's MySQL database and user with the current names (MysqlRename); the password does not change. */
     public boolean renameMysql(String mysqlUser, String mysqlDatabase) {
         try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_RENAME_MYSQL)) {
             ps.setString(1, mysqlUser);
@@ -248,7 +248,7 @@ public class dataBaseManager {
             preparedStatement.setString(1, mysqlHost);
             preparedStatement.setString(2, mysqlPort);
             preparedStatement.setString(3, mysqlUser);
-            preparedStatement.setString(4, storeSecret(0, mysqlPassword));   // la password va nel file dei segreti
+            preparedStatement.setString(4, storeSecret(0, mysqlPassword));   // the password goes into the secrets file
             preparedStatement.setString(5, mysqlDatabase);
 
             int res = preparedStatement.executeUpdate();
@@ -292,14 +292,14 @@ public class dataBaseManager {
     }
 
     /**
-     * Il flag di un servizio: l'istruzione fissa che lo legge e quella che lo scrive (la colonna non e'
-     * un parametro). Null se il servizio non e' riconosciuto.
+     * A service's flag: the fixed statement that reads it and the one that writes it (the column is not
+     * a parameter). Null if the service is not recognised.
      */
     private record ServiceFlag(String read, String write) {}
 
     private static ServiceFlag serviceFlag(String service) {
         if (service == null) return null;
-        // Switch expression (Java 14+) — nessun fall-through, return diretto del valore.
+        // Switch expression (Java 14+) -- no fall-through, direct return of the value.
         return switch (service.toLowerCase()) {
             case "postfix"   -> new ServiceFlag(SqlCatalog.CONFIG_GET_POSTFIX_INSTALLED, SqlCatalog.CONFIG_SET_POSTFIX_INSTALLED);
             case "dovecot"   -> new ServiceFlag(SqlCatalog.CONFIG_GET_DOVECOT_INSTALLED, SqlCatalog.CONFIG_SET_DOVECOT_INSTALLED);
@@ -338,8 +338,8 @@ public class dataBaseManager {
 
     public ResultSet get_data_config() {
         try {
-            // Non in un try con risorse: il ResultSet esce di qui. Chi lo chiude (tutti lo leggono
-            // in un try) chiude anche lo statement, e con lui la lettura che tiene il lock.
+            // Not in a try-with-resources: the ResultSet leaves this method. Whoever closes it (everyone reads it
+            // in a try) also closes the statement, and with it the read that holds the lock.
             PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_DATA_CONFIG);
             prepare.closeOnCompletion();
             return prepare.executeQuery();
@@ -368,14 +368,14 @@ public class dataBaseManager {
     }
 
     /**
-     * La configurazione pronta all'avvio: su un server nuovo prima la tabella (con la riga dei valori predefiniti),
-     * poi i nomi di prima e le colonne aggiunte dopo la prima versione. L'ordine conta: fino alla 0.9.0 Main faceva le
-     * colonne PRIMA di creare la tabella, e su un server nuovo gli ALTER fallivano in silenzio sulla tabella che non
-     * c'era; la tabella nasceva poi senza roundcube_ssl_chain e l'opzione 3 del menu non salvava («no such column»),
-     * finche' un secondo avvio non aggiungeva la colonna. Su un server gia' installato la tabella c'e' e resta solo
-     * il resto, nell'ordine di sempre: i nomi di prima, poi le colonne che mancano.
+     * The configuration ready at startup: on a new server first the table (with the row of default values), then the
+     * previous names and the columns added after the first version. The order matters: up to 0.9.0 Main created the
+     * columns BEFORE creating the table, and on a new server the ALTERs failed silently on the table that did not
+     * exist; the table was then born without roundcube_ssl_chain and menu option 3 did not save ("no such column"),
+     * until a second startup added the column. On a server already installed the table is there and only the rest
+     * remains, in the usual order: the previous names, then the missing columns.
      *
-     * @return vero se la tabella e' stata creata adesso (un server nuovo)
+     * @return true if the table was created now (a new server)
      */
     public boolean prepareAtStartup() {
         boolean created = check_tables() < 1;
@@ -395,7 +395,7 @@ public class dataBaseManager {
         this.database_.get(1).ensureMailHostnameColumn();
     }
 
-    /** Le colonne della configurazione col nome di prima del prodotto: prima di ogni ensure*Column. */
+    /** The configuration columns with the product's previous name: before every ensure*Column. */
     public void renameProductColumns() {
         this.database_.get(1).renameProductColumns();
     }

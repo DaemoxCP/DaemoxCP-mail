@@ -1,5 +1,5 @@
-// Le pagine generate prima e dopo: stesso JavaScript a meno di una rinomina coerente.
-//   NODE_PATH=$(npm root -g) node tools/js-rename-check.js <pagine-prima> <pagine-dopo> <mappa.txt>
+// The generated pages before and after: the same JavaScript except for a consistent rename.
+//   NODE_PATH=$(npm root -g) node tools/js-rename-check.js <pages-before> <pages-after> <map.txt>
 const ts = require('typescript');
 const fs = require('fs'), path = require('path');
 const [before, after, mapFile] = process.argv.slice(2);
@@ -17,7 +17,7 @@ function tokens(code) {
 function scripts(html) { const r = []; const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g; let m; while ((m = re.exec(html))) r.push(m[1]); return r; }
 let bad = 0, pages = 0, renamed = 0;
 const problem = s => { if (bad++ < 25) console.log('NON TORNA ' + s); };
-// le due cartelle devono avere le stesse pagine, e almeno una: con niente davanti non si verifica niente
+// the two folders must have the same pages, and at least one: with nothing in front nothing is checked
 const listA = fs.readdirSync(before).filter(f => f.endsWith('.html')).sort(), listB = fs.readdirSync(after).filter(f => f.endsWith('.html')).sort();
 if (!listA.length) problem('nessuna pagina in ' + before);
 if (listA.join() !== listB.join()) problem('le pagine non sono le stesse: ' + listA.length + ' prima, ' + listB.length + ' dopo');
@@ -26,15 +26,15 @@ for (const f of listA.filter(f => listB.includes(f))) {
   pages++;
   const sa = scripts(A), sb = scripts(B);
   if (sa.length !== sb.length) { problem(f + ': numero di script ' + sa.length + ' -> ' + sb.length); continue; }
-  // il markup fuori dagli script
+  // the markup outside the scripts
   const ma = A.replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, '<script/>'), mb = B.replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, '<script/>');
   if (onRename(ma) !== mb) problem(f + ': il markup e\' cambiato fuori dagli on*=');
   for (let i = 0; i < sa.length; i++) {
     const ta = tokens(sa[i]), tb = tokens(sb[i]);
     if (ta.length !== tb.length) { problem(f + '#' + i + ': token ' + ta.length + ' -> ' + tb.length); continue; }
     const fwd = new Map(), back = new Map();
-    // i nomi di variabile e di funzione che c'erano: le chiavi di proprieta' (obj.name, { name: })
-    // stanno in un altro spazio, e chiamare cosi' una variabile non le tocca
+    // the variable and function names that were there: the property keys (obj.name, { name: })
+    // are in another space, and naming a variable that way does not touch them
     const isPropKey = (pa, x) => (ts.isPropertyAccessExpression(pa) && pa.name.getText() === x) || (ts.isPropertyAssignment(pa) && pa.name.getText() === x) || (ts.isMethodDeclaration(pa) && pa.name.getText() === x);
     const oldIds = new Set(ta.filter(t => t[0] === ts.SyntaxKind.Identifier && !isPropKey(t[2], t[1])).map(t => t[1]));
     for (let k = 0; k < ta.length; k++) {
@@ -46,7 +46,7 @@ for (const f of listA.filter(f => listB.includes(f))) {
           if (map.get(xa) !== xb) { problem(f + '#' + i + ': ' + xa + ' -> ' + xb + ' non e\' nella mappa'); break; }
           if (oldIds.has(xb) && !map.has(xb)) { problem(f + '#' + i + ': ' + xa + ' -> ' + xb + ' cattura un nome che c\'era gia\''); break; }
         } else if (map.has(xa)) {
-          // rimasto col nome vecchio: va bene solo se e' una chiave di proprieta' (dati)
+          // left with the old name: it is fine only if it is a property key (data)
           const isProp = (ts.isPropertyAccessExpression(pa) && pa.name.getText() === xa) || ts.isPropertyAssignment(pa);
           if (!isProp) { problem(f + '#' + i + ': ' + xa + ' rimasto col nome vecchio'); break; }
         }

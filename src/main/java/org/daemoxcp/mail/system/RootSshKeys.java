@@ -18,37 +18,37 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Le chiavi SSH di root, dal pannello (chiesto dal committente l'08/11/2026): vederle, aggiungerne una,
- * toglierne una. Solo il file {@code /root/.ssh/authorized_keys}: sshd_config, la porta 22 e le regole di pf
- * non si toccano mai, da qui.
+ * Root's SSH keys, from the panel (requested by the owner on 2026-11-08): view them, add one,
+ * remove one. Only the file {@code /root/.ssh/authorized_keys}: sshd_config, port 22 and the pf rules
+ * are never touched from here.
  *
- * <p>Chi decide: un superadmin (permesso ssh.manage) con una conferma recente (passkey o codice, come per il
- * vault), controllata dal gestore della rotta. Qui le regole del file:
+ * <p>Who decides: a superadmin (permission ssh.manage) with a recent confirmation (passkey or code, as for the
+ * vault), checked by the route handler. Here, the rules of the file:
  * <ul>
- *   <li>si aggiunge solo una chiave semplice: tipo, chiave, commento, senza opzioni ({@code from=},
- *       {@code command=}...). I tipi: ed25519, ecdsa (256, 384, 521), le loro versioni con chiavetta (sk-),
- *       e RSA da almeno 3072 bit; non DSA. Il tipo scritto deve essere quello dentro la chiave;</li>
- *   <li>il commento: lettere, cifre e pochi segni (r4), al massimo 100 caratteri;</li>
- *   <li>non si toglie l'ultima chiave: senza, come root via SSH non si entrerebbe piu';</li>
- *   <li>le righe che il pannello non capisce (commenti, chiavi con opzioni scritte a mano) restano com'erano;</li>
- *   <li>il file si riscrive intero in modo atomico, 0600 root:wheel, nella cartella .ssh 0700; la versione di
- *       prima resta accanto ({@code authorized_keys.panel-previous}); un collegamento simbolico non si segue.</li>
+ *   <li>only a plain key is added: type, key, comment, without options ({@code from=},
+ *       {@code command=}...). The types: ed25519, ecdsa (256, 384, 521), their security-key versions (sk-),
+ *       and RSA of at least 3072 bits; not DSA. The written type must be the one inside the key;</li>
+ *   <li>the comment: letters, digits and a few symbols (r4), at most 100 characters;</li>
+ *   <li>the last key is not removed: without it, nobody could log in as root via SSH any more;</li>
+ *   <li>the lines the panel does not understand (comments, keys with hand-written options) stay as they were;</li>
+ *   <li>the file is rewritten whole and atomically, 0600 root:wheel, in the .ssh folder 0700; the previous
+ *       version stays beside it ({@code authorized_keys.panel-previous}); a symbolic link is not followed.</li>
  * </ul>
- * L'impronta e' quella di {@code ssh-keygen -l}: "SHA256:" e lo SHA-256 della chiave in base64 senza "=".
+ * The fingerprint is the one of {@code ssh-keygen -l}: "SHA256:" and the SHA-256 of the key in base64 without "=".
  */
 public final class RootSshKeys {
 
     private RootSshKeys() {}
 
-    /** /root/.ssh; le prove la spostano in una cartella loro (daemoxcp.mail.root.ssh.dir), mai quella vera. */
+    /** /root/.ssh; the tests move it to a folder of their own (daemoxcp.mail.root.ssh.dir), never the real one. */
     static final Path DIR = Path.of(System.getProperty("daemoxcp.mail.root.ssh.dir", "/root/.ssh"));
     static final Path FILE = DIR.resolve("authorized_keys");
     static final Path PREVIOUS = DIR.resolve("authorized_keys.panel-previous");
 
-    /** I tipi che si accettano per una chiave nuova. */
+    /** The types accepted for a new key. */
     static final List<String> ACCEPTED = List.of("ssh-ed25519", "sk-ssh-ed25519@openssh.com", "ecdsa-sha2-nistp256",
             "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "sk-ecdsa-sha2-nistp256@openssh.com", "ssh-rsa");
-    /** I tipi che si riconoscono in un file gia' scritto (anche DSA, per poterla vedere e togliere). */
+    /** The types recognised in a file already written (DSA too, so that it can be seen and removed). */
     private static final Pattern KEY = Pattern.compile("(?:^|\\s)(ssh-ed25519|sk-ssh-ed25519@openssh\\.com|ecdsa-sha2-nistp(?:256|384|521)"
             + "|sk-ecdsa-sha2-nistp256@openssh\\.com|ssh-rsa|ssh-dss)\\s+([A-Za-z0-9+/]+={0,2})(?:\\s+(.*))?$");
     private static final Pattern COMMENT = Pattern.compile("[A-Za-z0-9 ._@+:()-]{0,100}");
@@ -56,12 +56,12 @@ public final class RootSshKeys {
     static final int MAX_LINE = 8192;
     public static final Pattern FINGERPRINT = Pattern.compile("SHA256:[A-Za-z0-9+/]{43}");
 
-    /** Una chiave del file: tipo, impronta, commento, le opzioni scritte prima (vuote se nessuna). */
+    /** A key of the file: type, fingerprint, comment, the options written before it (empty if none). */
     public record Key(String type, String fingerprint, String comment, String options) {}
 
     /**
-     * L'esito di un controllo, di un'aggiunta o di una rimozione: errorKey null se va, altrimenti la chiave del
-     * messaggio coi suoi parametri. key e' la chiave in questione; line la riga da scrivere (solo dal controllo).
+     * The result of a check, an addition or a removal: errorKey null if it goes through, otherwise the message key
+     * with its parameters. key is the key in question; line the line to write (only from the check).
      */
     public record Outcome(String errorKey, Map<String, Object> params, Key key, String line) {
         static Outcome ok(Key k) { return new Outcome(null, Map.of(), k, null); }
@@ -71,7 +71,7 @@ public final class RootSshKeys {
         public boolean success() { return errorKey == null; }
     }
 
-    // ===================== Le parti che si provano senza un sistema sotto =====================
+    // ===================== The parts that are tested without a system underneath =====================
 
     static String fingerprint(byte[] blob) {
         try {
@@ -82,7 +82,7 @@ public final class RootSshKeys {
         }
     }
 
-    /** Una riga del file, se e' una chiave; null se no (un commento, una riga vuota, una che non si capisce). */
+    /** A line of the file, if it is a key; null if not (a comment, an empty line, one that cannot be understood). */
     static Key parse(String line) {
         String t = line == null ? "" : line.trim();
         if (t.isEmpty() || t.startsWith("#")) return null;
@@ -109,7 +109,7 @@ public final class RootSshKeys {
         return out;
     }
 
-    /** Il primo campo di una chiave: una stringa SSH (lunghezza a 4 byte e i byte), o null. */
+    /** The first field of a key: an SSH string (4-byte length and the bytes), or null. */
     private static byte[] sshString(ByteBuffer b) {
         if (b.remaining() < 4) return null;
         int n = b.getInt();
@@ -120,8 +120,8 @@ public final class RootSshKeys {
     }
 
     /**
-     * Una chiave nuova, controllata: la riga da scrivere (tipo, chiave e commento separati da uno spazio), o il
-     * motivo per cui non va (la chiave del messaggio, in Outcome).
+     * A new key, checked: the line to write (type, key and comment separated by one space), or the
+     * reason why it is not accepted (the message key, in Outcome).
      */
     static Outcome validate(String input) {
         String t = input == null ? "" : input.trim();
@@ -161,7 +161,7 @@ public final class RootSshKeys {
         return Outcome.ok(new Key(parts[0], fingerprint(blob), comment, ""), line);
     }
 
-    /** Il file con la riga della chiave in piu' in fondo; null se la chiave c'e' gia'. */
+    /** The file with the line of the extra key at the end; null if the key is already there. */
     static String withKey(String content, Key key, String line) {
         String c = content == null ? "" : content;
         for (Key k : keys(c)) if (k.fingerprint().equals(key.fingerprint())) return null;
@@ -169,7 +169,7 @@ public final class RootSshKeys {
         return c + line + "\n";
     }
 
-    /** Il file senza le righe di quella chiave; null se non c'e'. */
+    /** The file without the lines of that key; null if it is not there. */
     static String withoutKey(String content, String fingerprint) {
         if (content == null) return null;
         StringBuilder out = new StringBuilder();
@@ -187,7 +187,7 @@ public final class RootSshKeys {
         return s.endsWith("\n\n") ? s.substring(0, s.length() - 1) : s;
     }
 
-    // ===================== Il file vero =====================
+    // ===================== The real file =====================
 
     private static void refuseLinks() throws IOException {
         if (Files.isSymbolicLink(DIR) || Files.isSymbolicLink(FILE)) throw new IOException("a symbolic link in " + DIR + ": not followed");

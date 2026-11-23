@@ -9,25 +9,27 @@ import java.time.Duration;
 import java.util.logging.Logger;
 
 /**
- * DANE per la posta in uscita: smtp_tls_security_level = dane e smtp_dns_support_level = dnssec.
+ * DANE for outgoing mail: smtp_tls_security_level = dane and smtp_dns_support_level = dnssec.
  *
- * Prima Postfix spediva con TLS opportunistico (may): cifrato se il server di destinazione lo offre, ma senza controllare
- * di chi fosse il certificato, e un attaccante sulla strada poteva togliere STARTTLS o presentarne uno suo. Con DANE
- * (RFC 7672, il TLS_README di Postfix), se il dominio di destinazione pubblica record TLSA firmati DNSSEC, Postfix
- * pretende TLS e un certificato che corrisponda; dove non ci sono, resta come prima (may). Gmail e Outlook non
- * pubblicano TLSA: per loro non cambia niente.
+ * Before, Postfix sent with opportunistic TLS (may): encrypted if the destination server offers it, but without
+ * checking whose certificate it was, and an attacker on the path could strip STARTTLS or present one of their own.
+ * With DANE (RFC 7672, Postfix's TLS_README), if the destination domain publishes DNSSEC-signed TLSA records,
+ * Postfix requires TLS and a matching certificate; where there are none, it stays as before (may). Gmail and
+ * Outlook do not publish TLSA: for them nothing changes.
  *
- * Serve un risolutore che convalidi DNSSEC sulla macchina stessa: local_unbound, che il pannello configura (la sola
- * cosa di cui Postfix si fida e' il flag AD di un risolutore su 127.0.0.1). Misurato il 20/11/2026: sulla VM e sul server
- * vero /etc/resolv.conf dice nameserver 127.0.0.1, local_unbound risponde con il flag ad, e posttls-finger con
- * smtp_dns_support_level = dnssec cerca i TLSA degli MX di ietf.org, posteo.de e mailbox.org (Postfix li cerca solo
- * dopo MX e indirizzi convalidati). Un risolutore che non convalida farebbe solo tornare tutto a may; ma un risolutore
- * che non e' locale no: qui non si cambia niente.
+ * It needs a resolver that validates DNSSEC on the machine itself: local_unbound, which the panel configures (the
+ * only thing Postfix trusts is the AD flag of a resolver on 127.0.0.1). Measured on 2026-11-20: on the VM and on
+ * the production server /etc/resolv.conf says nameserver 127.0.0.1, local_unbound answers with the ad flag, and
+ * posttls-finger with smtp_dns_support_level = dnssec looks up the TLSA of the MXs of ietf.org, posteo.de and
+ * mailbox.org (Postfix looks them up only after validated MX and addresses). A resolver that does not validate
+ * would only make everything fall back to may; a resolver that is not local is another matter: then nothing is
+ * changed here.
  *
- * L'installatore lo scrive in main.cf; sui server installati prima lo fa questa riparazione all'avvio, solo se i due
- * valori sono quelli dell'installatore di prima (may e il predefinito): un valore scritto a mano resta. postconf -e,
- * postfix check, reload, e la verifica: i due valori letti da Postfix, Postfix acceso, il risolutore che convalida
- * ancora. Se qualcosa non torna rimette i valori di prima. Al secondo avvio non fa niente.
+ * The installer writes it into main.cf; on the servers installed earlier this boot repair does it, only if the
+ * two values are those of the earlier installer (may and the default): a value written by hand stays.
+ * postconf -e, postfix check, reload, and the verification: the two values as read by Postfix, Postfix running,
+ * the resolver still validating. If something does not add up it puts the previous values back. On the second
+ * startup it does nothing.
  */
 public final class PostfixDane {
 
@@ -42,8 +44,8 @@ public final class PostfixDane {
     enum Action { NOTHING, APPLY, LEFT_ALONE, NO_RESOLVER }
 
     /**
-     * Che cosa fare. level, dns: i valori di Postfix (postconf -h); localResolver: il primo nameserver di
-     * /etc/resolv.conf e' 127.0.0.1 o ::1; validates: quel risolutore convalida DNSSEC. Funzione pura.
+     * What to do. level, dns: Postfix's values (postconf -h); localResolver: the first nameserver of
+     * /etc/resolv.conf is 127.0.0.1 or ::1; validates: that resolver validates DNSSEC. Pure function.
      */
     static Action decide(String level, String dns, boolean localResolver, boolean validates) {
         String l = level == null ? "" : level.trim(), d = dns == null ? "" : dns.trim();
@@ -52,7 +54,7 @@ public final class PostfixDane {
         return localResolver && validates ? Action.APPLY : Action.NO_RESOLVER;
     }
 
-    /** Il primo nameserver di resolv.conf e' la macchina stessa. Funzione pura. */
+    /** The first nameserver in resolv.conf is the machine itself. Pure function. */
     static boolean localResolver(String resolvConf) {
         if (resolvConf == null) return false;
         for (String line : resolvConf.split("\n")) {
@@ -62,7 +64,7 @@ public final class PostfixDane {
         return false;
     }
 
-    /** L'uscita di drill -D dice che la risposta e' convalidata: il flag ad. Funzione pura. */
+    /** The output of drill -D says that the answer is validated: the ad flag. Pure function. */
     static boolean authenticated(String drill) {
         if (drill == null) return false;
         for (String line : drill.split("\n"))
@@ -70,7 +72,7 @@ public final class PostfixDane {
         return false;
     }
 
-    /** Il risolutore della macchina convalida: la radice (sempre firmata) torna col flag ad. */
+    /** The machine's resolver validates: the root (always signed) comes back with the ad flag. */
     static boolean validates() {
         return authenticated(Shell.run(Duration.ofSeconds(20), "drill", "-D", ".", "DNSKEY", "@127.0.0.1").output());
     }

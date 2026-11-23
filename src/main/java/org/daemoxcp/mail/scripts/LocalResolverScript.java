@@ -1,29 +1,29 @@
 package org.daemoxcp.mail.scripts;
 
 /**
- * Un risolutore DNS ricorsivo locale, per rspamd: il pezzo di script che accende local_unbound
- * del sistema base senza inoltro, e ci fa puntare /etc/resolv.conf. Lo usano i tre script che
- * installano rspamd (FullMailServerScript, RspamdScript, FullMailStackScript), prima che rspamd
- * parta, perche' rspamd legge resolv.conf all'avvio.
+ * A local recursive DNS resolver, for rspamd: the piece of script that turns on the base system's local_unbound
+ * without forwarding, and points /etc/resolv.conf at it. It is used by the three scripts that
+ * install rspamd (FullMailServerScript, RspamdScript, FullMailStackScript), before rspamd
+ * starts, because rspamd reads resolv.conf at startup.
  *
- * Il perche', misurato sulla VM FreeBSD 15.1 il 29/10/2026 con rspamc e un messaggio che
- * contiene il dominio di prova di Spamhaus (dbltest.com):
- *  - con il DNS che lo script "timezone" del pannello imposta (1.1.1.1), rspamd riceve
- *    DBL_BLOCKED_OPENRESOLVER e URIBL_BLOCKED: Spamhaus non risponde alle domande che arrivano
- *    da un risolutore pubblico (per dbltest.com da' 127.255.255.254), quindi le liste non
- *    servono a niente;
- *  - con il DNS della VM, DBL_FAIL "query timed out", e 5 secondi per ogni messaggio;
- *  - con local_unbound ricorsivo, dbltest.com da' 127.0.1.2, che e' la risposta giusta.
- * Il pannello sa gia' che serve: la pagina «Unbound» (SSLMailServer.runUnboundFixAll) fa la
- * stessa cosa a mano, e controlla proprio che non ci sia inoltro. L'installatore non lo faceva.
+ * The reason, measured on the FreeBSD 15.1 VM on 2026-10-29 with rspamc and a message that
+ * contains Spamhaus's test domain (dbltest.com):
+ *  - with the DNS that the panel's "timezone" script sets (1.1.1.1), rspamd gets
+ *    DBL_BLOCKED_OPENRESOLVER and URIBL_BLOCKED: Spamhaus does not answer queries that come
+ *    from a public resolver (for dbltest.com it gives 127.255.255.254), so the lists are
+ *    useless;
+ *  - with the VM's DNS, DBL_FAIL "query timed out", and 5 seconds for every message;
+ *  - with recursive local_unbound, dbltest.com gives 127.0.1.2, which is the right answer.
+ * The panel already knows it is needed: the "Unbound" page (SSLMailServer.runUnboundFixAll) does the
+ * same thing by hand, and checks precisely that there is no forwarding. The installer did not do it.
  *
- * local_unbound_forwarders="none" e' il modo di FreeBSD: local-unbound-setup va in modo
- * ricorsivo, commenta in resolv.conf gli altri server e scrive un resolvconf.conf statico
- * (libc="NO"), quindi un rinnovo DHCP non rimette gli inoltri. Misurato: dopo
- * "service dhclient restart" resolv.conf resta su 127.0.0.1 e forward.conf non nasce.
+ * local_unbound_forwarders="none" is the FreeBSD way: local-unbound-setup goes into recursive
+ * mode, comments out the other servers in resolv.conf and writes a static resolvconf.conf
+ * (libc="NO"), so a DHCP renewal does not bring the forwarders back. Measured: after
+ * "service dhclient restart" resolv.conf stays on 127.0.0.1 and forward.conf is not created.
  *
- * Si puo' ripetere: con una configurazione gia' ricorsiva non si rifa' il setup, si riavvia
- * soltanto. E se il risolutore locale non risponde, tutto torna esattamente com'era.
+ * It can be repeated: with a configuration that is already recursive the setup is not redone, it is
+ * only restarted. And if the local resolver does not answer, everything goes back exactly as it was.
  */
 public final class LocalResolverScript {
 

@@ -9,15 +9,15 @@ import java.util.*;
 import java.util.stream.Stream;
 
 /**
- * Le chiavi JSON che finirebbero due volte sullo stesso oggetto dopo una rinomina.
+ * The JSON keys that would end up twice on the same object after a rename.
  *
- * Per ogni put("chiave", ...) e opt*("chiave") con chiave letterale si risale all'oggetto:
- * la variabile su cui si chiama, o la radice di una catena new JSONObject().put(...).put(...).
- * Poi, con la mappa delle rinomine (vecchia nuova, una per riga), si segnala ogni oggetto che
- * dopo la rinomina avrebbe due chiavi uguali: una vecchia rinominata e una che esisteva gia',
- * o due vecchie con la stessa traduzione.
+ * For every put("key", ...) and opt*("key") with a literal key it goes back to the object:
+ * the variable it is called on, or the root of a chain new JSONObject().put(...).put(...).
+ * Then, with the map of the renames (old new, one per line), every object that after the
+ * rename would have two equal keys is reported: an old one renamed and one that already
+ * existed, or two old ones with the same translation.
  *
- * Uso: java JsonKeyCheck.java <classpath> <mappa>   (dalla radice del progetto)
+ * Usage: java JsonKeyCheck.java <classpath> <map>   (from the project root)
  */
 public class JsonKeyCheck {
     static String shortText(Tree t) {
@@ -42,7 +42,7 @@ public class JsonKeyCheck {
         Iterable<? extends CompilationUnitTree> cus = task.parse();
         task.analyze();
         Trees trees = Trees.instance(task);
-        // oggetto -> (chiave -> dove)
+        // object -> (key -> where)
         Map<Object, Map<String, List<String>>> puts = new LinkedHashMap<>(), reads = new LinkedHashMap<>();
         Map<Object, String> label = new HashMap<>();
         for (CompilationUnitTree cu : cus) {
@@ -58,14 +58,14 @@ public class JsonKeyCheck {
                         boolean read = m.startsWith("opt") || m.startsWith("get") || m.equals("has") || m.equals("remove") || m.equals("isNull");
                         if (put || read) {
                             ExpressionTree recv = ms.getExpression();
-                            // risale la catena di put: l'oggetto e' la radice
+                            // goes back up the chain of puts: the object is the root
                             while (put && recv instanceof MethodInvocationTree inner && inner.getMethodSelect() instanceof MemberSelectTree ims
                                     && (ims.getIdentifier().contentEquals("put") || ims.getIdentifier().contentEquals("accumulate")))
                                 recv = ims.getExpression();
                             Object id;
                             Element e = trees.getElement(new TreePath(getCurrentPath(), recv));
                             if (recv instanceof IdentifierTree && e != null) id = e;
-                            else id = recv;   // la radice della catena, come nodo
+                            else id = recv;   // the root of the chain, as a node
                             label.putIfAbsent(id, file + ":" + lm.getLineNumber(sp.getStartPosition(cu, mi)) + " " + shortText(recv));
                             (put ? puts : reads).computeIfAbsent(id, k -> new TreeMap<>()).computeIfAbsent(key, k -> new ArrayList<>())
                                     .add(file + ":" + lm.getLineNumber(sp.getStartPosition(cu, mi)));

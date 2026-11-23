@@ -12,19 +12,18 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
- * syslogd non apre piu' la porta 514 alla rete.
+ * syslogd no longer opens port 514 to the network.
  *
- * Misurato il 07/11/2026 sul server vero e sulla VM: syslogd ascolta in UDP su *:514, IPv4 e IPv6. E' il
- * predefinito di FreeBSD (/etc/defaults/rc.conf: syslogd_flags="-s"): con un solo -s i messaggi da fuori
- * si scartano, ma la porta resta aperta. Il manuale, syslogd(8): "-s ... If specified twice, no network
- * socket will be opened at all, which also disables logging to remote machines". Sul server niente
- * manda i log a un'altra macchina (in /etc/syslog.conf c'e' solo "#*.* @loghost", commentata) e niente
- * li riceve: col doppio -s non si perde niente.
+ * Measured on 2026-11-07 on the production server and on the VM: syslogd listens over UDP on *:514, IPv4 and IPv6.
+ * It is the FreeBSD default (/etc/defaults/rc.conf: syslogd_flags="-s"): with a single -s the messages from outside
+ * are discarded, but the port stays open. The manual, syslogd(8): "-s ... If specified twice, no network socket will
+ * be opened at all, which also disables logging to remote machines". On the server nothing sends the logs to another
+ * machine (in /etc/syslog.conf there is only "#*.* @loghost", commented out) and nothing receives them: with the
+ * double -s nothing is lost.
  *
- * Si cambia solo se i flag sono quelli di FreeBSD ("-s") e nessuna riga di syslog.conf manda i log
- * altrove: chi li ha scelti diversi ha i suoi motivi. Dopo il riavvio di syslogd si controlla che nessuna
- * porta sia rimasta aperta e che un messaggio scritto con logger arrivi in /var/log/messages; se no, i
- * flag tornano com'erano.
+ * It is changed only if the flags are the FreeBSD ones ("-s") and no line of syslog.conf sends the logs elsewhere:
+ * whoever chose different ones has their reasons. After syslogd is restarted it checks that no port was left open
+ * and that a message written with logger arrives in /var/log/messages; if not, the flags go back to how they were.
  */
 public final class SyslogNetwork {
 
@@ -34,7 +33,7 @@ public final class SyslogNetwork {
     static final List<String> CONF_DIRS = List.of("/etc/syslog.d", "/usr/local/etc/syslog.d");
     static final String MESSAGES = "/var/log/messages";
 
-    /** Una riga attiva che manda i log a un'altra macchina: "selettore @host". */
+    /** An active line that sends the logs to another machine: "selector @host". */
     private static final Pattern FORWARD = Pattern.compile("^[^#]*\\s@\\S");
 
     private SyslogNetwork() {}
@@ -43,7 +42,7 @@ public final class SyslogNetwork {
 
     record Decision(Action action, String reason) {}
 
-    /** Funzione pura: i flag di adesso (sysrc -n) e le righe di syslog.conf. */
+    /** Pure function: the current flags (sysrc -n) and the lines of syslog.conf. */
     static Decision decide(String flags, List<String> confLines) {
         String f = flags == null ? "" : flags.trim().replaceAll("\\s+", " ");
         if (f.equals("-ss") || f.matches("(.* )?-s( .*)? -s( .*)?") || f.matches("(.* )?-ss( .*)?"))
@@ -101,7 +100,7 @@ public final class SyslogNetwork {
         return true;
     }
 
-    /** Nessuna porta di syslogd, e un messaggio locale che arriva. */
+    /** No syslogd port, and a local message that arrives. */
     static String verify() throws Exception {
         String probe = "daemoxcp-mail syslog probe " + UUID.randomUUID();
         for (int i = 0; i < 10; i++) {

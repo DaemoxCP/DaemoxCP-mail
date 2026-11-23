@@ -7,24 +7,24 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Le patch del sistema di base installate dal pannello, e il riavvio che chiedono (reperto 185).
+ * The base system patches installed by the panel, and the restart they ask for (finding 185).
  *
- * <p>Fino al 07/11/2026 il pannello sapeva solo SCARICARE le patch ("freebsd-update fetch"):
- * installarle era possibile solo dentro il passaggio a una release nuova. Sul server vero le patch
- * fino alla p6 aspettavano scaricate dal 22/10, e nessuno lo vedeva se non in una riga della
- * scheda del sistema. Il lavoro vero e' in UpdateManager.runOsPatchInstall; qui le decisioni, che
- * si provano senza un sistema sotto.
+ * <p>Until 2026-11-07 the panel could only DOWNLOAD the patches ("freebsd-update fetch"):
+ * installing them was possible only inside the upgrade to a new release. On the production server
+ * the patches up to p6 had been waiting, downloaded, since 22 October, and nobody saw it except in
+ * one line of the system tab. The real work is in UpdateManager.runOsPatchInstall; here are the
+ * decisions, which can be tested without a system underneath.
  */
 public final class OsPatch {
 
     private OsPatch() {}
 
-    /** Il file "tag" di freebsd-update: "freebsd-update|arm64|15.1-RELEASE|6|<hash>|<fine supporto>". */
+    /** The freebsd-update "tag" file: "freebsd-update|arm64|15.1-RELEASE|6|<hash>|<end of support>". */
     private static final Pattern TAG = Pattern.compile("^freebsd-update\\|[^|]+\\|([0-9]{1,2}\\.[0-9]{1,2}-[A-Z]+[A-Z0-9-]*)\\|([0-9]{1,4})\\|");
 
     /**
-     * La versione a cui portano le patch scaricate, dal file tag: "15.1-RELEASE-p6". Vuota se il
-     * tag non c'e' o non ha quella forma; "15.1-RELEASE" per il livello 0.
+     * The version the downloaded patches lead to, from the tag file: "15.1-RELEASE-p6". Empty if the
+     * tag is not there or does not have that form; "15.1-RELEASE" for level 0.
      */
     static String target(String tag) {
         if (tag == null) return "";
@@ -35,42 +35,42 @@ public final class OsPatch {
     }
 
     /**
-     * freebsd-update install ha installato il kernel e chiede di riavviare PRIMA di proseguire
-     * (succede nei passaggi di release: "Please reboot and run freebsd-update install again").
-     * Fra due patch della stessa release installa tutto in un giro solo.
+     * freebsd-update install has installed the kernel and asks to reboot BEFORE going on
+     * (it happens in release upgrades: "Please reboot and run freebsd-update install again").
+     * Between two patches of the same release it installs everything in a single run.
      */
     static boolean asksRebootFirst(String output) {
         String o = output == null ? "" : output.toLowerCase();
         return o.contains("reboot") && o.contains("install") && o.contains("again");
     }
 
-    /** L'uscita di freebsd-update quando non c'e' niente da installare. */
+    /** The output of freebsd-update when there is nothing to install. */
     static boolean nothingToInstall(String output) {
         String o = output == null ? "" : output.toLowerCase();
         return o.contains("no updates are available to install");
     }
 
-    /** L'uscita di "freebsd-update fetch" quando la release e' gia' all'ultima patch. */
+    /** The output of "freebsd-update fetch" when the release is already at the latest patch. */
     static boolean nothingToFetch(String output) {
         String o = output == null ? "" : output.toLowerCase();
         return o.contains("no updates needed") || o.contains("has no updates available");
     }
 
     /**
-     * Se il server va riavviato, e perche'.
+     * Whether the server must be restarted, and why.
      *
      * <ul>
-     *   <li>"needed": il kernel installato non e' quello in esecuzione (il criterio dell'Handbook):
-     *   le patch del kernel non valgono finche' non si riavvia;</li>
-     *   <li>"advised": le patch sono state installate dopo l'ultima accensione, ma il kernel e'
-     *   quello giusto. I servizi accesi usano ancora le librerie di prima (libc, OpenSSL del
-     *   sistema) finche' non ripartono: il riavvio li fa ripartire tutti insieme;</li>
-     *   <li>"none": niente da fare. Se il pannello ha installato patch prima dell'ultima
-     *   accensione, "done" dice quali.</li>
+     *   <li>"needed": the installed kernel is not the running one (the Handbook's criterion):
+     *   kernel patches do not take effect until a restart;</li>
+     *   <li>"advised": the patches were installed after the last boot, but the kernel is the
+     *   right one. The running services still use the old libraries (libc, the system's
+     *   OpenSSL) until they restart: the restart restarts them all together;</li>
+     *   <li>"none": nothing to do. If the panel installed patches before the last boot,
+     *   "done" says which.</li>
      * </ul>
      *
-     * @param installedAt quando il pannello ha installato le ultime patch (secondi epoch), 0 se mai
-     * @param boot        quando si e' acceso il server, null se non si sa
+     * @param installedAt when the panel installed the latest patches (epoch seconds), 0 if never
+     * @param boot        when the server was started, null if unknown
      */
     static JSONObject rebootState(String installedKernel, String runningKernel, long installedAt, Instant boot, String installedTo) {
         String installed = installedKernel == null ? "" : installedKernel.trim();
@@ -87,11 +87,12 @@ public final class OsPatch {
     }
 
     /**
-     * Il file di configurazione con cui il pannello lancia "freebsd-update install": quello del
-     * sistema, con CreateBootEnv no. L'ambiente di avvio lo crea il pannello prima, con un nome che
-     * dice cosa c'era dentro, e controlla che esista: senza, non installa. Lasciato a freebsd-update,
-     * se bectl non lo crea (bectl check fallisce) l'installazione prosegue lo stesso, senza via di
-     * ritorno. Una riga CreateBootEnv gia' attiva si toglie: freebsd-update rifiuta i doppioni.
+     * The configuration file with which the panel launches "freebsd-update install": the system's
+     * one, with CreateBootEnv no. The panel creates the boot environment beforehand, with a name that
+     * says what was in it, and checks that it exists: without it, it does not install. Left to
+     * freebsd-update, if bectl does not create it (bectl check fails) the installation goes ahead
+     * anyway, with no way back. A CreateBootEnv line that is already active is removed:
+     * freebsd-update refuses duplicates.
      */
     static String installConfig(String system) {
         StringBuilder out = new StringBuilder();

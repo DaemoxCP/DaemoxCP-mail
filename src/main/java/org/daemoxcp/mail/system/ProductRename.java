@@ -10,29 +10,31 @@ import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 /**
- * All'avvio del servizio, da root e prima di tutto il resto: il pannello passa dal nome di prima (FreeBSD Mail Panel,
- * "mailpanel" sul disco) a DaemoxCP Mail (17/11/2026), su un server installato prima.
+ * At service startup, as root and before everything else: the panel moves from the previous name (FreeBSD Mail
+ * Panel, "mailpanel" on disk) to DaemoxCP Mail (2026-11-17), on a server installed earlier.
  *
- * <p>Il nome sta in molti posti del server, e ognuno ha la sua migrazione, con i suoi controlli e il suo ritorno
- * indietro. Qui c'e' solo l'ordine, che conta:
+ * <p>The name is in many places on the server, and each one has its own migration, with its own checks and its
+ * own way back. Here there is only the order, which matters:
  * <ol>
- *   <li>i file e le cartelle che legge soltanto il pannello (sezione "productFiles"): i segreti, i registri delle
- *       reinstallazioni, il database SQLite, la nota della manutenzione. Si spostano e basta; e i file delle cartelle
- *       di prima che finiscono in una di adesso gia' presente (sezione "mergedFolders", mergeFolders);</li>
- *   <li>le cartelle dei dati, che leggono anche php-fpm, nginx e pf (DataFolderRename);</li>
- *   <li>le righe di commento col nome di prima nei file di configurazione (PanelMarker.productComments): dopo, il
- *       codice che riconosce i suoi blocchi dal commento trova quello di adesso;</li>
- *   <li>l'utente di sistema della parte web, prima che la parte root la accenda (PanelUserRename);</li>
- *   <li>il servizio rc.d e il jar (PanelServiceRename);</li>
- *   <li>la jail di fail2ban degli accessi (AuthJailRename) e la superficie pubblica sulla 443 (PublicSurfaceRename).</li>
+ *   <li>the files and folders that only the panel reads (section "productFiles"): the secrets, the logs of the
+ *       reinstallations, the SQLite database, the maintenance note. They are simply moved; and the files of the
+ *       previous folders that end up in a current one already present (section "mergedFolders",
+ *       mergeFolders);</li>
+ *   <li>the data folders, which php-fpm, nginx and pf read too (DataFolderRename);</li>
+ *   <li>the comment lines with the previous name in the configuration files (PanelMarker.productComments):
+ *       afterwards, the code that recognizes its blocks by the comment finds the current one;</li>
+ *   <li>the system user of the web part, before the root part starts it (PanelUserRename);</li>
+ *   <li>the rc.d service and the jar (PanelServiceRename);</li>
+ *   <li>the fail2ban jail for logins (AuthJailRename) and the public surface on 443 (PublicSurfaceRename).</li>
  * </ol>
- * Il database e gli utenti di MySQL vengono dopo, quando il pannello ha aperto la sua configurazione (MysqlRename, da
- * Main). Un passo che non riesce lascia le cose come stavano e lo dice nel registro; quelli dopo non dipendono da lui,
- * e al prossimo avvio si riprova. Su un server gia' passato, o installato con questa versione, non c'e' niente da
- * fare e nessun passo tocca niente.
+ * The MySQL database and users come later, when the panel has opened its configuration (MysqlRename, from
+ * Main). A step that fails leaves things as they were and says so in the log; the ones after it do not depend on
+ * it, and at the next startup it is tried again. On a server already moved over, or installed with this version,
+ * there is nothing to do and no step touches anything.
  *
- * <p>Solo nel processo del servizio (--web) o del menu, da root: un comando da console (--access-code, --create-admin,
- * --reinstall) che spostasse le cartelle sotto un servizio ancora acceso con la versione di prima lo romperebbe.
+ * <p>Only in the service process (--web) or the menu one, as root: a console command (--access-code,
+ * --create-admin, --reinstall) that moved the folders from under a service still running with the previous
+ * version would break it.
  */
 public final class ProductRename {
 
@@ -40,7 +42,7 @@ public final class ProductRename {
 
     private ProductRename() {}
 
-    /** Vero per il processo che puo' fare il passaggio: root, e il servizio (--web) o il menu (senza argomenti). */
+    /** True for the process that can do the move: root, and the service (--web) or the menu (no arguments). */
     public static boolean applies(String[] args) {
         if (!"root".equals(System.getProperty("user.name"))) return false;
         if (args.length == 0) return true;
@@ -66,7 +68,7 @@ public final class ProductRename {
         }
     }
 
-    /** I file del solo pannello: spostati se c'e' il nome di prima e non quello di adesso. Non segue i collegamenti. */
+    /** The panel-only files: moved if the previous name exists and the current one does not. Does not follow links. */
     static void files() {
         moveFiles(LegacyNames.pairs("productFiles"));
         mergeFolders(LegacyNames.pairs("mergedFolders"));
@@ -92,11 +94,12 @@ public final class ProductRename {
     }
 
     /**
-     * Le cartelle di prima il cui nome di adesso e' gia' di un'altra (sezione "mergedFolders"): /usr/local/etc/mailpanel,
-     * dove lo script del solo MySQL lasciava mysql.json, e /usr/local/etc/mail-panel, i segreti, diventano entrambe
-     * /usr/local/etc/daemoxcp-mail. Ogni file passa nella cartella di adesso col suo nome, proprietario e permessi; uno
-     * che li' c'e' gia' resta dov'e', e allora resta anche la cartella. Vuota, la cartella di prima si toglie.
-     * Una cartella di adesso che manca non si crea: chi deve crearla (PanelSecrets) le da' i permessi giusti.
+     * The previous folders whose current name already belongs to another one (section "mergedFolders"):
+     * /usr/local/etc/mailpanel, where the MySQL-only script left mysql.json, and /usr/local/etc/mail-panel, the
+     * secrets, both become /usr/local/etc/daemoxcp-mail. Every file moves into the current folder with its name,
+     * owner and permissions; one that is already there stays where it is, and then the folder stays too. Once
+     * empty, the previous folder is removed. A current folder that is missing is not created: whoever has to
+     * create it (PanelSecrets) gives it the right permissions.
      */
     static void mergeFolders(List<String[]> pairs) {
         for (String[] p : pairs) {

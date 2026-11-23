@@ -21,7 +21,7 @@ import java.util.Properties;
  * halfway. After every round: does the panel still get into MySQL? (Main.connectFromConfig, the same
  * connection as the console commands.)
  *
- * Reperto 156: before this fix the new password became the panel's BEFORE the script, and every
+ * Finding 156: before this fix the new password became the panel's BEFORE the script, and every
  * early exit left it with a password MySQL refuses.
  *
  * It does not touch the real panel's configuration: every round has a folder of its own (SQLite,

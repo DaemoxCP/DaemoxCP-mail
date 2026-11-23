@@ -11,23 +11,24 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Le regole Sieve del pannello compilate dal Pigeonhole che c'e' adesso (reperto 241).
+ * The panel's Sieve rules compiled by the Pigeonhole that is installed now (finding 241).
  *
- * <p>Il compilato (.svbin) accanto a ogni regola del pannello lo fa il pannello con sievec (SieveCompiler, reperto 218):
- * Dovecot consegna come vmail e nella cartella di root non lo puo' scrivere. Quando Pigeonhole cambia formato, come nel
- * passaggio dalla 2.3 alla 2.4 (intestazione 02 contro 03, misurato sulla VM), il compilato di prima non vale piu':
- * Dovecot ricompila la regola in memoria a ogni messaggio, la posta arriva e le regole funzionano, ma a ogni messaggio
- * scrive due errori nel registro («binary ... save: failed to create temporary file», «The LDA Sieve plugin does not
- * have permission to save global Sieve script binaries»). Il testo delle regole non cambia, quindi SieveRulesRefresh
- * non riscriveva niente, e ne' il passaggio a Dovecot 2.4 ne' il riavvio del pannello se ne accorgevano.
+ * <p>The compiled file (.svbin) beside each panel rule is made by the panel with sievec (SieveCompiler, finding
+ * 218): Dovecot delivers as vmail and cannot write it in root's folder. When Pigeonhole changes format, as in the
+ * switch from 2.3 to 2.4 (header 02 versus 03, measured on the VM), the previous compiled file is no longer
+ * valid: Dovecot recompiles the rule in memory for every message, the mail arrives and the rules work, but for
+ * every message it writes two errors in the log ("binary ... save: failed to create temporary file", "The LDA
+ * Sieve plugin does not have permission to save global Sieve script binaries"). The text of the rules does not
+ * change, so SieveRulesRefresh did not rewrite anything, and neither the switch to Dovecot 2.4 nor the panel
+ * restart noticed it.
  *
- * <p>Qui ogni regola del pannello (/var/mail/sieve/dominio/nome/.dovecot.sieve che comincia con le righe require del
- * pannello: uno script fatto a mano resta com'e') si compila col sievec installato, e il compilato si sostituisce solo
- * se e' diverso. Il compilato e' deterministico (misurato: due compilazioni della 2.4.5 uguali byte per byte), quindi
- * al secondo giro non si scrive niente. Si fa all'avvio della parte root dopo SieveRulesRefresh; nel passaggio a
- * Dovecot 2.4 appena la 2.4 e' partita; e di nuovo se il passaggio torna alla 2.3. Le cartelle si percorrono senza
- * seguire collegamenti; compilare e scrivere e' SieveCompiler (sievec come utente sievec, RootOnlyPath). Nel log solo
- * i conteggi, mai gli indirizzi.
+ * <p>Here every panel rule (/var/mail/sieve/domain/name/.dovecot.sieve that starts with the panel's require
+ * lines: a hand-made script stays as it is) is compiled with the installed sievec, and the compiled file is
+ * replaced only if it is different. The compiled file is deterministic (measured: two 2.4.5 compilations equal
+ * byte for byte), so the second time round nothing is written. It is done at the start of the root part after
+ * SieveRulesRefresh; in the switch to Dovecot 2.4 as soon as 2.4 has started; and again if the switch goes back
+ * to 2.3. The folders are walked without following links; compiling and writing is SieveCompiler (sievec as the
+ * sievec user, RootOnlyPath). In the log only the counts, never the addresses.
  */
 public final class SieveBinaries {
 
@@ -37,21 +38,21 @@ public final class SieveBinaries {
 
     static final Path ROOT = Path.of("/var/mail/sieve");
     static final String SCRIPT = ".dovecot.sieve";
-    /** Un file di regole del pannello e' piccolo: piu' grande non e' suo. */
+    /** A panel rules file is small: a bigger one is not the panel's. */
     static final long MAX_SCRIPT = 64 << 10;
 
-    /** Quello che serve, per provarlo senza sievec ne' /var/mail. */
+    /** What is needed, to test it without sievec or /var/mail. */
     interface Compiler {
-        /** Le regole del pannello; vuoto se Pigeonhole non c'e'. */
+        /** The panel's rules; empty if Pigeonhole is not there. */
         List<Path> scripts() throws IOException;
-        /** Compila e sostituisce il compilato solo se e' diverso (SieveCompiler.refresh). */
+        /** Compiles and replaces the compiled file only if it is different (SieveCompiler.refresh). */
         SieveCompiler.Outcome refresh(Path script);
     }
 
-    /** Quante ricompilate, quante gia' giuste, e lo stato di quelle che non si sono compilate. */
+    /** How many recompiled, how many already right, and the state of those that did not compile. */
     public record Result(int recompiled, int unchanged, List<String> failed) {}
 
-    /** Puro rispetto a {@link Compiler}. */
+    /** Pure with respect to {@link Compiler}. */
     static Result run(Compiler c) {
         List<Path> scripts;
         try {
@@ -72,12 +73,12 @@ public final class SieveBinaries {
         return new Result(recompiled, unchanged, failed);
     }
 
-    /** Le regole del pannello sul server, col sievec installato. */
+    /** The panel's rules on the server, with the installed sievec. */
     public static Result refreshNow() {
         return run(real());
     }
 
-    /** All'avvio della parte root, dopo SieveRulesRefresh. */
+    /** At the start of the root part, after SieveRulesRefresh. */
     public static void ensureAtBoot() {
         try {
             Result r = refreshNow();
@@ -93,7 +94,7 @@ public final class SieveBinaries {
         }
     }
 
-    // ===================== Il server vero =====================
+    // ===================== The production server =====================
 
     static Compiler real() {
         return new Compiler() {
@@ -107,7 +108,7 @@ public final class SieveBinaries {
         };
     }
 
-    /** dominio/nome/.dovecot.sieve sotto root, senza seguire collegamenti, solo quelli che il pannello ha scritto. */
+    /** domain/name/.dovecot.sieve under root, without following links, only those the panel has written. */
     static List<Path> panelScripts(Path root) throws IOException {
         List<Path> out = new ArrayList<>();
         if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) return out;

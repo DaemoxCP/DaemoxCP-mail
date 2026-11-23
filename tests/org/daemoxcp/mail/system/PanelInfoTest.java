@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 
 /**
- * The panel card at the top of the dashboard: since when it has been running and on what (reperto 183).
+ * The panel card at the top of the dashboard: since when it has been running and on what (finding 183).
  *
  *  1. Build.read: the entries Maven wrote; those the filter did not replace ("${...}") and a bad
  *     date count as not recorded, not as values.

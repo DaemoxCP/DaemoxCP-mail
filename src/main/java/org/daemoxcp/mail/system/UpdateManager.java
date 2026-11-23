@@ -26,29 +26,29 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Protezione dei pacchetti, aggiornamenti e vulnerabilita' per lo stack di posta.
+ * Package protection, updates and vulnerabilities for the mail stack.
  *
- * Il senso di questa classe non e' "mostrare che ci sono aggiornamenti": quello lo fa
- * gia' pkg. Il senso e' rispondere alla domanda che pkg NON puo' porsi — *questo*
- * aggiornamento rompe *questo* server di posta? — e impedire materialmente quelli che
- * lo romperebbero.
+ * The point of this class is not "to show that there are updates": pkg already does
+ * that. The point is to answer the question that pkg CANNOT ask itself -- does *this*
+ * update break *this* mail server? -- and to physically prevent the ones that
+ * would break it.
  *
- * Il caso che ha motivato tutto: il pannello genera la configurazione di Dovecot con
- * la sintassi 2.3 (mail_location, passdb/userdb senza nome, variabili %u %d %n).
- * Dovecot 2.4 non degrada su quella configurazione: si RIFIUTA di partire. Un banale
- * "pkg upgrade" fermerebbe la posta, e nessun numero di versione lo direbbe.
+ * The case that motivated all of it: the panel generates the Dovecot configuration with
+ * the 2.3 syntax (mail_location, passdb/userdb without a name, variables %u %d %n).
+ * Dovecot 2.4 does not degrade on that configuration: it REFUSES to start. A trivial
+ * "pkg upgrade" would stop the mail, and no version number would say so.
  */
 public final class UpdateManager {
 
     private static final Logger LOGGER = Logger.getLogger(UpdateManager.class.getName());
 
     static {
-        // Ogni lavoro che prende il turno dei pacchetti scrive com'erano pacchetti e servizi all'inizio: se muore a
-        // meta', il pannello in servizio sa che cosa ha cambiato e lo completa (InterruptedJobRecovery).
+        // Every job that takes the package turn records what packages and services were like at the start: if it
+        // dies halfway, the panel in service knows what it changed and completes it (InterruptedJobRecovery).
         PackageQueue.snapshot = UpdateManager::jobSnapshot;
     }
 
-    /** I pacchetti installati (nome -> versione) e i servizi accesi adesso: la fotografia d'inizio di un lavoro. */
+    /** The installed packages (name -> version) and the services running now: the snapshot at the start of a job. */
     static JSONObject jobSnapshot() {
         JSONObject inv = new JSONObject();
         for (Map.Entry<String, String> e : PackagePlan.versionsOnly(PackagePlan.installed()).entrySet()) inv.put(e.getKey(), e.getValue());
@@ -58,14 +58,14 @@ public final class UpdateManager {
     }
     private static final Map<String, Job> JOBS = new ConcurrentHashMap<>();
 
-    /** Elenco dei pacchetti sbloccati durante una manutenzione, per rimetterli a posto dopo un crash. */
+    /** List of the packages unlocked during a maintenance, to put them back in place after a crash. */
     private static final String MAINTENANCE_STATE = PackageQueue.STATE_PATH;
 
     private UpdateManager() {}
 
-    // ===================== esecuzione comandi =====================
+    // ===================== running commands =====================
 
-    /** Comando shell, output completo. Timeout esplicito: un pkg che non torna bloccherebbe un thread HTTP. */
+    /** Shell command, full output. Explicit timeout: a pkg that does not return would block an HTTP thread. */
     private static String sh(String cmd, int seconds) {
         return Shell.runShell(Duration.ofSeconds(seconds), cmd).outputTrim();
     }
@@ -79,32 +79,33 @@ public final class UpdateManager {
     private static boolean ok(String cmd) { return ok(cmd, 30); }
 
     /**
-     * Un nome di pacchetto finisce dentro una riga di comando: si accettano solo nomi
-     * plausibili. Non e' teoria — "roundcube-php84" e "py311-fail2ban" contengono cifre
-     * e trattini, quindi la regola dev'essere precisa senza essere permissiva.
+     * A package name ends up inside a command line: only plausible names are
+     * accepted. It is not theory -- "roundcube-php84" and "py311-fail2ban" contain digits
+     * and hyphens, so the rule must be precise without being permissive.
      */
     public static boolean isValidName(String n) {
-        // Il primo carattere lettera o cifra: il nome finisce nei comandi di pkg e di service, e uno che comincia col
-        // trattino ne diventerebbe un'opzione. Nessun pacchetto ne' servizio di FreeBSD comincia cosi' (reperto 205).
+        // The first character a letter or a digit: the name ends up in pkg and service commands, and one that
+        // starts with a hyphen would become one of their options. No FreeBSD package or service starts that way
+        // (finding 205).
         return n != null && n.matches("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}");
     }
 
     /**
-     * Un pacchetto risulta protetto solo se compare come RIGA INTERA in `pkg lock -l`.
-     * Con un contains() ingenuo, "curl" combacerebbe dentro "php84-curl-8.4.19" e il
-     * pannello dichiarerebbe protetto un pacchetto che non lo e'.
+     * A package counts as locked only if it appears as a WHOLE LINE in `pkg lock -l`.
+     * With a naive contains(), "curl" would match inside "php84-curl-8.4.19" and the
+     * panel would declare locked a package that is not.
      */
     private static boolean locked(String lockList, String name) {
         for (String line : lockList.split("\n")) {
             String t = line.trim();
             if (t.isEmpty() || t.endsWith(":")) continue;   // "Currently locked packages:"
             if (t.equals(name)) return true;
-            // In "nome-versione" il taglio e' UNO SOLO: l'ultimo trattino, e cio' che segue
-            // dev'essere una versione, cioe' cominciare con una cifra. Provando ogni trattino
-            // "php84-curl-8.4.24" produceva anche il prefisso "php84", e il pannello
-            // dichiarava protetto php84 per colpa di una sua estensione. Le versioni dei port
-            // FreeBSD non contengono trattini (8.4.24, 1.7.2,1, 1.1.0_8, 25.0.3+9.f.1),
-            // quindi un taglio solo basta ed e' esatto.
+            // In "name-version" there is ONLY ONE cut: the last hyphen, and what follows
+            // must be a version, that is, start with a digit. Trying every hyphen,
+            // "php84-curl-8.4.24" also produced the prefix "php84", and the panel
+            // declared php84 locked because of one of its extensions. FreeBSD port
+            // versions contain no hyphens (8.4.24, 1.7.2,1, 1.1.0_8, 25.0.3+9.f.1),
+            // so a single cut is enough and is exact.
             int d = t.lastIndexOf('-');
             if (d > 0 && d + 1 < t.length() && Character.isDigit(t.charAt(d + 1))
                     && t.substring(0, d).equals(name)) return true;
@@ -112,18 +113,18 @@ public final class UpdateManager {
         return false;
     }
 
-    // ===================== quali pacchetti riguardano la posta =====================
+    // ===================== which packages concern mail =====================
 
     /**
-     * I pacchetti si RICONOSCONO, non si elencano. Cablare "mysql80-server" o "php84"
-     * significa dover riscrivere questa classe al primo cambio di versione — ed e'
-     * esattamente l'errore che gli script di installazione di questo pannello contengono
-     * gia'. Qui si parte da cio' che e' davvero installato e lo si classifica.
+     * Packages are RECOGNIZED, not listed. Hard-coding "mysql80-server" or "php84"
+     * means having to rewrite this class at the first version change -- and that is
+     * exactly the mistake that this panel's installation scripts already
+     * contain. Here we start from what is actually installed and classify it.
      */
     private static final String[][] ROLES = {
         {"^postfix(-.*)?$",            "SMTP (Postfix)"},
-        // Con i sapori del port: dovecot-mysql E' Dovecot, non un suo componente, ed e' il
-        // pacchetto che l'installazione mette. Lo stesso per dovecot24-mysql della 2.4.
+        // With the port flavors: dovecot-mysql IS Dovecot, not one of its components, and it is the
+        // package the installation puts in. The same for dovecot24-mysql of 2.4.
         {"^dovecot[0-9]*(-(mysql|pgsql|sqlite3|ldap|cdb))?$", "IMAP/POP3 (Dovecot)"},
         {"^dovecot[0-9]*-pigeonhole(-.*)?$", "server.um.role.sieve"},
         {"^dovecot[0-9]*-.*$",         "server.um.role.dovecotPart"},
@@ -144,74 +145,74 @@ public final class UpdateManager {
         {"^openjdk[0-9]*$",            "server.um.locked.4"},
     };
 
-    /** Ruolo del pacchetto nello stack di posta, o null se non lo riguarda. */
+    /** Role of the package in the mail stack, or null if it does not concern it. */
     private static String roleOf(String name) {
         for (String[] r : ROLES) if (name.matches(r[0])) return I18n.tr(r[1]);
         return null;
     }
 
     /**
-     * Servizi che questo pannello governa. Ogni riga elenca i nomi POSSIBILI dello stesso
-     * servizio, perche' lo script rc.d puo' chiamarsi in modi diversi: PHP-FPM e' "php_fpm"
-     * (con il trattino basso, come lo chiama il resto del pannello) e il resolver puo' essere
-     * "unbound" del port oppure "local_unbound" del sistema base.
+     * Services that this panel manages. Each row lists the POSSIBLE names of the same
+     * service, because the rc.d script can be called in different ways: PHP-FPM is "php_fpm"
+     * (with the underscore, as the rest of the panel calls it) and the resolver can be
+     * "unbound" from the port or "local_unbound" from the base system.
      *
-     * Non e' un dettaglio: un nome sbagliato non produce un errore, produce un SILENZIO. Il
-     * servizio semplicemente non compare fra quelli controllati, e un aggiornamento che lo
-     * spegnesse verrebbe dichiarato riuscito. E' successo: php-fpm con il trattino non e' mai
-     * stato trovato, quindi la webmail non era sorvegliata affatto.
+     * It is not a detail: a wrong name does not produce an error, it produces a SILENCE. The
+     * service simply does not appear among the checked ones, and an update that
+     * stopped it would be declared successful. It happened: php-fpm with the hyphen was never
+     * found, so the webmail was not watched at all.
      */
     public static final String[][] SERVICES = {
         {"postfix"}, {"dovecot"}, {"rspamd"}, {"redis"},
-        // Entrambe le grafie: il pannello stesso, in Main.java, prova "clamav_clamd" e poi
-        // "clamav-clamd", segno che il nome dello script rc.d cambia fra le versioni del port.
+        // Both spellings: the panel itself, in Main.java, tries "clamav_clamd" and then
+        // "clamav-clamd", a sign that the name of the rc.d script changes between port versions.
         {"clamav_clamd", "clamav-clamd"}, {"clamav_freshclam", "clamav-freshclam"},
         {"mysql-server"}, {"nginx"},
         {"php_fpm", "php-fpm"},
         {"fail2ban"},
         {"unbound", "local_unbound"},
-        // pf e ntpd sono del sistema base e pkg non li aggiorna, ma se erano attivi prima e
-        // non lo sono dopo qualcosa e' successo comunque, e vale la pena accorgersene:
-        // senza firewall il server e' esposto, senza orario giusto saltano DKIM e TLS.
+        // pf and ntpd belong to the base system and pkg does not update them, but if they were running
+        // before and are not afterwards something happened anyway, and it is worth noticing:
+        // without a firewall the server is exposed, without the right time DKIM and TLS break.
         {"pf"},
         {"ntpd"},
-        // NON si aggiungono, e il motivo va scritto perche' sembrano mancanze:
-        //  - sendmail: il pannello lo SPEGNE apposta, va in conflitto con Postfix. Metterlo
-        //    qui vorrebbe dire dichiarare guasto uno stato corretto.
-        //  - roundcube: non e' un demone, non esiste nessuno script rc.d. Il riferimento a
-        //    "service roundcube" altrove nel pannello e' verosimilmente uno sbaglio.
+        // They are NOT added, and the reason must be written down because they look like omissions:
+        //  - sendmail: the panel STOPS it on purpose, it conflicts with Postfix. Putting it
+        //    here would mean declaring a correct state broken.
+        //  - roundcube: it is not a daemon, there is no rc.d script at all. The reference to
+        //    "service roundcube" elsewhere in the panel is most likely a mistake.
     };
 
     /**
-     * Che fine hanno fatto i servizi, confrontati con com'erano PRIMA del lavoro.
+     * What became of the services, compared with how they were BEFORE the job.
      *
-     * "Non attivo adesso" non vuol dire "caduto". Su questa macchina local_unbound non e'
-     * nemmeno abilitato e ntpd non parte: un controllo che guarda solo l'adesso dichiara
-     * guasto OGNI aggiornamento. Misurato sulla VM FreeBSD 15.1 il 23/10/2026: un
-     * aggiornamento guidato di nginx riuscito in ogni singolo passo — piano rispettato,
-     * servizio riavviato, pid cambiato, pacchetto riprotetto — e' finito in "error" con
-     * "un servizio non e' ripartito come doveva", per due servizi che non erano attivi
-     * nemmeno prima.
+     * "Not running now" does not mean "crashed". On this machine local_unbound is not
+     * even enabled and ntpd does not start: a check that looks only at the present declares
+     * EVERY update broken. Measured on the FreeBSD 15.1 VM on 2026-10-23: a guided
+     * nginx update that succeeded in every single step -- plan followed, service
+     * restarted, pid changed, package locked again -- ended in "error" with "a service
+     * did not restart as it should", for two services that were not running even
+     * before.
      *
-     * Un allarme che suona sempre insegna a ignorarlo, e quando suona per davvero non lo
-     * distingue nessuno. Che non fosse attivo nemmeno prima si dice comunque: e' una cosa
-     * da sapere, non un guasto di questo lavoro.
+     * An alarm that always rings teaches people to ignore it, and when it rings for real nobody
+     * tells it apart. That it was not running even before is said anyway: it is something
+     * to know, not a failure of this job.
      *
-     * Sta in un punto solo perche' lo chiedono quattro lavori (manutenzione, aggiornamento
-     * guidato, aggiornamento dei non protetti, migrazione di MySQL) e la stessa decisione
-     * scritta quattro volte e' diventata quattro decisioni diverse: una giusta e tre no.
+     * It lives in one place only because four jobs ask for it (maintenance, guided
+     * update, update of the unlocked packages, MySQL migration) and the same decision
+     * written four times became four different decisions: one right and three wrong.
      *
-     * @param prima lo stato dei servizi all'inizio del lavoro, da {@link #servicesState()}
-     * @return true se almeno un servizio che era attivo adesso non lo e' piu'
+     * @param before the state of the services at the start of the job, from {@link #servicesState()}
+     * @return true if at least one service that was running is no longer running now
      */
     private static boolean fallenServices(Job job, Map<String, Boolean> before) {
         return fallenServices(job, before, servicesState());
     }
 
-    /** Il confronto in se', senza chiedere niente al sistema: cosi' si prova. */
+    /** The comparison itself, without asking the system anything: that way it can be tested. */
     static boolean fallenServices(Job job, Map<String, Boolean> before, Map<String, Boolean> now) {
         java.util.LinkedHashSet<String> names = new java.util.LinkedHashSet<>(before.keySet());
-        names.addAll(now.keySet());   // un servizio comparso con l'aggiornamento si vede
+        names.addAll(now.keySet());   // a service that appeared with the update is visible
         boolean fallen = false;
         for (String s : names) {
             boolean wasActive = Boolean.TRUE.equals(before.get(s));
@@ -228,19 +229,19 @@ public final class UpdateManager {
         return fallen;
     }
 
-    /** Quali servizi risultano attivi adesso. Solo quelli davvero presenti sul sistema. */
+    /** Which services are running now. Only those actually present on the system. */
     static Map<String, Boolean> servicesState() {
         Map<String, Boolean> m = new LinkedHashMap<>();
         for (String[] candidates : SERVICES) {
-            // Un servizio non installato non e' "caduto": va distinto, altrimenti la verifica
-            // finale segnalerebbe come guasto qualcosa che non c'e' mai stato. La presenza si
-            // decide dallo script rc.d, non dall'esito di "status": quello e' diverso da zero
-            // sia per un servizio spento sia per uno inesistente, e confonderebbe i due casi.
+            // A service that is not installed has not "crashed": it must be told apart, otherwise
+            // the final check would report as broken something that was never there. Presence
+            // is decided by the rc.d script, not by the result of "status": that is non-zero
+            // both for a stopped service and for a nonexistent one, and would mix up the two.
             for (String s : candidates) {
                 if (!isValidName(s)) continue;
                 if (!ok("test -f /usr/local/etc/rc.d/" + s + " -o -f /etc/rc.d/" + s, 10)) continue;
                 m.put(s, ok("service " + s + " status", 15));
-                break;   // trovato il nome giusto: gli altri sono lo stesso servizio
+                break;   // found the right name: the others are the same service
             }
         }
         return m;
@@ -250,8 +251,8 @@ public final class UpdateManager {
         JSONObject r = new JSONObject();
         String lock = sh("pkg lock -l 2>/dev/null");
 
-        // Nome e versione di TUTTI i pacchetti in una query sola: interrogarli uno per uno
-        // significherebbe decine di fork+exec a ogni click.
+        // Name and version of ALL packages in a single query: querying them one by one
+        // would mean dozens of fork+exec at every click.
         Map<String, String> versions = new LinkedHashMap<>();
         for (String line : sh("pkg query '%n %v' 2>/dev/null", 30).split("\n")) {
             int sp = line.indexOf(' ');
@@ -278,10 +279,10 @@ public final class UpdateManager {
     }
 
     /**
-     * Protegge o sblocca i pacchetti. Aspetta il turno dei lavori sui pacchetti: cambiare le
-     * protezioni mentre un lavoro le ha tolte e le deve rimettere falserebbe il suo ripristino.
-     * Con l'elenco di un lavoro interrotto su disco invece si puo': rimettere le protezioni e'
-     * proprio il rimedio.
+     * Locks or unlocks the packages. Waits for the package turn: changing the locks
+     * while a job has removed them and must put them back would corrupt its restore.
+     * With the list of an interrupted job on disk, instead, it may: putting the locks back is
+     * exactly the remedy.
      */
     public static JSONObject packagesLock(boolean lock, String onlyThis) {
         String id = "lock-" + System.nanoTime();
@@ -289,8 +290,8 @@ public final class UpdateManager {
         if (refusal != null) return new JSONObject().put("success", false).put("error", refusal);
         try {
             JSONObject outcome = changeLocks(lock, onlyThis);
-            // La traccia sulla macchina dice lo stato di adesso: se un amministratore sblocca
-            // dal pannello, ne' la nota ne' l'annotazione devono continuare a dirlo bloccato.
+            // The trace on the machine states how things are now: if an administrator unlocks
+            // from the panel, neither the note nor the annotation must keep calling it locked.
             refreshLockTrace();
             return outcome;
         }
@@ -319,8 +320,8 @@ public final class UpdateManager {
                .append(done ? (lock ? I18n.tr("server.um.x.lockDone") : I18n.tr("server.um.x.unlockDone")) : I18n.tr("server.um.x.lockFailed")).append("\n");
             if (done) { changedCount++; rememberUnlock(name, !lock); }
         }
-        // Un pacchetto che non e' dello stack (una dipendenza vulnerabile, uno bloccato a mano):
-        // la tabella pacchetti lo mostra con il suo pulsante, quindi si blocca o sblocca come gli altri.
+        // A package that is not part of the stack (a vulnerable dependency, one locked by hand):
+        // the packages table shows it with its button, so it is locked or unlocked like the others.
         if (!onlyThis.isEmpty() && !found) {
             String[] iv = PackagePlan.installed().get(onlyThis);
             if (iv == null) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.ov.notInstalled", java.util.Map.of("name", onlyThis)));
@@ -335,13 +336,13 @@ public final class UpdateManager {
         return new JSONObject().put("success", true).put("changed", changedCount).put("output", log.toString());
     }
 
-    // ===================== la regola dei blocchi =====================
+    // ===================== the locking rule =====================
 
     /**
-     * I pacchetti dello stack di posta restano bloccati: e' cosi' che un pkg upgrade, da qui o
-     * da SSH, non li sostituisce senza i controlli dell'aggiornamento guidato. Fanno eccezione
-     * solo quelli che un amministratore ha sbloccato con il pannello: quella scelta si ricorda
-     * (impostazione pkg.unlocked_by_admin) e si rispetta.
+     * The mail stack packages stay locked: that is how a pkg upgrade, from here or from
+     * SSH, does not replace them without the checks of the guided update. The only exceptions
+     * are those an administrator unlocked with the panel: that choice is remembered
+     * (setting pkg.unlocked_by_admin) and respected.
      */
     static final String UNLOCKED_BY_HAND = "pkg.unlocked_by_admin";
 
@@ -353,7 +354,7 @@ public final class UpdateManager {
         return r;
     }
 
-    /** Ricorda (o dimentica) che un amministratore ha sbloccato questo pacchetto apposta. */
+    /** Remembers (or forgets) that an administrator unlocked this package on purpose. */
     static synchronized void rememberUnlock(String name, boolean unlocked) {
         if (org.daemoxcp.mail.Main.mailDatabase == null) return;
         Set<String> r = unlockedByHand();
@@ -363,30 +364,30 @@ public final class UpdateManager {
     }
 
     /**
-     * All'avvio: blocca ogni pacchetto dello stack installato e non bloccato, tranne quelli
-     * sbloccati apposta da un amministratore. Non fa niente se c'e' lo stato di un lavoro
-     * interrotto (prima va ripristinato quello) o se il database del pannello non risponde:
-     * senza l'elenco degli sblocchi voluti bloccherebbe anche quelli.
+     * At startup: locks every installed stack package that is not locked, except those
+     * unlocked on purpose by an administrator. Does nothing if there is the state of an
+     * interrupted job (that must be restored first) or if the panel database does not respond:
+     * without the list of the intended unlocks it would lock those too.
      */
     public static String applyLockPolicy() {
         if (PackageQueue.statePresent() || org.daemoxcp.mail.Main.mailDatabase == null) return "";
-        // Anche questa passa all'avvio di ogni processo: se un altro pannello sta lavorando sui
-        // pacchetti, le protezioni che ha tolto sono sue (reperto 147). Per esempio la
-        // reinstallazione completa dal menu, che li ha sbloccati apposta: bloccarli adesso le
-        // fermerebbe pkg a meta' (reperto 154). Lo si dice nel log: tornando "" come quando non
-        // c'e' niente da fare, chi legge il log del servizio non sapeva che la regola era saltata.
+        // This one too runs at the startup of every process: if another panel is working on the
+        // packages, the locks it removed are its own (finding 147). For example the complete
+        // reinstallation from the menu, which unlocked them on purpose: locking them now would
+        // stop its pkg halfway (finding 154). It is said in the log: by returning "" as when there
+        // is nothing to do, whoever read the service log did not know the rule had been skipped.
         String refusal = PackageQueue.takeForLocks("startup-lock-policy", I18n.tr("server.recovery.turnLockPolicy"));
         if (refusal != null) {
-            // Chi lo chiama lo stampa nel registro del servizio: in inglese, con chi tiene il turno, non col motivo
-            // tradotto (EnglishLogsTest).
+            // The caller prints it in the service log: in English, with who holds the turn, not with the
+            // translated reason (EnglishLogsTest).
             String msg = "Package lock rule not applied at this start (it is applied at the next one): the package turn is held by "
                     + PackageQueue.holderForLog();
             LOGGER.info(msg);
             return msg;
         }
         try {
-            // Col turno in mano si riguarda: l'elenco di un lavoro puo' essere comparso fra il
-            // primo sguardo e il turno, e allora prima va ripristinato quello.
+            // With the turn in hand, look again: a job's list may have appeared between the
+            // first look and the turn, and then that one must be restored first.
             if (PackageQueue.statePresent()) return "";
             return applyLockPolicyOnTurn();
         }
@@ -403,10 +404,10 @@ public final class UpdateManager {
             if (p.getBoolean("locked") || unlockedByHand.contains(n) || !isValidName(n)) continue;
             if (ok("pkg lock -y " + n)) lockedPackages.add(n); else failed.add(n);
         }
-        // La traccia si rimette in pari a ogni avvio, anche quando non c'era niente da bloccare:
-        // dice lo stato di ADESSO, e una traccia che resta indietro e' peggio di nessuna traccia.
-        // E' anche il punto che ripara cio' che e' rimasto indietro fuori dal pannello: lo
-        // script che aggiorna Java riprotegge con pkg lock e poi riavvia il pannello.
+        // The trace is brought back up to date at every startup, even when there was nothing to lock:
+        // it states how things are NOW, and a trace that falls behind is worse than no trace at all.
+        // It is also the point that repairs what fell behind outside the panel: the script
+        // that updates Java locks again with pkg lock and then restarts the panel.
         refreshLockTrace();
         if (lockedPackages.isEmpty() && failed.isEmpty()) return "";
         String msg = "Mail stack packages locked at startup: " + (lockedPackages.isEmpty() ? "none" : String.join(", ", lockedPackages))
@@ -415,49 +416,49 @@ public final class UpdateManager {
         return msg;
     }
 
-    // ===================== la traccia dei blocchi sulla macchina =====================
+    // ===================== the lock trace on the machine =====================
 
     /**
-     * Dove il pannello spiega, sulla macchina, perche' quei pacchetti sono bloccati.
+     * Where the panel explains, on the machine, why those packages are locked.
      *
-     * Il blocco non scade e nessuno lo toglie allo spegnimento: e' la regola, ed e' giusta
-     * finche' il pannello c'e'. Ma se il pannello viene disinstallato, o semplicemente non
-     * riparte piu', quei pacchetti restano bloccati per sempre — e un pacchetto bloccato non
-     * riceve nemmeno le correzioni di sicurezza.
+     * The lock does not expire and nobody removes it at shutdown: it is the rule, and it is right
+     * as long as the panel is there. But if the panel is uninstalled, or simply never starts
+     * again, those packages stay locked forever -- and a locked package does not even
+     * receive security fixes.
      *
-     * Chi se ne accorgerebbe? Misurato sulla VM FreeBSD 15.1 il 23/10/2026, con 40 pacchetti
-     * bloccati: `pkg upgrade` nomina i bloccati in una riga di passaggio, non li mette nel
-     * riepilogo e termina con uscita ZERO. Dal sistema non si capisce ne' chi li ha bloccati,
-     * ne' perche', ne' come liberarli: `pkg lock -l` elenca i nomi e basta.
+     * Who would notice? Measured on the FreeBSD 15.1 VM on 2026-10-23, with 40 packages
+     * locked: `pkg upgrade` names the locked ones in a passing line, does not put them in the
+     * summary and ends with exit status ZERO. From the system one cannot tell who locked them,
+     * nor why, nor how to free them: `pkg lock -l` lists the names and nothing else.
      *
-     * Questo file e' la risposta a quelle tre domande, e sopravvive al pannello.
+     * This file is the answer to those three questions, and it outlives the panel.
      */
     static final String LOCK_NOTE = "/var/db/daemoxcp-mail/locked-packages.txt";
 
-    /** Dove sta la nota. E' una variabile solo perche' le prove non scrivano in /var/db. */
+    /** Where the note lives. It is a variable only so that the tests do not write in /var/db. */
     static Path lockNotePath = Paths.get(LOCK_NOTE);
 
-    /** Il comando che libera tutto, scritto in un punto solo perche' compare in piu' testi. */
+    /** The command that frees everything, written in one place only because it appears in several texts. */
     static final String UNLOCK_ALL_COMMAND = "pkg unlock -a -y";
 
     /**
-     * Il testo della nota. Funzione pura: riceve l'elenco e il momento, cosi' si prova.
+     * The text of the note. Pure function: it receives the list and the moment, so it can be tested.
      *
-     * In italiano come i commenti degli altri file che il pannello genera sulla macchina
-     * (l'override del ramo di pkg, il filtro di fail2ban, la lista permaban): la legge chi
-     * amministra il server, non il programma. Sempre nella lingua d'origine del pannello, mai in
-     * quella di chi ha fatto scattare la scrittura: la nota si riscrive anche dentro i lavori
-     * lanciati dalle pagine, e cambierebbe lingua secondo chi ha cliccato. La firma in inglese,
-     * come in tutti (PanelMarker).
+     * In Italian like the comments of the other files the panel generates on the machine
+     * (the pkg branch override, the fail2ban filter, the permaban list): it is read by whoever
+     * administers the server, not by the program. Always in the panel's original language, never in
+     * that of whoever triggered the write: the note is rewritten also inside the jobs
+     * started from the pages, and it would change language depending on who clicked. The signature
+     * in English, as in all of them (PanelMarker).
      */
     static String lockNoteText(java.util.Collection<String> locked, String when) {
         return lockNoteText(locked, when, I18n.SOURCE_LANGUAGE);
     }
 
     /**
-     * La nota in una lingua data. I testi stanno nei file di lingua (server.lockNote.*, r11);
-     * ogni paragrafo si spezza qui in righe di commento, cosi' una traduzione non puo' rompere il
-     * formato: fuori dai commenti restano solo i nomi dei pacchetti, che e' quello che si legge.
+     * The note in a given language. The texts live in the language files (server.lockNote.*, r11);
+     * each paragraph is split here into comment lines, so a translation cannot break the
+     * format: outside the comments only the package names remain, which is what gets read.
      */
     static String lockNoteText(java.util.Collection<String> locked, String when, String lang) {
         StringBuilder sb = new StringBuilder();
@@ -480,7 +481,7 @@ public final class UpdateManager {
         return sb.toString();
     }
 
-    /** Un paragrafo come righe "# " di al massimo 84 colonne, spezzate fra le parole. */
+    /** A paragraph as "# " lines of at most 84 columns, broken between words. */
     private static void noteComment(StringBuilder sb, String text) {
         StringBuilder line = new StringBuilder();
         for (String word : text.trim().split("\\s+")) {
@@ -495,9 +496,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Scrive la nota con i pacchetti bloccati ADESSO. Se non ce n'e' nessuno, la cancella:
-     * una nota che elenca blocchi che non esistono piu' manderebbe a cercare un problema
-     * che non c'e'.
+     * Writes the note with the packages locked NOW. If there are none, it deletes it:
+     * a note listing locks that no longer exist would send people looking for a problem
+     * that is not there.
      */
     static synchronized void writeLockNote() {
         try {
@@ -507,26 +508,26 @@ public final class UpdateManager {
             if (locked.isEmpty()) { Files.deleteIfExists(f); return; }
             if (f.getParent() != null) Files.createDirectories(f.getParent());
             String when = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString();
-            // Scrittura atomica: un file letto a meta' da chi indaga su un server fermo
-            // sarebbe un modo di sbagliare proprio nel momento peggiore.
+            // Atomic write: a file read halfway by someone investigating a stopped server
+            // would be a way to go wrong precisely at the worst moment.
             Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
             Files.writeString(tmp, lockNoteText(locked, when), StandardCharsets.UTF_8);
             Files.move(tmp, f, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
                     java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } catch (Exception e) {
-            // La nota e' una spiegazione, non un meccanismo: se non si scrive, il pannello
-            // funziona comunque. Ma lo si dice, perche' senza di lei la macchina non spiega
-            // piu' i propri blocchi.
+            // The note is an explanation, not a mechanism: if it cannot be written, the panel
+            // works anyway. But it is said, because without it the machine no longer
+            // explains its own locks.
             LOGGER.log(Level.WARNING, "Cannot write " + lockNotePath, e);
         }
     }
 
     /**
-     * L'avviso sui pacchetti che resterebbero bloccati senza il pannello, o "" se non ce
-     * n'e' nessuno.
+     * The warning about the packages that would stay locked without the panel, or "" if
+     * there are none.
      *
-     * Serve dove qualcuno sta togliendo il pannello di mezzo: e' l'unico momento in cui la
-     * domanda "e i blocchi?" si pone da se', ed e' il momento in cui nessuno la faceva.
+     * It is needed where someone is taking the panel out of the way: it is the only moment when
+     * the question "and the locks?" arises by itself, and it is the moment when nobody asked it.
      */
     static String locksStayWarning() {
         Set<String> locked = new TreeSet<>();
@@ -537,12 +538,12 @@ public final class UpdateManager {
     }
 
     /**
-     * La traccia dei blocchi rimessa in pari con la macchina: la nota e le annotazioni.
+     * The lock trace brought back in line with the machine: the note and the annotations.
      *
-     * Si chiama dove le protezioni possono essere cambiate: all'avvio, dal pulsante delle
-     * protezioni e alla fine di ogni lavoro sul turno dei pacchetti (withLockTrace). Non
-     * lancia mai: la traccia e' una spiegazione, non un meccanismo, e un suo guasto non deve
-     * far fallire il lavoro che l'ha chiamata.
+     * It is called where the locks can be changed: at startup, from the locks button
+     * and at the end of every job on the package turn (withLockTrace). It never
+     * throws: the trace is an explanation, not a mechanism, and a failure of it must not
+     * make the job that called it fail.
      */
     static void refreshLockTrace() {
         writeLockNote();
@@ -556,9 +557,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Il lavoro sul turno dei pacchetti, con la traccia dei blocchi rimessa in pari quando
-     * finisce, anche con un errore. Avvolge TUTTI i lavori del turno, quindi un lavoro nuovo
-     * che riprotegge non deve ricordarsene.
+     * The job on the package turn, with the lock trace brought back in line when it
+     * ends, even with an error. It wraps ALL the jobs of the turn, so a new job
+     * that locks again does not have to remember it.
      */
     static Runnable withLockTrace(Runnable work) {
         return () -> {
@@ -568,11 +569,11 @@ public final class UpdateManager {
     }
 
     /**
-     * Il lavoro sul turno dei pacchetti, con la proprieta' dei file della webmail riaffermata
-     * quando finisce: il post-install di roundcube-php84 fa "chown www:www" di logs e temp a ogni
-     * installazione e aggiornamento (misurato sulla VM FreeBSD 15.1 il 31/10/2026), e il PHP di
-     * Roundcube, che gira come roundcube, non potrebbe piu' scriverci. Avvolge tutti i lavori del
-     * turno, come withLockTrace: anche quelli che aggiornano Roundcube senza dirlo.
+     * The job on the package turn, with the ownership of the webmail files reasserted
+     * when it ends: the post-install of roundcube-php84 does "chown www:www" of logs and temp at every
+     * installation and update (measured on the FreeBSD 15.1 VM on 2026-10-31), and the PHP of
+     * Roundcube, which runs as roundcube, could no longer write there. It wraps all the jobs of
+     * the turn, like withLockTrace: even those that update Roundcube without saying so.
      */
     static Runnable withWebmailOwnership(Runnable work) {
         return () -> {
@@ -589,27 +590,28 @@ public final class UpdateManager {
     }
 
     /**
-     * Mette l'annotazione su ogni pacchetto bloccato dal pannello che non ce l'ha, e la toglie
-     * da quelli che non lo sono piu'. Restituisce {aggiunte, tolte}.
+     * Puts the annotation on every package locked by the panel that does not have it, and removes
+     * it from those that no longer are. Returns {added, removed}.
      *
-     * L'annotazione e' il cartello nel punto in cui qualcuno si fa la domanda: chi vede
-     * "nginx-1.30.6,3 is locked and may not be modified" e indaga con `pkg info -A nginx`
-     * trova la riga, e la riga rimanda alla nota.
+     * The annotation is the sign at the point where someone asks the question: whoever sees
+     * "nginx-1.30.6,3 is locked and may not be modified" and investigates with `pkg info -A nginx`
+     * finds the line, and the line points to the note.
      *
-     * Prima si annotava solo il pacchetto appena bloccato all'avvio. Misurato sulla VM
-     * FreeBSD 15.1 il 24/10/2026: reinstallare un pacchetto — quindi anche aggiornarlo —
-     * cancella le sue annotazioni, e nessuna riprotezione le riscriveva. Su 39 pacchetti
-     * protetti dal pannello l'annotazione stava su uno, redis: il cartello spariva proprio dai
-     * pacchetti che il pannello aveva aggiornato.
+     * Before, only the package just locked at startup was annotated. Measured on the FreeBSD
+     * 15.1 VM on 2026-10-24: reinstalling a package -- and so also updating it -- deletes
+     * its annotations, and no re-locking rewrote them. Of 39 packages locked by the
+     * panel the annotation was on one, redis: the sign disappeared precisely from the
+     * packages the panel had updated.
      *
-     * Costa due letture (pkg query) e un comando per ogni cartello da cambiare, quindi a regime
-     * nessuno. Se una delle due letture fallisce non si tocca niente: con l'elenco dei blocchi
-     * vuoto per un errore, i cartelli si toglierebbero da tutti.
+     * It costs two reads (pkg query) and one command for each sign to change, so in steady
+     * state none. If one of the two reads fails nothing is touched: with the list of locks
+     * empty because of an error, the signs would be removed from all of them.
      *
-     * I bloccati si leggono con pkg query e non con "pkg lock -l": misurato sulla VM il 07/11/2026
-     * (pkg 2.8.4), senza nessun pacchetto bloccato "pkg lock -l" esce con 1 («No locked packages
-     * were found»), cioe' come un errore, e qui si fermava tutto: i cartelli rimasti sui pacchetti
-     * sbloccati non se ne andavano piu' (reperto 173). Lo stesso tranello di InstallLocks.real().
+     * The locked ones are read with pkg query and not with "pkg lock -l": measured on the VM on
+     * 2026-11-07 (pkg 2.8.4), with no package locked "pkg lock -l" exits with 1 ("No locked
+     * packages were found"), that is, like an error, and everything stopped here: the signs left
+     * on the unlocked packages never went away again (finding 173). The same trap as
+     * InstallLocks.real().
      */
     static int[] syncLockMarks() {
         Shell.Result lock = Shell.runShell(Duration.ofSeconds(30), "pkg query -e '%k = 1' '%n-%v'");
@@ -626,16 +628,16 @@ public final class UpdateManager {
             if (!ok(cmd, 20)) continue;
             if (cmd.contains(" -A ")) added++; else if (cmd.contains(" -M ")) rewritten++; else removed++;
         }
-        // I cartelli con la chiave di prima (sezione "pkgMarkKeys"): quello con la chiave di adesso l'ha appena messo
-        // il giro qui sopra sui pacchetti bloccati, quindi quelli vecchi si tolgono e basta.
+        // The signs with the previous key (section "pkgMarkKeys"): the one with the current key has just been
+        // put on by the loop above on the locked packages, so the old ones are simply removed.
         for (String cmd : oldKeyCommands(out)) if (ok(cmd, 20)) rewritten++;
         return new int[]{added, removed, rewritten};
     }
 
     /**
-     * I pacchetti che portano l'annotazione del pannello, da un'uscita di
-     * `pkg query -a '%n %At %Av'` (o '%n %At'): una riga per annotazione, "nome chiave valore".
-     * Funzione pura.
+     * The packages that carry the panel's annotation, from an output of
+     * `pkg query -a '%n %At %Av'` (or '%n %At'): one line per annotation, "name key value".
+     * Pure function.
      */
     static Set<String> markedIn(String output) {
         Set<String> r = new TreeSet<>();
@@ -647,10 +649,11 @@ public final class UpdateManager {
     }
 
     /**
-     * Quelli il cui cartello non dice piu' quello che il pannello scrive adesso: il testo di
-     * prima, in italiano, sui server installati prima della fine di ottobre 2026. Il cartello e'
-     * solo una spiegazione per chi lo legge con pkg info -A, quindi non serve riconoscerlo: basta
-     * che non sia quello di adesso. Funzione pura, sull'uscita di `pkg query -a '%n %At %Av'`.
+     * Those whose sign no longer says what the panel writes now: the previous text, in
+     * Italian, on servers installed before the end of October 2026. The sign is only an
+     * explanation for whoever reads it with pkg info -A, so there is no need to recognize it: it
+     * is enough that it is not the current one. Pure function, on the output of
+     * `pkg query -a '%n %At %Av'`.
      */
     static Set<String> staleMarksIn(String output) {
         Set<String> r = new TreeSet<>();
@@ -663,17 +666,17 @@ public final class UpdateManager {
     }
 
     /**
-     * I comandi che portano i cartelli dallo stato annotati a quello bloccati: aggiungere
-     * dove manca, togliere dove il blocco non c'e' piu'. Funzione pura, quindi si prova.
+     * The commands that bring the signs from the annotated state to the locked one: add
+     * where missing, remove where the lock is no longer there. Pure function, so it can be tested.
      *
-     * La regola e' la stessa della nota (lo stack di posta, bloccato adesso): le due tracce
-     * devono dire la stessa cosa.
+     * The rule is the same as the note's (the mail stack, locked now): the two traces
+     * must say the same thing.
      */
     static java.util.List<String> lockMarkCommands(Set<String> locked, Set<String> marked) {
         return lockMarkCommands(locked, marked, Set.of());
     }
 
-    /** Come sopra, e in piu' riscrive i cartelli rimasti col testo di prima sui pacchetti ancora bloccati. */
+    /** As above, and in addition rewrites the signs left with the previous text on the packages still locked. */
     static java.util.List<String> lockMarkCommands(Set<String> locked, Set<String> marked, Set<String> stale) {
         java.util.List<String> r = new ArrayList<>();
         for (String n : new TreeSet<>(stale)) {
@@ -694,18 +697,18 @@ public final class UpdateManager {
         return r;
     }
 
-    /** Il comando che toglie l'annotazione, o null se il nome non passa il filtro. */
+    /** The command that removes the annotation, or null if the name does not pass the filter. */
     static String removeMarkCommand(String name) {
         if (!isValidName(name)) return null;
         return "pkg annotate -y -D " + name + " " + MARK_KEY;
     }
 
-    /** La chiave dell'annotazione nel database di pkg. */
+    /** The key of the annotation in the pkg database. */
     static final String MARK_KEY = Product.ID + "_lock";
 
     /**
-     * I comandi che tolgono i cartelli con una chiave di prima (sezione "pkgMarkKeys" di legacy-names.json), da
-     * un'uscita di `pkg query -a '%n %At %Av'`. Funzione pura.
+     * The commands that remove the signs with a previous key (section "pkgMarkKeys" of legacy-names.json), from
+     * an output of `pkg query -a '%n %At %Av'`. Pure function.
      */
     static java.util.List<String> oldKeyCommands(String output) {
         java.util.List<String> r = new ArrayList<>();
@@ -718,37 +721,37 @@ public final class UpdateManager {
         return r;
     }
 
-    /** Il valore: rimanda alla nota e al comando che libera tutto. */
+    /** The value: it points to the note and to the command that frees everything. */
     static final String MARK_VALUE = "locked by " + Product.NAME + ": see " + LOCK_NOTE
             + " - unlock with " + UNLOCK_ALL_COMMAND;
 
     /**
-     * Il comando che scrive l'annotazione, o null se il nome non passa il filtro.
+     * The command that writes the annotation, or null if the name does not pass the filter.
      *
-     * Sta in una funzione sua perche' il valore contiene spazi, un percorso e un trattino
-     * lungo: e' una riga di comando, e una riga di comando si prova eseguendola, non
-     * leggendola. In questo progetto un apice dentro un testo e' gia' passato intatto
-     * attraverso un here-document per rompere piu' in la'.
+     * It lives in a function of its own because the value contains spaces, a path and an em
+     * dash: it is a command line, and a command line is tested by running it, not by
+     * reading it. In this project an apostrophe inside a text has already passed intact
+     * through a here-document only to break further on.
      */
     static String markCommand(String name) {
         if (!isValidName(name)) return null;
         return "pkg annotate -y -A " + name + " " + MARK_KEY + " '" + MARK_VALUE + "'";
     }
 
-    /** Il comando che riscrive il valore di un cartello che c'e' gia', o null se il nome non passa il filtro. */
+    /** The command that rewrites the value of a sign already there, or null if the name does not pass the filter. */
     static String rewriteMarkCommand(String name) {
         if (!isValidName(name)) return null;
         return "pkg annotate -y -M " + name + " " + MARK_KEY + " '" + MARK_VALUE + "'";
     }
 
-    // ===================== il quadro dei pacchetti =====================
+    // ===================== the packages overview =====================
 
     /**
-     * Il quadro unico dei pacchetti per la pagina Aggiornamenti: per ognuno versione
-     * installata e del catalogo, blocco, vulnerabilita' con il verdetto sulla correzione, e se
-     * si puo' aggiornare da qui. Sola lettura e senza rete. Dentro: i pacchetti dello stack di
-     * posta, piu' ogni altro pacchetto vulnerabile o bloccato; gli altri con un aggiornamento
-     * (librerie, dipendenze) solo elencati a parte.
+     * The single overview of the packages for the Updates page: for each one the installed and
+     * catalog version, lock, vulnerabilities with the verdict on the fix, and whether it
+     * can be updated from here. Read-only and without network. Inside: the mail stack
+     * packages, plus every other vulnerable or locked package; the others with an update
+     * (libraries, dependencies) only listed separately.
      */
     public static JSONObject packagesOverview() {
         JSONObject r = new JSONObject();
@@ -780,8 +783,8 @@ public final class UpdateManager {
             JSONObject row = new JSONObject().put("name", n).put("installed", iv[0]).put("available", available)
                     .put("update", !available.isEmpty()).put("locked", locked).put("stack", role != null)
                     .put("role", role == null ? "" : role);
-            // La famiglia (FAMILIES): i suoi pacchetti si aggiornano insieme, quindi la pagina ne fa UN passo. Sul
-            // server vero la riga diceva «1 di 30», 27 dei quali erano php84 e le sue estensioni (reperto 203).
+            // The family (FAMILIES): its packages are updated together, so the page makes ONE step of them. On
+            // the production server the row said "1 of 30", 27 of which were php84 and its extensions (finding 203).
             String fam = familyOf(n);
             if (fam != null) row.put("family", fam).put("familyReason", familyReason(n));
             if (locked) lockedPackages++;
@@ -800,7 +803,7 @@ public final class UpdateManager {
             }
             if (eJvm) {
                 row.put("panelRuntime", true).put("inUse", I18n.tr("server.um.ov.panelRuns"));
-                // Il JDK del pannello ha la sua procedura: ferma il pannello, aggiorna, riaccende.
+                // The panel's JDK has its own procedure: stop the panel, update, start it again.
                 if (!available.isEmpty()) { why = I18n.tr("server.um.ov.javaFlow"); row.put("javaFlow", true); }
                 String inUse = System.getProperty("java.version", "");
                 String pkgName = iv[0].replaceAll("[+_].*$", "");
@@ -823,8 +826,8 @@ public final class UpdateManager {
             if (names.contains(e.getKey()) || !inst.containsKey(e.getKey())) continue;
             others.put(new JSONObject().put("name", e.getKey()).put("installed", inst.get(e.getKey())[0]).put("available", e.getValue()));
         }
-        // Le procedure dedicate che servono adesso, lette dagli stessi dati: la pagina mostra una riga per ognuna
-        // solo quando c'e' qualcosa da fare (reperto 193). Niente di lento: nomi e versioni gia' letti qui sopra.
+        // The dedicated procedures needed now, read from the same data: the page shows a row for each one
+        // only when there is something to do (finding 193). Nothing slow: names and versions already read above.
         JSONObject procedures = new JSONObject();
         procedures.put("java", jvm != null && !jvm.isEmpty() && update.containsKey(jvm));
         String webmail = null;
@@ -843,8 +846,9 @@ public final class UpdateManager {
             if (mp.find() && !mp.group(1).equals(python)) olderPython = true;
         }
         procedures.put("python", olderPython);
-        // Dovecot 2.4, pacchetto a parte nel ramo latest: la riga c'e' finche' e' installata la 2.3 col sapore MySQL e il
-        // catalogo offre la 2.4 (reperto 213). Il passaggio non e' obbligatorio: la 2.3 riceve ancora le correzioni critiche.
+        // Dovecot 2.4, a separate package in the latest branch: the row is there as long as 2.3 with the MySQL
+        // flavor is installed and the catalog offers 2.4 (finding 213). The switch is not mandatory: 2.3 still
+        // receives the critical fixes.
         procedures.put("dovecot24", inst.containsKey("dovecot-mysql") && !inst.containsKey("dovecot24-mysql")
                 && !sh("pkg rquery -U %v dovecot24-mysql 2>/dev/null", 30).isBlank());
         r.put("procedures", procedures);
@@ -854,14 +858,14 @@ public final class UpdateManager {
                         .put("stackUnlocked", unlockedStack).put("panelRestart", panelRestart));
     }
 
-    // ===================== avvertenze specifiche dello stack di posta =====================
+    // ===================== mail stack specific warnings =====================
 
     /**
-     * Colonne: espressione del nome, livello su salto di versione maggiore, testo.
+     * Columns: name expression, level on a major version jump, text.
      *
-     * Il livello "attendi" non e' decorativo: la manutenzione automatica NON sblocca i
-     * pacchetti che lo portano. Un'avvertenza che si limita a comparire mentre il bottone
-     * accanto aggiorna lo stesso non e' un'avvertenza.
+     * The "wait" level is not decorative: the automatic maintenance does NOT unlock the
+     * packages that carry it. A warning that merely appears while the button next to it
+     * updates anyway is not a warning.
      */
     private static final String[][] WARNINGS = {
         {"^dovecot.*", "wait",
@@ -897,30 +901,30 @@ public final class UpdateManager {
     };
 
     /**
-     * Quante cifre della versione delimitano una rottura, per pacchetto.
+     * How many version digits mark a breaking change, per package.
      *
-     * Guardare solo la prima cifra e' l'errore che rende inutile tutto il resto: Dovecot
-     * 2.3 -> 2.4 riscrive il formato della configurazione e PHP 8.4 -> 8.5 cambia percorsi
-     * e socket, ma per entrambi la prima cifra non si muove. Trattarli da "aggiornamenti
-     * minori normalmente sicuri" sarebbe falso proprio sui due casi piu' pericolosi.
+     * Looking only at the first digit is the mistake that makes everything else useless: Dovecot
+     * 2.3 -> 2.4 rewrites the configuration format and PHP 8.4 -> 8.5 changes paths
+     * and sockets, but for both the first digit does not move. Treating them as "minor
+     * updates, normally safe" would be false precisely on the two most dangerous cases.
      */
     private static final String[][] VERSION_DEPTH = {
-        {"^dovecot.*",           "2"},   // 2.3 -> 2.4: configurazione incompatibile
-        {"^php[0-9]+.*",         "2"},   // 8.4 -> 8.5: percorsi, socket, nome dei pacchetti
-        {"^mysql[0-9]+-.*",      "2"},   // 8.0 -> 8.4: data dictionary, opzioni rimosse
-        {"^roundcube.*",         "2"},   // 1.5 -> 1.6: schema del database
-        {"^rspamd$",             "2"},   // le minori cambiano opzioni e chiavi in Redis
-        {"^postfix.*",           "2"},   // 3.10 -> 3.11 cambia i predefiniti del compatibility_level
+        {"^dovecot.*",           "2"},   // 2.3 -> 2.4: incompatible configuration
+        {"^php[0-9]+.*",         "2"},   // 8.4 -> 8.5: paths, socket, package names
+        {"^mysql[0-9]+-.*",      "2"},   // 8.0 -> 8.4: data dictionary, removed options
+        {"^roundcube.*",         "2"},   // 1.5 -> 1.6: database schema
+        {"^rspamd$",             "2"},   // minor versions change options and keys in Redis
+        {"^postfix.*",           "2"},   // 3.10 -> 3.11 changes the compatibility_level defaults
     };
 
-    /** Confronta le prime N cifre di due versioni: true se sono cambiate. */
+    /** Compares the first N digits of two versions: true if they changed. */
     static boolean significantJump(String name, String from, String to) {
         int digits = 1;
         for (String[] r : VERSION_DEPTH) if (name.matches(r[0])) { digits = Integer.parseInt(r[1]); break; }
         return !versionPrefix(from, digits).equals(versionPrefix(to, digits));
     }
 
-    /** Le prime n componenti numeriche di una versione, es. ("2.3.21", 2) -> "2.3". */
+    /** The first n numeric components of a version, e.g. ("2.3.21", 2) -> "2.3". */
     static String versionPrefix(String v, int n) {
         if (v == null) return "";
         String[] parts = v.split("[._,+~]");
@@ -933,15 +937,15 @@ public final class UpdateManager {
     }
 
     /**
-     * Pacchetti il cui rischio NON dipende dal numero di versione, e per cui quindi
-     * l'avvertenza vale sempre, anche su un aggiornamento di sole cifre finali.
+     * Packages whose risk does NOT depend on the version number, and for which the
+     * warning therefore always applies, even on an update of only the trailing digits.
      *
-     * Il caso e' openjdk: il problema non e' cosa cambia fra due versioni, e' che il pannello
-     * ci sta girando sopra. Appena i file della JVM vengono sostituiti, il processo in memoria
-     * non riesce piu' ad avviare comandi: il job che sta facendo l'aggiornamento non puo'
-     * nemmeno ribloccare il pacchetto e si ferma a meta', lasciando tutto scoperto.
-     * Trattarlo con la regola generale "i salti minori sono sicuri" significa annullare la
-     * protezione proprio nel caso per cui e' stata scritta.
+     * The case is openjdk: the problem is not what changes between two versions, it is that the panel
+     * is running on it. As soon as the JVM files are replaced, the process in memory
+     * can no longer launch commands: the job that is doing the update cannot even
+     * lock the package again and stops halfway, leaving everything exposed.
+     * Treating it with the general rule "minor jumps are safe" means cancelling the
+     * protection precisely in the case it was written for.
      */
     private static final String[] ALWAYS_WAIT = { "^openjdk[0-9]*$" };
 
@@ -950,7 +954,7 @@ public final class UpdateManager {
         return false;
     }
 
-    /** Avvertenza per un pacchetto, o null se non ne ha una specifica. */
+    /** Warning for a package, or null if it has no specific one. */
     private static JSONObject warningFor(String name, boolean majorJump) {
         for (String[] a : WARNINGS) {
             if (!name.matches(a[0])) continue;
@@ -958,9 +962,10 @@ public final class UpdateManager {
                 return new JSONObject().put("level", "ok").put("text",
                         I18n.tr("server.um.warningFor.1"));
             }
-            // Un'avvertenza scritta per il caso peggiore, mostrata su un aggiornamento di
-            // sole cifre finali, dice il falso: parla di "cambio maggiore" quando il salto
-            // non c'e'. Chi legge o si allarma per niente, o smette di fidarsi del testo.
+            // A warning written for the worst case, shown on an update of only the
+            // trailing digits, says something false: it speaks of a "major change" when there
+            // is no jump. Whoever reads it either gets alarmed for nothing or stops
+            // trusting the text.
             String text = majorJump ? I18n.tr(a[2])
                     : I18n.tr("server.um.warningFor.2", java.util.Map.of("p", I18n.tr(a[2])));
             return new JSONObject().put("level", a[1]).put("text", text);
@@ -973,9 +978,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Versioni disponibili per i pacchetti BLOCCATI. Serve un comando diverso da
-     * `pkg upgrade -n`: quello i bloccati li salta e non dice a che versione andrebbero,
-     * quindi da solo lascerebbe credere che non abbiano aggiornamenti.
+     * Available versions for the LOCKED packages. It needs a command other than
+     * `pkg upgrade -n`: that one skips the locked ones and does not say what version they
+     * would go to, so on its own it would suggest that they have no updates.
      */
     public static JSONArray lockedUpdates() {
         String v = sh("pkg version -U -vRL= 2>/dev/null", 60);
@@ -1000,26 +1005,26 @@ public final class UpdateManager {
     }
 
     /**
-     * Stato aggiornamenti e vulnerabilita'. Tutto in sola lettura: `pkg upgrade -n` e'
-     * una simulazione e `pkg audit` interroga soltanto il database delle vulnerabilita'.
+     * Update and vulnerability status. All read-only: `pkg upgrade -n` is
+     * a simulation and `pkg audit` only queries the vulnerability database.
      */
     public static JSONObject updatesStatus() {
         JSONObject r = new JSONObject();
         ok("pkg update -q", 120);
 
-        // La simulazione va letta INTERA. Le righe "is locked" dei pacchetti protetti ne
-        // occupano decine, e un taglio anticipato cadrebbe in mezzo all'elenco facendo
-        // risultare "senza aggiornamenti" pacchetti che invece ne hanno. Si taglia solo
-        // cio' che si mostra a video, mai cio' che si analizza.
-        // Il piano dell'aggiornamento dei NON protetti, con la sua firma. Prima qui c'era un
-        // "pkg upgrade -n" grezzo e il testo finiva in pagina cosi' com'era: chi premeva
-        // "Aggiorna non protetti" approvava un testo, non un piano, e niente legava quel
-        // testo a cio' che sarebbe stato eseguito. Era l'unico dei tre lavori sui pacchetti
-        // senza piano ne' firma — e l'unico che non confrontava niente alla fine.
+        // The simulation must be read in FULL. The "is locked" lines of the locked packages
+        // take up dozens of them, and an early cut would fall in the middle of the list, making
+        // packages that do have updates show up as "without updates". Only what is shown
+        // on screen is cut, never what is analysed.
+        // The plan of the update of the UNLOCKED packages, with its signature. Before, there was a
+        // raw "pkg upgrade -n" here and the text ended up on the page as it was: whoever pressed
+        // "Upgrade unlocked" approved a text, not a plan, and nothing tied that
+        // text to what would be executed. It was the only one of the three package jobs
+        // without plan or signature -- and the only one that compared nothing at the end.
         //
-        // Nessuno sblocco: e' il senso di questo aggiornamento, quindi la regola rifiuta
-        // sempre, e i protetti restano nel piano con il loro motivo (pkg li salta). E nessun
-        // gemello di famiglia da sbloccare, per la stessa ragione: qui non si sblocca niente.
+        // No unlocking: that is the point of this update, so the rule always refuses,
+        // and the locked ones stay in the plan with their reason (pkg skips them). And no
+        // family twin to unlock, for the same reason: here nothing is unlocked.
         JSONObject unprotectedPlan = judged(PackagePlan.fullPlan(java.util.Set.of(), lockedNames(),
                 b -> I18n.tr("server.um.x.staysLockedHere")));
         String blocked = cardBlockedReason(unprotectedPlan);
@@ -1037,7 +1042,7 @@ public final class UpdateManager {
                 + (omitted > 0 ? I18n.tr("server.um.updatesStatus.1", java.util.Map.of("omitted", String.valueOf(omitted))) : ""));
         r.put("upToDate", fullSimulation.contains("Your packages are up to date"));
 
-        // Quali pacchetti DELLA POSTA verrebbero toccati, e se sono protetti.
+        // Which MAIL packages would be touched, and whether they are locked.
         JSONArray involved = new JSONArray();
         JSONArray st = packagesStatus().getJSONArray("packages");
         for (int i = 0; i < st.length(); i++) {
@@ -1050,31 +1055,31 @@ public final class UpdateManager {
         r.put("affectedMailPackages", involved);
         r.put("lockedUpdates", lockedUpdates());
 
-        // --- Vulnerabilita' note ---
+        // --- Known vulnerabilities ---
         String audit = sh("pkg audit -F 2>&1", 180);
         r.put("audit", audit.length() > 4000 ? audit.substring(audit.length() - 4000) : audit);
 
-        // Incrocio vulnerabilita' <-> protezione. E' il punto: un pacchetto bloccato NON
-        // riceve le correzioni di sicurezza. Il lock protegge da cambiamenti inattesi, non
-        // e' uno stato in cui restare per sempre, e chi lo mette deve poterlo vedere.
+        // Vulnerability <-> lock cross-check. That is the point: a locked package does NOT
+        // receive security fixes. The lock protects from unexpected changes, it is not
+        // a state to stay in forever, and whoever sets it must be able to see that.
         JSONArray vulnerable = new JSONArray();
         String lock = sh("pkg lock -l 2>/dev/null");
 
-        // Quali pacchetti hanno una versione piu' recente nel catalogo, PROTETTI COMPRESI.
+        // Which packages have a more recent version in the catalog, LOCKED ONES INCLUDED.
         //
-        // Serve perche' "pkg upgrade -n" i protetti li salta: dalla simulazione non si puo'
-        // sapere se per un pacchetto protetto esista una correzione. "pkg version" invece
-        // confronta le versioni e del lock non si occupa, quindi risponde anche per quelli.
+        // It is needed because "pkg upgrade -n" skips the locked ones: from the simulation one
+        // cannot know whether a fix exists for a locked package. "pkg version", instead,
+        // compares the versions and does not care about the lock, so it answers for those too.
         Set<String> updatable = new java.util.LinkedHashSet<>();
         for (String line : sh("pkg version -U -vRL= 2>/dev/null", 60).split("\n")) {
             String t = line.trim();
             if (t.isEmpty()) continue;
-            // "nome-1.2.3    <   needs updating (index has 1.2.4)"
+            // "name-1.2.3    <   needs updating (index has 1.2.4)"
             //
-            // Solo "<" vuol dire che esiste una versione piu' recente. ">" (installato piu'
-            // nuovo del catalogo), "?" (non nel catalogo) e "!" (confronto fallito) sono
-            // differenze, non aggiornamenti: prenderle per tali direbbe a chi legge che per
-            // un pacchetto vulnerabile esiste una correzione che non esiste.
+            // Only "<" means that a more recent version exists. ">" (installed newer
+            // than the catalog), "?" (not in the catalog) and "!" (comparison failed) are
+            // differences, not updates: taking them as such would tell whoever reads that
+            // a fix exists for a vulnerable package when it does not.
             String[] fields = t.split("\\s+");
             if (fields.length < 2 || !"<".equals(fields[1])) continue;
             String pv = fields[0];
@@ -1087,31 +1092,31 @@ public final class UpdateManager {
         for (String name : seen) {
             boolean lk = locked(lock, name);
             String role = roleOf(name);
-            // Esiste una versione piu' recente? E' una domanda diversa da "l'aggiornamento
-            // la applicherebbe", e va tenuta separata: per un pacchetto protetto la seconda
-            // e' sempre no, ma la prima puo' essere si'.
+            // Does a more recent version exist? It is a different question from "the update
+            // would apply it", and it must be kept separate: for a locked package the second
+            // is always no, but the first can be yes.
             boolean hasUpdate = updatable.contains(name);
             JSONObject v = new JSONObject().put("name", name).put("locked", lk)
                     .put("mailPackage", role != null).put("role", role == null ? "" : role)
                     .put("updateAvailable", hasUpdate)
-                    // Prima qui c'era "!lk && simulazione.contains(nome)", e per un pacchetto
-                    // protetto veniva sempre falso — mentre la scheda scriveva "protetto,
-                    // quindi NON riceve la correzione", cioe' affermava che una correzione
-                    // esistesse. Nessuno l'aveva verificato: la simulazione i protetti li
-                    // salta, quindi da li' quell'informazione non si ricava proprio.
+                    // Before, there was "!lk && simulazione.contains(nome)" here, and for a
+                    // locked package it was always false -- while the card wrote "locked,
+                    // so it does NOT receive the fix", that is, it stated that a fix
+                    // existed. Nobody had checked it: the simulation skips the locked
+                    // ones, so that information simply cannot be derived from there.
                     .put("fixedByUpgrade", !lk && (hasUpdate
                             || fullSimulation.contains(name + ":")));
-            // Il dettaglio serve per decidere: "ha una vulnerabilita'" non dice se e' una
-            // esecuzione di codice da remoto o un rifiuto di servizio che non ti riguarda.
+            // The detail is needed to decide: "has a vulnerability" does not say whether it is a
+            // remote code execution or a denial of service that does not concern you.
             JSONObject d = vulnerabilityDetail(audit, name);
             v.put("cve", d.getJSONArray("cve"));
             v.put("description", d.getString("description"));
             v.put("references", d.getJSONArray("references"));
             vulnerable.put(v);
         }
-        // "C'e' una versione piu' recente" non risponde a "la correzione c'e'?": la versione
-        // piu' recente puo' essere ancora vulnerabile, e la correzione puo' esistere in una
-        // versione che il tuo catalogo non ha. Lo dicono gli intervalli di VuXML.
+        // "There is a more recent version" does not answer "is there a fix?": the more recent
+        // version may still be vulnerable, and the fix may exist in a version that your
+        // catalog does not have. The VuXML ranges say so.
         if (vulnerable.length() > 0) {
             JSONObject fixes = PackagePlan.fixes();
             if (fixes.optBoolean("success")) {
@@ -1125,13 +1130,13 @@ public final class UpdateManager {
             }
         }
         r.put("vulnerable", vulnerable);
-        // Lezione pagata sull'altro server il 30/08: mysql80-server era stato aggiornato a
-        // 8.0.46 ma il processo continuava a girare sui binari 8.0.45, quindi la correzione
-        // non era in servizio pur risultando installata. Vale per ogni libreria condivisa.
+        // Lesson paid for on the other server on 30 August: mysql80-server had been updated to
+        // 8.0.46 but the process kept running on the 8.0.45 binaries, so the fix was not
+        // in service although it showed as installed. It applies to every shared library.
         r.put("restartNote",
             I18n.tr("server.um.updatesStatus.2"));
 
-        // --- Sistema base: kernel e userland a confronto. Se differiscono manca un riavvio. ---
+        // --- Base system: kernel and userland compared. If they differ, a reboot is missing. ---
         String k = sh("freebsd-version -k", 15), run = sh("freebsd-version -r", 15), u = sh("freebsd-version -u", 15);
         r.put("kernel", k).put("running", run).put("userland", u);
         r.put("rebootPending", !k.isEmpty() && !run.isEmpty() && !k.equals(run));
@@ -1141,45 +1146,45 @@ public final class UpdateManager {
     }
 
     /**
-     * Estrae dal referto di `pkg audit` il blocco che riguarda un pacchetto: descrizione,
-     * identificativi CVE e riferimenti. Senza questo il pannello direbbe soltanto "e'
-     * vulnerabile", che non basta per decidere se valga la pena sbloccare e aggiornare.
+     * Extracts from the `pkg audit` report the block about a package: description,
+     * CVE identifiers and references. Without this the panel would only say "it is
+     * vulnerable", which is not enough to decide whether it is worth unlocking and updating.
      */
-    /** La riga con cui pkg audit chiude il referto. E' la prova che il controllo e' avvenuto. */
+    /** The line with which pkg audit closes the report. It is the proof that the check took place. */
     private static final Pattern FULL_AUDIT = Pattern.compile(
             "(\\d+)\\s+problem\\(s\\)\\s+in\\s+(\\d+)\\s+[^\\n]*package\\(s\\)\\s+found");
 
     /**
-     * Il referto di pkg audit per UNA versione precisa di un pacchetto.
+     * The pkg audit report for ONE precise version of a package.
      *
-     * Due trappole, misurate sulla VM FreeBSD 15.1 il 23/10/2026, che insieme rendevano
-     * questo controllo incapace di dire qualunque cosa.
+     * Two traps, measured on the FreeBSD 15.1 VM on 2026-10-23, which together made
+     * this check unable to say anything at all.
      *
-     * 1. `pkg audit nome`, col solo nome, non risponde "la versione installata e'
-     *    vulnerabile?" ma "VuXML ha voci per questo nome?". Su nginx 1.30.6,3, appena
-     *    aggiornato e non vulnerabile, rispondeva "nginx is vulnerable" con 25 problemi,
-     *    elencando intervalli come "< 1.8.1_3,2" che non c'entrano niente; `pkg audit` senza
-     *    argomenti, che guarda le versioni installate, nello stesso momento non lo nominava
-     *    affatto. E l'intestazione di quel referto e' "nginx is vulnerable:", SENZA la
-     *    versione, quindi vulnerabilityDetail — che cerca "nome-versione is vulnerable:"
-     *    — non entrava mai nel blocco: zero CVE sempre, in entrambe le direzioni.
-     *    Su php84 8.4.26, vulnerabile per davvero, il referto del pannello era "[ok] Nessuna
-     *    vulnerabilita' nota registrata per questo pacchetto", mentre pkg diceva
-     *    "php84 is vulnerable" e PackagePlan.fixes, che la domanda la pone giusta,
-     *    trovava la fix nella 8.4.27.
-     *    La forma che risponde alla domanda giusta e' `pkg audit nome-versione`: con
-     *    "nginx-1.30.6,3" dice "0 problem(s)", con "php84-8.4.26" trova l'unico problema vero.
+     * 1. `pkg audit name`, with the name alone, does not answer "is the installed version
+     *    vulnerable?" but "does VuXML have entries for this name?". On nginx 1.30.6,3, just
+     *    updated and not vulnerable, it answered "nginx is vulnerable" with 25 problems,
+     *    listing ranges like "< 1.8.1_3,2" that have nothing to do with it; `pkg audit` without
+     *    arguments, which looks at the installed versions, did not name it at all at the
+     *    same moment. And the header of that report is "nginx is vulnerable:", WITHOUT the
+     *    version, so vulnerabilityDetail -- which looks for "name-version is vulnerable:"
+     *    -- never entered the block: always zero CVEs, in both directions.
+     *    On php84 8.4.26, truly vulnerable, the panel's report was "[ok] No known
+     *    vulnerability recorded for this package", while pkg said
+     *    "php84 is vulnerable" and PackagePlan.fixes, which asks the question correctly,
+     *    found the fix in 8.4.27.
+     *    The form that answers the right question is `pkg audit name-version`: with
+     *    "nginx-1.30.6,3" it says "0 problem(s)", with "php84-8.4.26" it finds the only real problem.
      *
-     * 2. Se il database delle vulnerabilita' non c'e', pkg risponde "vulnxml file vuln.xml
-     *    does not exist" e chi cerca solo le righe "is vulnerable" conclude "nessuna
-     *    vulnerabilita'". E' il caso peggiore: una rassicurazione al posto di un "non ho
-     *    potuto controllare". Il codice di uscita non aiuta a distinguere — misurato: 1
-     *    senza il database, 0 sia con problemi trovati sia senza. Quello che distingue un
-     *    referto fatto da uno non fatto e' la riga finale "N problem(s) in M package(s)
-     *    found.", e quella si pretende.
+     * 2. If the vulnerability database is not there, pkg answers "vulnxml file vuln.xml
+     *    does not exist" and whoever looks only for the "is vulnerable" lines concludes "no
+     *    vulnerabilities". It is the worst case: a reassurance instead of an "I could not
+     *    check". The exit code does not help to tell them apart -- measured: 1
+     *    without the database, 0 both with problems found and without. What tells a
+     *    report that was done from one that was not is the final line "N problem(s) in M package(s)
+     *    found.", and that one is required.
      *
-     * Il conto che si mostra e' quello della riga finale, non il numero di CVE: una voce di
-     * VuXML puo' non avere nessun identificativo CVE, e contare i CVE la perderebbe.
+     * The count shown is the one in the final line, not the number of CVEs: a VuXML entry
+     * may have no CVE identifier at all, and counting the CVEs would lose it.
      */
     static JSONObject auditReport(String name, String version) {
         JSONObject r = emptyAuditReport(name, version);
@@ -1189,7 +1194,7 @@ public final class UpdateManager {
         return readAuditReport(sh("pkg audit '" + name + "-" + version + "' 2>&1", 120), name, r);
     }
 
-    /** La lettura del referto, separata dal comando: funzione pura, si prova con uscite vere. */
+    /** Reading the report, separate from the command: pure function, tested with real outputs. */
     static JSONObject readAuditReport(String out, String name, JSONObject r) {
         Matcher m = FULL_AUDIT.matcher(out == null ? "" : out);
         if (!m.find())
@@ -1203,7 +1208,7 @@ public final class UpdateManager {
                 .put("references", detail.getJSONArray("references"));
     }
 
-    /** Un referto vuoto da riempire, per chi legge un'uscita gia' in mano. */
+    /** An empty report to fill in, for whoever reads an output already in hand. */
     static JSONObject emptyAuditReport(String name, String version) {
         return new JSONObject().put("name", name == null ? "" : name)
                 .put("version", version == null ? "" : version)
@@ -1218,13 +1223,13 @@ public final class UpdateManager {
         java.util.LinkedHashSet<String> seenCves = new java.util.LinkedHashSet<>();
         for (String line : audit.split("\n")) {
             String t = line.trim();
-            // Inizio del blocco: "<nome>-<versione> is vulnerable:"
+            // Start of the block: "<name>-<version> is vulnerable:"
             if (t.matches("^" + java.util.regex.Pattern.quote(pkgName) + "-[0-9]\\S* is vulnerable:.*")) {
                 inside = true;
                 continue;
             }
             if (!inside) continue;
-            // Il blocco finisce quando ne inizia un altro o alla prima riga vuota dopo il testo.
+            // The block ends when another one starts or at the first empty line after the text.
             if (t.endsWith("is vulnerable:") || (t.isEmpty() && description.length() > 0)) break;
             if (t.startsWith("CVE:")) {
                 for (String c : t.substring(4).trim().split("[\\s,]+")) {
@@ -1253,9 +1258,9 @@ public final class UpdateManager {
             if (o.getBoolean("majorJump")) majors++;
             if (o.has("advisory") && "wait".equals(o.getJSONObject("advisory").getString("level"))) expectedOnes++;
         }
-        // Il piano esatto dell'intera manutenzione, calcolato su una copia del database di pkg
-        // con gli stessi sblocchi che fara' il lavoro vero. La tabella qui sopra dice i pacchetti
-        // protetti; questo dice TUTTO cio' che cambiera', dipendenze comprese.
+        // The exact plan of the whole maintenance, computed on a copy of the pkg database
+        // with the same unlocks the real job will make. The table above gives the locked
+        // packages; this one gives EVERYTHING that will change, dependencies included.
         JSONObject plan = judged(maintenancePlan(arr).getJSONObject("plan"));
         String blocked = cardBlockedReason(plan);
         return new JSONObject().put("success", true).put("packages", arr)
@@ -1266,17 +1271,17 @@ public final class UpdateManager {
                     I18n.tr("server.um.maintenancePreview.1"));
     }
 
-    // ===================== compatibilita' della configurazione viva =====================
+    // ===================== compatibility of the live configuration =====================
 
     private static final String DOVECOT_DIR = "/usr/local/etc/dovecot";
     private static final String MYCNF = "/usr/local/etc/mysql/my.cnf";
 
     /**
-     * Costrutti che Dovecot 2.4 non accetta piu'. Colonne: espressione regolare da cercare
-     * nei file di configurazione, descrizione, cosa mettere al suo posto.
+     * Constructs that Dovecot 2.4 no longer accepts. Columns: regular expression to look for
+     * in the configuration files, description, what to put in its place.
      *
-     * Presi dalle note ufficiali di aggiornamento 2.3 -> 2.4, non dalla memoria: qui una voce
-     * sbagliata significa dire a un amministratore che puo' aggiornare quando non puo'.
+     * Taken from the official 2.3 -> 2.4 upgrade notes, not from memory: here a wrong entry
+     * means telling an administrator that they can update when they cannot.
      */
     private static final String[][] DOVECOT_24_BREAKS = {
         {"^[[:space:]]*mail_location[[:space:]]*=", "mail_location",
@@ -1306,49 +1311,49 @@ public final class UpdateManager {
     };
 
     /**
-     * I file che Dovecot legge DAVVERO. La differenza non e' un dettaglio: sotto
-     * /usr/local/etc/dovecot il port lascia anche example-config/, un albero di
-     * configurazioni di esempio che Dovecot non apre mai. Scansionarlo significa
-     * segnalare problemi in file che nessuno usa — e far sembrare bloccante un
-     * aggiornamento per colpa di un esempio di LDAP che non e' nemmeno attivo.
+     * The files that Dovecot ACTUALLY reads. The difference is not a detail: under
+     * /usr/local/etc/dovecot the port also leaves example-config/, a tree of
+     * sample configurations that Dovecot never opens. Scanning it means
+     * reporting problems in files nobody uses -- and making an update look blocking
+     * because of an LDAP example that is not even active.
      *
-     * L'insieme si ricostruisce come lo costruisce Dovecot: si parte da dovecot.conf e si
-     * seguono le direttive !include NON commentate, piu' i .conf.ext nominati negli args.
+     * The set is rebuilt the way Dovecot builds it: start from dovecot.conf and
+     * follow the !include directives that are NOT commented out, plus the .conf.ext named in the args.
      */
     private static List<String> fileDovecot() { return fileDovecotIn(DOVECOT_DIR); }
 
-    /** Come sopra, ma su una cartella qualsiasi: e' l'unico modo di provarlo senza un Dovecot installato. */
+    /** As above, but on any folder: it is the only way to test it without an installed Dovecot. */
     static List<String> fileDovecotIn(String dir) {
         java.util.LinkedHashSet<String> alive = new java.util.LinkedHashSet<>();
         String root = dir + "/dovecot.conf";
         if (!ok("test -f " + root, 10)) return new ArrayList<>();
         alive.add(root);
 
-        // I conf.d/*.conf entrano solo se dovecot.conf li include davvero: una riga
-        // "#!include" commentata non fa entrare niente, e trattarla come attiva
-        // reintrodurrebbe lo stesso errore degli esempi.
+        // The conf.d/*.conf files come in only if dovecot.conf really includes them: a
+        // commented-out "#!include" line brings nothing in, and treating it as active
+        // would reintroduce the same mistake as the examples.
         if (ok("grep -qE '^[[:space:]]*!include[[:space:]]+conf\\.d/\\*\\.conf' " + root, 10)) {
             for (String f : sh("ls -1 " + dir + "/conf.d/*.conf 2>/dev/null", 15).split("\n")) {
                 if (validDovecotPath(dir, f.trim())) alive.add(f.trim());
             }
         }
 
-        // I .conf.ext non sono inclusi da un glob: entrano solo se nominati esplicitamente,
-        // da un !include attivo oppure da un args = di passdb/userdb.
-        for (int round = 0; round < 3; round++) {   // tre livelli bastano e impediscono un ciclo infinito
+        // The .conf.ext files are not included by a glob: they come in only if named explicitly,
+        // by an active !include or by an args = of passdb/userdb.
+        for (int round = 0; round < 3; round++) {   // three levels are enough and prevent an infinite loop
             int before = alive.size();
             String list = String.join(" ", alive);
-            // -H e non -h: serve sapere DA QUALE file arriva ogni riferimento, perche' un
-            // include relativo si risolve rispetto alla cartella del file che lo contiene.
-            // "!include auth-sql.conf.ext" dentro conf.d/10-auth.conf indica
-            // conf.d/auth-sql.conf.ext, non un file nella radice: risolverlo dalla radice
-            // significa non trovarlo, e non trovarlo significa dichiarare compatibile una
-            // configurazione che non lo e' — proprio il file che contiene i passdb.
-            // Le righe commentate restano fuori: un include disattivato non porta dentro nulla.
-            // Il grep prende largo e il filtro dei commenti si fa qui: esprimere "riga non
-            // commentata che contiene args" in una sola espressione POSIX e' possibile ma
-            // fragile, e una svista li' significa non seguire un riferimento — cioe' dichiarare
-            // compatibile una configurazione che non lo e'.
+            // -H and not -h: we need to know FROM WHICH file each reference comes, because a
+            // relative include is resolved against the folder of the file that contains it.
+            // "!include auth-sql.conf.ext" inside conf.d/10-auth.conf means
+            // conf.d/auth-sql.conf.ext, not a file in the root: resolving it from the root
+            // means not finding it, and not finding it means declaring compatible a
+            // configuration that is not -- precisely the file that contains the passdb entries.
+            // Commented-out lines stay out: a disabled include brings nothing in.
+            // The grep casts a wide net and the comment filtering is done here: expressing
+            // "non-commented line that contains args" in a single POSIX expression is possible
+            // but fragile, and an oversight there means not following a reference -- that is,
+            // declaring compatible a configuration that is not.
             String references = sh("grep -HE '^[[:space:]]*(!include(_try)?[[:space:]]|.*args[[:space:]]*=)' "
                     + list + " 2>/dev/null", 20);
             for (String line : references.split("\n")) {
@@ -1356,7 +1361,7 @@ public final class UpdateManager {
                 if (c <= 0) continue;
                 String source = line.substring(0, c);
                 String content = line.substring(c + 1);
-                if (content.trim().startsWith("#")) continue;   // include o args disattivato
+                if (content.trim().startsWith("#")) continue;   // include or args disabled
                 String base = source.contains("/") ? source.substring(0, source.lastIndexOf('/')) : dir;
                 Matcher m = Pattern.compile("([A-Za-z0-9._/-]*[A-Za-z0-9._-]+\\.conf(\\.ext)?)").matcher(content);
                 while (m.find()) {
@@ -1371,8 +1376,8 @@ public final class UpdateManager {
     }
 
     /**
-     * Un percorso finisce dentro un comando: deve stare sotto la cartella di Dovecot, avere
-     * una forma innocua, e NON provenire dall'albero degli esempi.
+     * A path ends up inside a command: it must be under the Dovecot folder, have a
+     * harmless shape, and NOT come from the examples tree.
      */
     static boolean validDovecotPath(String dir, String p) {
         return p.startsWith(dir + "/")
@@ -1381,24 +1386,25 @@ public final class UpdateManager {
     }
 
     /**
-     * La verifica che conta davvero: non "che versione ho" ma "la MIA configurazione
-     * sopravvive alla prossima versione?". La stessa domanda che un numero di versione
-     * non puo' rappresentare.
+     * The check that really matters: not "what version do I have" but "does MY configuration
+     * survive the next version?". The very question that a version number
+     * cannot represent.
      */
     public static JSONObject dovecotCompatibility() {
         JSONObject r = new JSONObject();
-        // Il pacchetto puo' chiamarsi dovecot, dovecot-mysql o dovecot-pgsql a seconda del
-        // sapore scelto: sono lo stesso port e si escludono a vicenda, quindi su un sistema
-        // con il sapore MySQL il nome "dovecot" NON e' installato e la query darebbe vuoto.
-        // Il binario e' la risposta piu' diretta; l'origine del port e' il ripiego esatto.
-        // Prima il PACCHETTO, poi il binario. Non e' indifferente: "dovecot --version" da' la
-        // versione a monte (2.3.21.1) mentre pkg da' quella del port con la revisione FreeBSD
-        // (2.3.21.1_3). Mettendo il binario per primo si finisce per confrontare due numeri di
-        // natura diversa, e la scheda mostra un aggiornamento disponibile che non esiste.
-        // L'interrogazione per ORIGINE funziona anche con i sapori, dove il nome "dovecot" non
-        // e' installato affatto: e' quella la ragione per cui il binario era diventato il primo.
-        // Dopo il passaggio guidato (reperto 213) il pacchetto e' della 2.4, un port a parte (mail/dovecot24): versione
-        // installata e disponibile si chiedono alla sua origine, o la scheda direbbe «installata 2.4.5, disponibile 2.3».
+        // The package can be called dovecot, dovecot-mysql or dovecot-pgsql depending on the
+        // flavor chosen: they are the same port and exclude each other, so on a system with
+        // the MySQL flavor the name "dovecot" is NOT installed and the query would return nothing.
+        // The binary is the most direct answer; the port origin is the exact fallback.
+        // First the PACKAGE, then the binary. It is not irrelevant: "dovecot --version" gives the
+        // upstream version (2.3.21.1) while pkg gives the port's one with the FreeBSD revision
+        // (2.3.21.1_3). Putting the binary first ends up comparing two numbers of a different
+        // nature, and the card shows an available update that does not exist.
+        // The query by ORIGIN works with the flavors too, where the name "dovecot" is not
+        // installed at all: that is the reason why the binary had become the first.
+        // After the guided switch (finding 213) the package is the 2.4 one, a separate port (mail/dovecot24): the
+        // installed and available versions are asked of its origin, or the card would say "installed 2.4.5,
+        // available 2.3".
         String origin = sh("pkg query -e '%o = \"mail/dovecot24\"' %o 2>/dev/null | head -1", 20).trim();
         if (!"mail/dovecot24".equals(origin)) origin = "mail/dovecot";
         String installed = sh("pkg query -e '%o = \"" + origin + "\"' %v 2>/dev/null | head -1", 20);
@@ -1409,10 +1415,10 @@ public final class UpdateManager {
         if (available.isEmpty() && "mail/dovecot".equals(origin)) available = sh("pkg rquery -U %v dovecot 2>/dev/null", 30);
         r.put("installed", installed).put("available", available).put("origin", origin);
 
-        // Quali pacchetti Dovecot offre il repository. Non e' curiosita': se la 2.4 fosse un
-        // PACCHETTO DIVERSO (come mysql80 e mysql84) allora nessun pkg upgrade potrebbe mai
-        // portarci, e il rischio non sarebbe "un aggiornamento rompe la posta" ma "una
-        // migrazione deliberata". Sono due scenari opposti e cambiano cosa va costruito.
+        // Which Dovecot packages the repository offers. It is not curiosity: if 2.4 were a
+        // DIFFERENT PACKAGE (like mysql80 and mysql84) then no pkg upgrade could ever
+        // get there, and the risk would not be "an update breaks the mail" but "a
+        // deliberate migration". They are two opposite scenarios and they change what must be built.
         JSONArray offered = new JSONArray();
         for (String line : sh("pkg rquery -U -g '%n %v' 'dovecot*' 2>/dev/null", 30).split("\n")) {
             String t = line.trim();
@@ -1423,10 +1429,10 @@ public final class UpdateManager {
         }
         r.put("repoPackages", offered);
 
-        // Il giudizio di Dovecot stesso sulla configurazione. Finora il pannello scriveva i
-        // file e riavviava senza mai chiedere al server se li accettasse: un errore di sintassi
-        // si sarebbe scoperto a servizio gia' fermo. doveconf -n e' l'equivalente di
-        // "mysqld --validate-config", e vale oggi, a prescindere dalla 2.4.
+        // Dovecot's own judgement on the configuration. Until now the panel wrote the
+        // files and restarted without ever asking the server whether it accepted them: a syntax
+        // error would have been found with the service already stopped. doveconf -n is the
+        // equivalent of "mysqld --validate-config", and it applies today, regardless of 2.4.
         Shell.Result dc = Shell.runShell(Duration.ofSeconds(30), "doveconf -n 2>&1 >/dev/null");
         r.put("doveconfAvailable", !dc.outputTrim().contains("not found"));
         String errors = dc.outputTrim();
@@ -1435,8 +1441,8 @@ public final class UpdateManager {
 
         int majorInstalled = majorVersion(installed), majorAvailable = majorVersion(available);
         int minInst = minorVersion(installed), minorAvailable = minorVersion(available);
-        // 2.3 -> 2.4 e' un salto di versione MINORE nei numeri ma una rottura totale nei fatti:
-        // confrontare solo la cifra maggiore lo lascerebbe passare per innocuo.
+        // 2.3 -> 2.4 is a MINOR version jump in the numbers but a total break in practice:
+        // comparing only the major digit would let it pass as harmless.
         boolean jumpTo24 = majorAvailable > majorInstalled || (majorAvailable == majorInstalled && minorAvailable > minInst);
         r.put("breakingUpgradeAvailable", jumpTo24 && !installed.isEmpty() && !available.isEmpty());
         r.put("on24", majorInstalled > 2 || (majorInstalled == 2 && minInst >= 4));
@@ -1458,8 +1464,8 @@ public final class UpdateManager {
                 issues.put(new JSONObject().put("construct", I18n.tr(rot[1])).put("replacement", I18n.tr(rot[2]))
                         .put("files", new JSONArray(where)));
             }
-            // Variabili a lettera singola: %u %d %n %h e le forme con modificatori (%2.256Nu).
-            // La sintassi nuova e' %{...}, che non combacia con questa espressione.
+            // Single-letter variables: %u %d %n %h and the forms with modifiers (%2.256Nu).
+            // The new syntax is %{...}, which does not match this expression.
             String var = sh("grep -lE '" + SINGLE_LETTER_VARS + "' " + list + " 2>/dev/null", 20);
             if (!var.isEmpty()) {
                 List<String> where = new ArrayList<>();
@@ -1469,8 +1475,8 @@ public final class UpdateManager {
                         .put("replacement", I18n.tr("server.um.dovecotCompatibility.4"))
                         .put("files", new JSONArray(where)));
             }
-            // Nella 2.4 questa direttiva e' obbligatoria e deve essere la prima: la sua assenza
-            // e' di per se' la prova che la configurazione e' ancora in formato 2.3.
+            // In 2.4 this directive is mandatory and must be the first: its absence
+            // is in itself the proof that the configuration is still in 2.3 format.
             if (sh("grep -lE '^[[:space:]]*dovecot_config_version' " + list + " 2>/dev/null", 20).isEmpty()) {
                 issues.put(new JSONObject()
                         .put("construct", I18n.tr("server.um.x.noConfigVersion"))
@@ -1492,13 +1498,13 @@ public final class UpdateManager {
     }
 
     /**
-     * Le variabili a lettera singola della 2.3 (%u, %d, %n, %2.256Nu) fuori dai commenti. Prima si cercavano in tutta la
-     * riga, e la configurazione 2.4 del pannello, che in un commento spiega «%d -> %{user | domain}», risultava non pronta
-     * per la 2.4 su una 2.4 che funzionava (reperto 213). La sintassi nuova, %{...}, non combacia.
+     * The 2.3 single-letter variables (%u, %d, %n, %2.256Nu) outside comments. Before, they were looked for in
+     * the whole line, and the panel's 2.4 configuration, which in a comment explains "%d -> %{user | domain}",
+     * came out as not ready for 2.4 on a 2.4 that worked (finding 213). The new syntax, %{...}, does not match.
      */
     static final String SINGLE_LETTER_VARS = "^[^#]*%[0-9.]*[A-Za-z]([^{A-Za-z]|$)";
 
-    /** Un costrutto cercato solo fuori dai commenti: quelli gia' ancorati a inizio riga lo sono di loro. */
+    /** A construct looked for only outside comments: those already anchored at line start are so by themselves. */
     static String outsideComments(String re) {
         return re.startsWith("^") ? re : "^[^#]*(" + re + ")";
     }
@@ -1513,7 +1519,7 @@ public final class UpdateManager {
         return m.find() ? Integer.parseInt(m.group(1)) : -1;
     }
 
-    /** Opzioni del my.cnf vivo che MySQL 8.4 ha rimosso: con una sola di queste il server non parte. */
+    /** Options of the live my.cnf that MySQL 8.4 has removed: with just one of these the server does not start. */
     private static final String[][] MYCNF_REMOVED_84 = {
         {"default_authentication_plugin", "authentication_policy"},
         {"expire_logs_days",              "server.um.minorVersion.1"},
@@ -1539,14 +1545,14 @@ public final class UpdateManager {
             return r.put("success", false).put("error", I18n.tr("server.um.mysqlCompatibility.2"));
         }
         r.put("present", true).put("version", sh("pkg query %v " + pkgServer, 20));
-        // La 8.0 e' a fine vita: va detto anche quando tutto funziona, perche' il momento in cui
-        // smetterebbe di funzionare non arriva con un preavviso.
+        // 8.0 is at end of life: it must be said even when everything works, because the moment when
+        // it would stop working does not come with advance notice.
         r.put("eol", pkgServer.startsWith("mysql80"));
         JSONArray issues = new JSONArray();
         if (Files.exists(Paths.get(MYCNF))) {
             for (String[] o : MYCNF_REMOVED_84) {
-                // Nel my.cnf '_' e '-' sono equivalenti, e alcune opzioni sono interruttori
-                // scritti senza '=': cercare solo "nome =" ne mancherebbe una parte.
+                // In my.cnf '_' and '-' are equivalent, and some options are switches
+                // written without '=': looking only for "name =" would miss some of them.
                 String v = o[0].replaceAll("[_-]", "[_-]");
                 if (ok("grep -qE '^[[:space:]]*" + v + "[[:space:]]*(=|$)' " + MYCNF + " 2>/dev/null", 15)) {
                     issues.put(new JSONObject().put("option", o[0]).put("replacement", I18n.tr(o[1])));
@@ -1561,9 +1567,9 @@ public final class UpdateManager {
     }
 
     /**
-     * PHP, webmail e pannello devono nominare la stessa versione di PHP. E' un accoppiamento
-     * che non si vede da nessuna parte finche' non si rompe: il pacchetto roundcube porta la
-     * versione nel nome, gli script del pannello la scrivono nei percorsi e nel socket php-fpm.
+     * PHP, webmail and panel must name the same PHP version. It is a coupling that
+     * is not visible anywhere until it breaks: the roundcube package carries the
+     * version in its name, the panel scripts write it in the paths and in the php-fpm socket.
      */
     public static JSONObject webmailCompatibility() {
         JSONObject r = new JSONObject();
@@ -1583,8 +1589,8 @@ public final class UpdateManager {
         if (!vPhp.isEmpty() && !vRc.isEmpty() && !vPhp.equals(vRc)) {
             note.put(I18n.tr("server.um.webmailCompatibility.1", java.util.Map.of("vRc", String.valueOf(vRc), "vPhp", String.valueOf(vPhp))));
         }
-        // Cosa nomina il pannello nei propri script: se diverge da cio' che e' installato, il
-        // prossimo script generato punterebbe a un percorso che non esiste.
+        // What the panel names in its own scripts: if it diverges from what is installed, the
+        // next generated script would point to a path that does not exist.
         if (!vPhp.isEmpty() && !("84".equals(vPhp))) {
             note.put(I18n.tr("server.um.webmailCompatibility.2", java.util.Map.of("vPhp", String.valueOf(vPhp))));
         }
@@ -1594,15 +1600,15 @@ public final class UpdateManager {
     }
 
     /**
-     * Contenuto dei file di configurazione che Dovecot legge davvero, in sola lettura.
+     * Content of the configuration files that Dovecot actually reads, read-only.
      *
-     * Serve per una ragione precisa: il pannello ha TRE generatori di configurazione Dovecot
-     * che nel tempo sono divergiti fra loro (userdb static contro userdb sql, Sieve presente
-     * o assente, protocolli diversi). Per unificarli bisogna sapere quale variante e'
-     * davvero in servizio, e l'unico modo onesto e' leggerla, non dedurla dal codice.
+     * It is needed for a precise reason: the panel has THREE Dovecot configuration generators
+     * that have diverged from each other over time (userdb static versus userdb sql, Sieve present
+     * or absent, different protocols). To unify them one must know which variant is
+     * actually in service, and the only honest way is to read it, not to deduce it from the code.
      *
-     * Le credenziali vengono oscurate PRIMA di uscire da qui: dovecot-sql.conf contiene la
-     * password del database delle caselle, e questo testo finisce in una pagina web.
+     * The credentials are masked BEFORE leaving here: dovecot-sql.conf contains the
+     * password of the mailbox database, and this text ends up in a web page.
      */
     public static JSONObject dumpDovecotConfig() {
         JSONArray files = new JSONArray();
@@ -1617,8 +1623,8 @@ public final class UpdateManager {
     }
 
     /**
-     * Toglie ogni password dal testo. Volutamente grossolana: meglio oscurare qualcosa di
-     * innocuo che lasciar passare una credenziale in una pagina web.
+     * Removes every password from the text. Deliberately coarse: better to mask something
+     * harmless than to let a credential through into a web page.
      */
     static String maskCredentials(String text) {
         if (text == null) return "";
@@ -1630,33 +1636,33 @@ public final class UpdateManager {
     }
 
     /**
-     * Postfix non ha una rottura annunciata come Dovecot 2.4: ha un meccanismo diverso, e
-     * dichiarato, che si chiama compatibility_level.
+     * Postfix has no announced break like Dovecot 2.4: it has a different, and
+     * declared, mechanism called compatibility_level.
      *
-     * Dalla 3.0 Postfix, quando cambia un valore predefinito in modo incompatibile, NON lo
-     * applica: continua a usare quello vecchio e scrive nel log "using backwards-compatible
-     * default setting nome=valore". La rete di sicurezza si toglie alzando
-     * compatibility_level al numero della versione. Quindi la domanda giusta per Postfix non
-     * e' "cosa si rompera'?" ma "su quali impostazioni vecchie mi sto appoggiando adesso?",
-     * e la risposta la scrive Postfix stesso.
+     * Since 3.0, when Postfix changes a default value in an incompatible way, it does NOT
+     * apply it: it keeps using the old one and writes in the log "using backwards-compatible
+     * default setting name=value". The safety net is removed by raising
+     * compatibility_level to the version number. So the right question for Postfix is not
+     * "what will break?" but "which old settings am I relying on right now?",
+     * and Postfix itself writes the answer.
      *
-     * Fonte: https://www.postfix.org/COMPATIBILITY_README.html e postconf(5).
+     * Source: https://www.postfix.org/COMPATIBILITY_README.html and postconf(5).
      */
-    // Cosa cambia a ogni livello di compatibilita' di Postfix: in PostfixLevels, che legge anche l'installazione.
+    // What changes at each Postfix compatibility level: in PostfixLevels, which the installation also reads.
 
     /**
-     * Postfix non ha una rottura annunciata come Dovecot 2.4: ha un meccanismo diverso, e
-     * dichiarato, che si chiama compatibility_level.
+     * Postfix has no announced break like Dovecot 2.4: it has a different, and
+     * declared, mechanism called compatibility_level.
      *
-     * Dalla 3.0, quando cambia un valore predefinito in modo incompatibile, Postfix NON lo
-     * applica: continua a usare quello vecchio finche' l'amministratore non alza il livello.
-     * Quindi la domanda giusta non e' "cosa si rompera'?" ma "di quanto sono indietro, e cosa
-     * cambierebbe ad allinearmi?".
+     * Since 3.0, when a default value changes in an incompatible way, Postfix does NOT
+     * apply it: it keeps using the old one until the administrator raises the level.
+     * So the right question is not "what will break?" but "how far behind am I, and what
+     * would change if I caught up?".
      *
-     * La prima versione di questo controllo decideva in base al fatto che "postfix check"
-     * stampasse qualcosa, e produceva la frase assurda "sta usando 0 impostazioni vecchie,
-     * elencate qui sotto" senza elenco. Il confronto giusto e' fra il livello impostato e
-     * quello che Postfix stesso indica nel proprio messaggio.
+     * The first version of this check decided based on whether "postfix check"
+     * printed something, and produced the absurd sentence "it is using 0 old settings,
+     * listed below" with no list. The right comparison is between the level set and
+     * the one Postfix itself indicates in its own message.
      */
     public static JSONObject postfixCompatibility() {
         JSONObject r = new JSONObject().put("success", true);
@@ -1677,17 +1683,17 @@ public final class UpdateManager {
          .put("explicitLevel", ok("postconf -n 2>/dev/null | grep -q '^compatibility_level'", 20));
 
         String check = sh("postfix check 2>&1", 60);
-        // Il campo si era perso nella riscrittura, e l'interfaccia mostrava l'intestazione
-        // "postfix check:" seguita dal nulla: un titolo senza contenuto sembra un guasto.
+        // The field had been lost in the rewrite, and the interface showed the heading
+        // "postfix check:" followed by nothing: a title without content looks like a fault.
         r.put("check", check.isBlank() ? "" : check).put("cleanCheck", check.isBlank());
 
-        // Il livello a cui Postfix stesso dice di salire, preso dal suo messaggio.
+        // The level Postfix itself says to raise to, taken from its message.
         String recommended = "";
         Matcher mc = Pattern.compile("compatibility_level=([0-9.]+)").matcher(check);
         if (mc.find()) recommended = mc.group(1);
         r.put("recommended", recommended);
 
-        // Cosa cambierebbe: solo i livelli STRETTAMENTE fra quello impostato e quello indicato.
+        // What would change: only the levels STRICTLY between the one set and the one indicated.
         JSONArray changes = new JSONArray();
         double from = levelNumber(set), to = levelNumber(recommended);
         if (to > from) {
@@ -1701,7 +1707,7 @@ public final class UpdateManager {
                 int open = 0;
                 for (String entry : l[2].split("\\s+")) {
                     if (entry.isBlank()) continue;
-                    // "nome@gate=valore": il parametro conta solo se il gate ha quel valore.
+                    // "name@gate=value": the parameter counts only if the gate has that value.
                     String name = entry, gate = "", expected = "";
                     int at = entry.indexOf('@');
                     if (at > 0) {
@@ -1762,17 +1768,17 @@ public final class UpdateManager {
     }
 
     /**
-     * Il tempo massimo di analisi di un messaggio, e se quel limite sia mai stato raggiunto.
+     * The maximum analysis time of a message, and whether that limit has ever been reached.
      *
-     * rspamadm configtest avverte che task_timeout (8s) e' inferiore al massimo teorico della
-     * cache dei simboli (10s). E' un controllo di coerenza AGGIUNTO nella 4.1.0, non un
-     * guasto comparso adesso, e la documentazione lo definisce informativo. Quei 10 secondi
-     * sono la somma dei limiti dei singoli simboli: perche' si raggiungano davvero, ognuno
-     * dovrebbe esaurire il proprio tempo nello stesso messaggio.
+     * rspamadm configtest warns that task_timeout (8s) is lower than the theoretical maximum of the
+     * symbols cache (10s). It is a consistency check ADDED in 4.1.0, not a fault
+     * that has appeared now, and the documentation calls it informational. Those 10 seconds
+     * are the sum of the limits of the individual symbols: for them to be really reached, each
+     * one would have to use up its own time on the same message.
      *
-     * Alzare un timeout perche' un avviso lo nomina sarebbe una scelta presa su una teoria.
-     * Qui si guarda se e' MAI successo: se rspamd non ha mai interrotto un'analisi, non c'e'
-     * niente da correggere; se l'ha fatto, si vede quante volte e quando.
+     * Raising a timeout because a warning names it would be a choice made on a theory.
+     * Here we look at whether it has EVER happened: if rspamd has never interrupted an analysis,
+     * there is nothing to fix; if it has, we see how many times and when.
      */
     public static JSONObject rspamdTimeoutDiagnostics() {
         JSONObject r = new JSONObject().put("success", true);
@@ -1794,20 +1800,20 @@ public final class UpdateManager {
             symbols.put(new JSONObject().put("name", ms.group(1)).put("seconds", ms.group(2)));
         r.put("symbols", symbols);
 
-        // La prova, se c'e', sta nel log. Non cerco una frase precisa — non la conosco e
-        // inventarla darebbe zero risultati che sembrerebbero una buona notizia. Cerco la
-        // parola e mostro cosa c'e', raggruppato.
+        // The proof, if there is any, is in the log. I do not look for a precise sentence -- I do not
+        // know it, and inventing it would give zero results that would look like good news. I look for
+        // the word and show what is there, grouped.
         String log = "/var/log/rspamd/rspamd.log";
         boolean logC = ok("test -r " + log, 15);
         r.put("log", log).put("logReadable", logC);
-        // Un solo lettore per tutto lo storico, compresse comprese.
+        // A single reader for the whole history, compressed files included.
         String reader = "for f in " + log + " /var/log/rspamd/rspamd.log.*; do "
                 + "[ -f \"$f\" ] || continue; case \"$f\" in "
                 + "*.bz2) bzip2 -dc \"$f\" 2>/dev/null;; *.gz) gzip -dc \"$f\" 2>/dev/null;; "
                 + "*.xz) xz -dc \"$f\" 2>/dev/null;; *.zst) zstd -dc \"$f\" 2>/dev/null;; "
                 + "*) cat \"$f\" 2>/dev/null;; esac; done";
         if (logC) {
-            // La prima riga nel formato di rspamd, non il marcatore di newsyslog.
+            // The first line in rspamd's format, not the newsyslog marker.
             r.put("since", sh("(" + reader + ") | grep -m1 -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "
                     + "| cut -c1-19", 120).trim());
             r.put("until", sh("grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}' " + log
@@ -1830,8 +1836,8 @@ public final class UpdateManager {
                 try {
                     int times = Integer.parseInt(t.substring(0, sp));
                     String msg = t.substring(sp + 1).trim();
-                    // rspamd_worker_check_and_adjust_timeout e' il controllo di coerenza che
-                    // rspamd esegue all'avvio: e' l'avviso, non un suo effetto.
+                    // rspamd_worker_check_and_adjust_timeout is the consistency check that
+                    // rspamd runs at startup: it is the warning, not one of its effects.
                     boolean isWarning = msg.contains("check_and_adjust_timeout")
                             || msg.contains("symbols cache timeout")
                             || msg.contains("symbols by execution time");
@@ -1851,9 +1857,9 @@ public final class UpdateManager {
 
         int occ = r.optInt("occurrences", -1);
         int logLines2 = r.optInt("logLines2", 0);
-        // Un campione piccolo non autorizza a dire "mai". La soglia non e' un numero magico:
-        // sotto le mille righe un log di posta copre tipicamente poche ore, e in poche ore
-        // puo' semplicemente non essere passato il messaggio lento che farebbe scattare il caso.
+        // A small sample does not entitle anyone to say "never". The threshold is not a magic number:
+        // below a thousand lines a mail log typically covers a few hours, and in a few hours
+        // the slow message that would trigger the case may simply not have come through.
         boolean wideSample = logLines2 >= 1000;
         String period = r.optString("since", "").isEmpty() ? ""
                 : " " + I18n.tr("server.um.x.rsLogSpan", java.util.Map.of("since", String.valueOf(r.optString("since")), "until", String.valueOf(r.optString("until"))));
@@ -1888,16 +1894,16 @@ public final class UpdateManager {
     }
 
     /**
-     * Alza il livello di compatibilita' di Postfix, dal pannello.
+     * Raises the Postfix compatibility level, from the panel.
      *
-     * Non e' un comando incollato in un pulsante: e' la stessa cosa che si farebbe a mano,
-     * piu' le tre cose che a mano si dimenticano — la copia di main.cf prima di toccarlo, la
-     * verifica che il valore sia DAVVERO cambiato, e il ritorno indietro automatico se
-     * qualcosa non torna.
+     * It is not a command pasted into a button: it is the same thing one would do by hand,
+     * plus the three things that get forgotten by hand -- the copy of main.cf before touching
+     * it, the check that the value has REALLY changed, and the automatic rollback if
+     * something does not add up.
      *
-     * L'esito lo dice il sistema, non il codice di uscita di postconf: si rilegge il valore,
-     * si richiede a Postfix se e' ancora in piedi, e si riesegue "postfix check" per vedere
-     * se l'avviso e' effettivamente sparito.
+     * The outcome is told by the system, not by the exit code of postconf: the value is read
+     * again, Postfix is asked whether it is still up, and "postfix check" is run again to see
+     * whether the warning has actually gone.
      */
     public static JSONObject raisePostfixCompatibilityLevel(String target) {
         JSONObject r = new JSONObject().put("pkgName", "postfix");
@@ -1918,7 +1924,7 @@ public final class UpdateManager {
             return r.put("success", false).put("before", before)
                     .put("error", I18n.tr("server.um.raisePostfixCompatibilityLevel.4", java.util.Map.of("before", String.valueOf(before), "target", String.valueOf(target))));
 
-        // La copia viene prima di tutto: e' cio' che rende reversibile il resto.
+        // The copy comes before everything: it is what makes the rest reversible.
         String mainCf = sh("postconf -h config_directory 2>/dev/null", 20).trim();
         if (mainCf.isEmpty()) mainCf = "/usr/local/etc/postfix";
         mainCf = mainCf + "/main.cf";
@@ -1950,8 +1956,8 @@ public final class UpdateManager {
         log.append("--- ").append(I18n.tr("server.um.x.pfReload")).append(" ---\n")
            .append(sh("postfix reload 2>&1", 60)).append("\n");
 
-        // Postfix e' ancora in piedi? La domanda non e' retorica: una main.cf accettata da
-        // postconf puo' comunque non piacere al master.
+        // Is Postfix still up? The question is not rhetorical: a main.cf accepted by
+        // postconf may still not be to the master's liking.
         boolean active = ok("service postfix status", 30);
         r.put("active", active);
         log.append(active ? I18n.tr("server.um.x.pfUpAfter") : I18n.tr("server.um.x.pfDownAfter")).append("\n");
@@ -1977,7 +1983,7 @@ public final class UpdateManager {
                         : I18n.tr("server.um.x.pfRaisedWarn", java.util.Map.of("before", String.valueOf(before), "after", String.valueOf(after), "copy", String.valueOf(copy))));
     }
 
-    /** "3.11" -> 3.11, "2" -> 2. Serve solo a ordinare i livelli fra loro. */
+    /** "3.11" -> 3.11, "2" -> 2. It only serves to order the levels among themselves. */
     private static double levelNumber(String v) {
         if (v == null) return -1;
         Matcher m = Pattern.compile("^([0-9]+)(?:\\.([0-9]+))?").matcher(v.trim());
@@ -1988,11 +1994,11 @@ public final class UpdateManager {
     }
 
     /**
-     * Rspamd cambia per gradi, e i cambiamenti che contano non sono di sintassi ma di
-     * COMPORTAMENTO: un'opzione che sparisce, un predefinito che si rovescia, un simbolo che
-     * cambia nome. Un file che resta valido puo' quindi produrre risultati diversi.
+     * Rspamd changes by degrees, and the changes that matter are not of syntax but of
+     * BEHAVIOR: an option that disappears, a default that flips, a symbol that
+     * changes name. A file that stays valid can therefore produce different results.
      *
-     * Le voci qui sotto vengono una per una dalle note ufficiali di rilascio 4.0 e 4.1.
+     * The entries below come one by one from the official 4.0 and 4.1 release notes.
      */
     private static final String[][] RSPAMD_CONSTRUCTS = {
         {"(^|[^A-Za-z0-9_])ssl[[:space:]]*=[[:space:]]*true", "server.um.levelNumber.1",
@@ -2042,7 +2048,7 @@ public final class UpdateManager {
         }
         r.put("filesRead", filesRead).put("issues", issues);
 
-        // rspamadm configtest e' l'equivalente di doveconf -n: lo dice rspamd, non io.
+        // rspamadm configtest is the equivalent of doveconf -n: rspamd says so, not me.
         if (ok("command -v rspamadm >/dev/null 2>&1", 15)) {
             String t = sh("rspamadm configtest 2>&1", 60);
             r.put("configtest", t).put("configtestOk", t.toLowerCase().contains("syntax ok"));
@@ -2050,8 +2056,8 @@ public final class UpdateManager {
             r.put("configtest", I18n.tr("server.um.rspamdCompatibility.1")).put("configtestOk", false);
         }
 
-        // Il ricalcolo dei Bayes riguarda SOLO le installazioni con Redis suddiviso su piu'
-        // server: dirlo evita di spaventare chi non e' in quel caso.
+        // The Bayes recalculation concerns ONLY installations with Redis split across several
+        // servers: saying so avoids scaring those who are not in that case.
         int redis = 0;
         if (c) {
             String rr = sh("grep -rhoE 'servers[[:space:]]*=[[:space:]]*\"[^\"]+\"' " + etc
@@ -2087,7 +2093,7 @@ public final class UpdateManager {
         return r;
     }
 
-    /** Le verifiche insieme: e' cio' che si guarda prima di premere "aggiorna". */
+    /** The checks together: it is what one looks at before pressing "update". */
     public static JSONObject compatibilityReport() {
         return new JSONObject().put("success", true)
                 .put("dovecot", dovecotCompatibility())
@@ -2097,17 +2103,18 @@ public final class UpdateManager {
                 .put("webmail", webmailCompatibility());
     }
 
-    // ===================== lavori in corso =====================
+    // ===================== jobs in progress =====================
 
     /**
-     * Il lavoro che sta girando adesso, a parole, o null: il turno dei pacchetti (PackageQueue) o un lavoro del
-     * pannello che non ha ancora scritto la sua fine. Per il riavvio, che non si programma sopra un lavoro a meta'.
+     * The job running now, in words, or null: the package turn (PackageQueue) or a panel job that has
+     * not yet written its end. For the restart, which is not scheduled on top of a half-done job.
      */
     public static String runningWork() {
         String holder = PackageQueue.holder();
         if (holder != null) return holder;
-        // Finche' la fine non e' scritta il lavoro gira, anche con l'esito gia' messo (visibleStatus). Uno fermo da
-        // piu' di sei ore non e' un lavoro, e' un difetto: non deve impedire per sempre il riavvio, che spesso e' la cura.
+        // Until the end is written the job is running, even with the outcome already set (visibleStatus). One
+        // stuck for more than six hours is not a job, it is a defect: it must not prevent the restart forever,
+        // which is often the cure.
         long now = System.currentTimeMillis();
         for (Job j : JOBS.values()) {
             String v = j.visibleStatus();
@@ -2118,19 +2125,20 @@ public final class UpdateManager {
     }
 
     /**
-     * Il lavoro sui pacchetti in corso adesso, per «Aggiorna il server» (reperto 206): chi tiene il turno, da quanto, e
-     * il suo id se e' un lavoro che la pagina puo' seguire. Il committente, rifiutato due volte mentre girava una ricerca:
-     * «non fa vedere cosa sta facendo né niente». Il turno e' quello di questo processo (PackageQueue): i lavori del
-     * pannello, chiunque li abbia avviati, da questa pagina, da un'altra o da un'altra scheda.
+     * The package job running now, for "Update the server" (finding 206): who holds the turn, since when,
+     * and its id if it is a job the page can follow. The owner, refused twice while a search was running:
+     * "it does not show what it is doing or anything". The turn is the one of this process (PackageQueue):
+     * the panel's jobs, whoever started them, from this page, from another one or from another tab.
      */
     public static JSONObject packageTurn() {
         JSONObject r = new JSONObject().put("success", true);
         String who = PackageQueue.holder();
         if (who == null) {
-            // L'aggiornamento della Java: lo script lavora fuori dal pannello, quindi il turno del pannello e' libero.
-            // Sul server vero, il 09/11/2026, «Aggiorna tutto» gli ha passato la mano e lo script ha lavorato 4 minuti:
-            // ricaricata la pagina, la scheda diceva «1 passo da fare: la Java» e un avviso su un lavoro «che non e'
-            // finito», niente su quello che stava succedendo (reperto 210). Adesso il turno lo dice, col suo registro.
+            // The Java update: the script works outside the panel, so the panel's turn is free.
+            // On the production server, on 2026-11-09, "Update everything" handed over to it and the script
+            // worked for 4 minutes: after reloading the page, the card said "1 step to do: Java" and a
+            // warning about a job "that has not finished", nothing about what was happening
+            // (finding 210). Now the turn says so, with its log.
             JSONObject java = javaUpdateInProgress();
             if (java == null) return r.put("running", false);
             String text = java.optString("text");
@@ -2143,31 +2151,33 @@ public final class UpdateManager {
         return r;
     }
 
-    /** Un'operazione lunga che il pannello segue mentre avviene. */
+    /** A long operation that the panel follows while it happens. */
     public static final class Job {
         public final String id;
         public final String type;
         public volatile String status = "pending";
         public volatile String errorMessage = "";
-        /** Il messaggio finale di un lavoro riuscito, da mostrare cosi' com'e' (es. il cambio di ramo). */
+        /** The final message of a successful job, to be shown as it is (e.g. the branch change). */
         public volatile String outcome = "";
         public volatile int step, total;
         public final long startedAt = System.currentTimeMillis();
         public volatile long finishedAt;
         private final StringBuilder log = new StringBuilder();
         /**
-         * Il registro su disco di questo lavoro (JobJournal), o null se non si e' potuto aprire. Si apre alla prima riga,
-         * non quando il lavoro nasce: un lavoro rifiutato perche' il turno e' di un altro non scrive niente, e prima
-         * lasciava un registro con l'inizio e senza la fine, che la Diagnostica contava fra quelli «finiti senza una
-         * fine». Sul server vero, il 09/11/2026, due «Aggiorna i pacchetti» premuti durante una ricerca (reperto 206).
+         * The on-disk log of this job (JobJournal), or null if it could not be opened. It is opened at the
+         * first line, not when the job is born: a job refused because the turn belongs to another one writes
+         * nothing, and before it left a log with the start and without the end, which Diagnostics counted
+         * among those "finished without an end". On the production server, on 2026-11-09, two "Update the
+         * packages" pressed during a search (finding 206).
          */
         private java.nio.file.Path journal;
         private boolean journalOpened;
         /**
-         * Quello che va fatto prima della fine scritta: la pulizia della via di ritorno (withWayBack). Prima girava
-         * dopo il lavoro, quindi dopo la fine: sulla VM, il 09/11/2026, «Aggiorna tutto» ha scritto «Way back: older
-         * boot environment ... removed» dopo «=== end», e l'elenco dei registri, che legge l'ultima riga, lo dava
-         * per «senza una fine» (reperto 207). E la pagina vedeva il lavoro finito mentre bectl lavorava ancora.
+         * What must be done before the end is written: the cleanup of the way back (withWayBack). Before, it
+         * ran after the job, so after the end: on the VM, on 2026-11-09, "Update everything" wrote "Way back:
+         * older boot environment ... removed" after "=== end", and the list of logs, which reads the last
+         * line, reported it as "without an end" (finding 207). And the page saw the job finished while bectl
+         * was still working.
          */
         private final java.util.List<Runnable> beforeEnd = new java.util.ArrayList<>();
 
@@ -2188,8 +2198,8 @@ public final class UpdateManager {
             log.append('[')
                .append(new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date()))
                .append("] ").append(line).append('\n');
-            // Un pkg upgrade di cento pacchetti produce migliaia di righe: senza un tetto il
-            // job terrebbe in memoria tutto l'output e la pagina diventerebbe illeggibile.
+            // A pkg upgrade of a hundred packages produces thousands of lines: without a cap the
+            // job would keep all the output in memory and the page would become unreadable.
             if (log.length() > 200_000) log.delete(0, log.length() - 150_000);
             JobJournal.append(journal(), line);
         }
@@ -2197,12 +2207,12 @@ public final class UpdateManager {
         public void advance(int s, int t) { this.step = s; this.total = t; }
 
         /**
-         * La fine del lavoro: l'ora, e nel registro su disco l'esito (stato, errore, durata). Una volta sola: chi la
-         * scrive per secondo non cambia niente.
+         * The end of the job: the time, and in the on-disk log the outcome (status, error, duration). Once
+         * only: whoever writes it second changes nothing.
          */
         public void finish() {
             synchronized (this) { if (finishedAt != 0) return; }
-            // Fuori dal lucchetto: bectl puo' metterci minuti, e la pagina intanto chiede lo stato (toJson).
+            // Outside the lock: bectl can take minutes, and meanwhile the page asks for the status (toJson).
             runBeforeEnd();
             synchronized (this) {
                 if (finishedAt != 0) return;
@@ -2211,12 +2221,12 @@ public final class UpdateManager {
             }
         }
 
-        /** Da fare prima della fine scritta, una volta sola. La fine la scrive il thread del lavoro. */
+        /** To be done before the end is written, once only. The end is written by the job's thread. */
         void beforeEnd(Runnable r) {
             synchronized (this) { beforeEnd.add(r); }
         }
 
-        /** Quello che aspetta la fine, adesso: ognuno una volta sola, anche se uno lancia un'eccezione. */
+        /** What is waiting for the end, now: each one once only, even if one throws an exception. */
         void runBeforeEnd() {
             java.util.List<Runnable> todo;
             synchronized (this) {
@@ -2229,28 +2239,29 @@ public final class UpdateManager {
             }
         }
 
-        /** Scrive la fine, se il lavoro non l'ha gia' scritta da se': vedi withEndMarked. */
+        /** Writes the end, if the job has not already written it by itself: see withEndMarked. */
         void markFinished() { finish(); }
 
         /**
-         * Lo stato come lo deve vedere chi aspetta il lavoro.
+         * The status as whoever is waiting for the job must see it.
          *
-         * Un lavoro scrive "completed" o "error" quando ha un esito, ma spesso ha ancora da
-         * fare: la manutenzione completa scrive "completed" appena pkg upgrade esce con 0, e
-         * DOPO confronta con il piano e con l'inventario, riprotegge i pacchetti, controlla
-         * protezioni e servizi — e ognuno di questi passi puo' cambiare l'esito in "error".
-         * La pagina smette di chiedere al primo esito che vede: un lavoro andato male poteva
-         * comparire come riuscito, e le righe della verifica finale non arrivavano a schermo.
-         * Misurato sulla VM il 23/10/2026: una sonda fermata al primo "completed" ha trovato 14
-         * pacchetti su 39 ancora da riproteggere.
+         * A job writes "completed" or "error" when it has an outcome, but it often still has things
+         * to do: the full maintenance writes "completed" as soon as pkg upgrade exits with 0, and
+         * AFTERWARDS compares with the plan and the inventory, locks the packages again, checks
+         * locks and services -- and each of these steps can change the outcome to "error".
+         * The page stops asking at the first outcome it sees: a job that went wrong could
+         * appear as successful, and the lines of the final check did not reach the screen.
+         * Measured on the VM on 2026-10-23: a probe stopped at the first "completed" found 14
+         * packages out of 39 still to be locked again.
          *
-         * Quindi un esito e' visibile solo quando la fine e' scritta, cioe' quando il lavoro ha
-         * finito davvero. Fino ad allora il lavoro e' "running", come e'.
+         * So an outcome is visible only when the end is written, that is, when the job has
+         * really finished. Until then the job is "running", as it is.
          *
-         * L'ordine delle due letture conta: prima la fine, poi lo stato. Sono campi volatile e
-         * il lavoro scrive lo stato PRIMA della fine, quindi chi vede la fine vede anche lo stato
-         * che c'era a quel punto. Nell'ordine opposto si potrebbe leggere lo stato di prima del
-         * finally e la fine di dopo, e mostrare come definitivo un "completed" gia' superato.
+         * The order of the two reads matters: first the end, then the status. They are volatile
+         * fields and the job writes the status BEFORE the end, so whoever sees the end also sees
+         * the status there was at that point. In the opposite order one could read the status from
+         * before the finally and the end from after it, and show as final a "completed" already
+         * superseded.
          */
         String visibleStatus() {
             long f = finishedAt;
@@ -2272,16 +2283,16 @@ public final class UpdateManager {
 
     public static JSONObject jobStatus(String id) {
         Job j = JOBS.get(id);
-        // «unknown»: il pannello non conosce piu' il lavoro (si e' riavviato). La pagina smette di chiedere e dice dove sta
-        // il registro su disco, invece di chiedere per sempre.
+        // "unknown": the panel no longer knows the job (it has restarted). The page stops asking and says
+        // where the on-disk log is, instead of asking forever.
         return j == null ? new JSONObject().put("success", false).put("unknown", true).put("error", I18n.tr("server.um.jobStatus.1"))
                          : new JSONObject().put("success", true).put("job", j.toJson());
     }
 
     /**
-     * Esegue un comando lungo scrivendo l'output nel log del lavoro mentre arriva.
-     * Shell.run raccoglie tutto e restituisce alla fine: per un pkg upgrade da minuti
-     * significherebbe una pagina ferma senza sapere se sta funzionando.
+     * Runs a long command, writing the output to the job's log as it arrives.
+     * Shell.run collects everything and returns at the end: for a pkg upgrade lasting minutes
+     * it would mean a frozen page without knowing whether it is working.
      */
     static int runLogged(Job job, String command, int timeoutSeconds) throws Exception {
         return runLogged(job, command, timeoutSeconds, null);
@@ -2291,19 +2302,19 @@ public final class UpdateManager {
         return runLogged(job, command, timeoutSeconds, capture, null);
     }
 
-    /** Il codice d'uscita di un comando fermato allo scadere del tempo, come timeout(1). */
+    /** The exit code of a command stopped when the time runs out, like timeout(1). */
     static final int TIMED_OUT = 124;
 
     /**
-     * Un comando che cambia i pacchetti o il sistema, che allo scadere del tempo NON si ferma.
+     * A command that changes the packages or the system, which does NOT stop when the time runs out.
      *
-     * Misurato sulla VM il 06/11/2026 (reperto 147): allo scadere il log diceva «termino il
-     * processo», ma il processo terminato era la shell; pkg, suo figlio, continuava e finiva, e
-     * runLogged tornava solo alla fine di pkg con IOException invece di un codice. Il lavoro
-     * finiva in errore mentre pkg stava ancora installando. Fermarlo davvero non e' la cura:
-     * un pkg ucciso a meta' di un'installazione lascia pacchetti installati a meta'. Quindi per
-     * questi comandi il tempo diventa una soglia di avviso: si dice che sta ancora lavorando e si
-     * aspetta. Scaricare (-F) e simulare (-n) invece si possono fermare.
+     * Measured on the VM on 2026-11-06 (finding 147): when the time ran out the log said "terminating
+     * the process", but the process terminated was the shell; pkg, its child, kept going and finished,
+     * and runLogged returned only at the end of pkg with IOException instead of a code. The job
+     * ended in error while pkg was still installing. Really stopping it is not the cure: a pkg
+     * killed in the middle of an installation leaves packages half installed. So for these
+     * commands the time becomes a warning threshold: it says it is still working and waits.
+     * Downloading (-F) and simulating (-n), instead, can be stopped.
      */
     static boolean mustNotBeKilled(String command) {
         for (String part : command.split("[;&|]")) {
@@ -2324,7 +2335,7 @@ public final class UpdateManager {
         return false;
     }
 
-    /** Ferma il processo e TUTTI i suoi discendenti: prima con le buone, dopo 10 secondi con le cattive. */
+    /** Stops the process and ALL its descendants: first gently, after 10 seconds forcibly. */
     static void stopTree(Process p) {
         List<ProcessHandle> tree = p.descendants().toList();
         tree.forEach(ProcessHandle::destroy);
@@ -2342,17 +2353,17 @@ public final class UpdateManager {
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
         org.daemoxcp.mail.util.Shell.applyPath(pb);
         if (environment != null) pb.environment().putAll(environment);
-        // Lo standard input e' /dev/null, come in Shell: la pipe predefinita di
-        // ProcessBuilder non arriva mai a EOF, quindi un comando che legge resterebbe
-        // fermo per tutto il timeout — qui 1800 o 3600 secondi. Il motivo per esteso sta
-        // sul campo NO_STDIN di Shell.
+        // Standard input is /dev/null, as in Shell: the default pipe of
+        // ProcessBuilder never reaches EOF, so a command that reads would stay
+        // stuck for the whole timeout -- here 1800 or 3600 seconds. The full reason is
+        // on the NO_STDIN field of Shell.
         pb.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
         pb.redirectErrorStream(true);
         Process p = pb.start();
 
-        // Il timeout va sorvegliato da FUORI. Metterlo solo sulla waitFor finale non
-        // servirebbe a niente: se il processo si blocca senza chiudere lo standard output,
-        // readLine resta in attesa per sempre e la waitFor non viene mai raggiunta.
+        // The timeout must be watched from OUTSIDE. Putting it only on the final waitFor would
+        // be of no use: if the process hangs without closing standard output,
+        // readLine waits forever and the waitFor is never reached.
         boolean keepWaiting = mustNotBeKilled(command);
         java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean(false);
         Thread guard = localizedThread(() -> {
@@ -2375,11 +2386,11 @@ public final class UpdateManager {
         guard.setDaemon(true);
         guard.start();
 
-        // L'uscita si legge in un thread a parte, e la fine la decide il PROCESSO, non l'uscita.
-        // Un processo che il comando ha lanciato e lasciato andare (una subshell con "&", un demone
-        // che non chiude lo standard output) esce dall'albero e tiene aperta la pipe: leggendola
-        // qui fino in fondo, runLogged avrebbe aspettato lui, timeout o no. Misurato sulla VM il
-        // 06/11/2026: "(sleep 71 &); sleep 63" con 3 secondi di timeout tornava dopo 71.
+        // The output is read in a separate thread, and the end is decided by the PROCESS, not by the output.
+        // A process that the command launched and let go (a subshell with "&", a daemon that
+        // does not close standard output) leaves the tree and keeps the pipe open: by reading it
+        // here to the end, runLogged would have waited for it, timeout or not. Measured on the VM on
+        // 2026-11-06: "(sleep 71 &); sleep 63" with a 3-second timeout returned after 71.
         java.util.concurrent.CountDownLatch drained = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.atomic.AtomicReference<java.io.IOException> readError = new java.util.concurrent.atomic.AtomicReference<>();
         Thread reader = localizedThread(() -> {
@@ -2391,7 +2402,7 @@ public final class UpdateManager {
                     if (capture != null) synchronized (capture) { capture.append(l).append('\n'); }
                 }
             } catch (java.io.IOException e) {
-                // Dopo stopTree lo stream si chiude sotto la lettura: quello che e' arrivato e' tutto.
+                // After stopTree the stream closes under the read: what has arrived is everything.
                 if (!stopped.get()) readError.set(e);
             } finally {
                 drained.countDown();
@@ -2407,57 +2418,57 @@ public final class UpdateManager {
         return stopped.get() ? TIMED_OUT : code;
     }
 
-    /** Quanto si aspetta l'uscita dopo la fine del comando, prima di non aspettarla piu'. */
+    /** How long the output is waited for after the end of the command, before no longer waiting for it. */
     static int OUTPUT_GRACE_SECONDS = 30;
 
-    // ===================== stato su disco, per sopravvivere a un crash =====================
+    // ===================== state on disk, to survive a crash =====================
 
     /**
-     * Il blocco finale di runMaintenanceJob non viene eseguito se il processo muore
-     * (riavvio del pannello, kill, crash della JVM): i pacchetti resterebbero sbloccati e
-     * nessuno se ne accorgerebbe finche' un aggiornamento successivo non porta via un
-     * servizio. Questo file e' l'unica cosa che sopravvive.
+     * The final block of runMaintenanceJob is not executed if the process dies
+     * (panel restart, kill, JVM crash): the packages would stay unlocked and
+     * nobody would notice until a later update takes a service
+     * down. This file is the only thing that survives.
      *
-     * Si scrive con PackageQueue.writeState, che dice se c'e' riuscito: prima un errore di
-     * scrittura finiva in un avviso e il lavoro sbloccava lo stesso. Chi non riesce a scriverlo
-     * non sblocca niente.
+     * It is written with PackageQueue.writeState, which says whether it succeeded: before, a write
+     * error ended up in a warning and the job unlocked anyway. Whoever fails to write it
+     * unlocks nothing.
      */
     private static void clearState() {
         PackageQueue.deleteState();
     }
 
     /**
-     * Da chiamare all'avvio del pannello. Se il file di stato esiste, un lavoro sui pacchetti non
-     * e' arrivato in fondo: i pacchetti elencati vanno riprotetti subito. Riproteggere qualcosa di
-     * gia' protetto non ha effetti, quindi e' sicuro anche se in realta' era andato tutto bene.
+     * To be called at panel startup. If the state file exists, a package job did not
+     * reach the end: the listed packages must be locked again right away. Locking again something
+     * already locked has no effect, so it is safe even if in fact everything went well.
      *
-     * Tre cose misurate sulla VM il 06/11/2026 (reperto 147), e la risposta a ognuna:
-     *  - ogni avvio del jar passa di qui, anche il menu da console aperto mentre il pannello web
-     *    aggiorna: senza il turno fra processi riproteggeva i pacchetti del lavoro in corso e ne
-     *    cancellava l'elenco. Adesso si prende il turno, e se lo tiene un altro processo non si
-     *    tocca niente;
-     *  - se pkg sta ancora lavorando (il pannello e' stato ucciso, non pkg), "pkg lock" fallisce e il
-     *    pacchetto restava sbloccato fino al riavvio SUCCESSIVO. Adesso si riprova da soli ogni
-     *    mezzo minuto, finche' pkg non ha finito;
-     *  - l'interruzione si annotava solo nel log. Adesso c'e' un avviso (PackageRecovery) che la
-     *    pagina Aggiornamenti e il rapporto mostrano finche' qualcuno non controlla.
+     * Three things measured on the VM on 2026-11-06 (finding 147), and the answer to each:
+     *  - every start of the jar passes through here, even the console menu opened while the web panel
+     *    is updating: without the turn between processes it locked again the packages of the running
+     *    job and deleted their list. Now the turn is taken, and if another process holds it nothing
+     *    is touched;
+     *  - if pkg is still working (the panel was killed, not pkg), "pkg lock" fails and the
+     *    package stayed unlocked until the NEXT restart. Now it retries on its own every
+     *    half minute, until pkg has finished;
+     *  - the interruption was noted only in the log. Now there is a warning (PackageRecovery) that the
+     *    Updates page and the report show until someone checks.
      */
     public static String restoreLocksAfterCrash() {
         return restoreLocksAfterCrash(I18n.tr("server.recovery.turnAtStartup"));
     }
 
-    /** Ogni quanto il servizio acceso guarda se un lavoro sui pacchetti e' morto a meta'. */
+    /** How often the running service checks whether a package job died halfway. */
     static int watchSeconds = 60;
     private static Thread interruptionWatch;
 
     /**
-     * Il guardiano del servizio --web: ogni watchSeconds, il ripristino dell'avvio se un lavoro sui
-     * pacchetti e' morto a meta' MENTRE il pannello era acceso.
+     * The watchdog of the --web service: every watchSeconds, the startup restore if a package
+     * job died halfway WHILE the panel was running.
      *
-     * <p>Misurato sulla VM il 06/11/2026 (reperto 165): la reinstallazione completa uccisa a meta'
-     * lasciava i 39 pacchetti sbloccati con l'elenco su disco, e il servizio acceso non se ne
-     * accorgeva: il ripristino lo faceva solo il suo avvio successivo, cioe' anche giorni dopo. Lo
-     * stesso per qualunque lavoro di un altro processo del pannello (il menu, un comando da console).
+     * <p>Measured on the VM on 2026-11-06 (finding 165): the complete reinstallation killed halfway
+     * left the 39 packages unlocked with the list on disk, and the running service did not
+     * notice: the restore was done only by its next startup, that is, even days later. The
+     * same for any job of another panel process (the menu, a console command).
      */
     public static synchronized void startInterruptionWatch() {
         if (interruptionWatch != null && interruptionWatch.isAlive()) return;
@@ -2465,7 +2476,7 @@ public final class UpdateManager {
             while (true) {
                 try {
                     Thread.sleep(watchSeconds * 1000L);
-                    watchOnce();      // quello che trova lo scrive gia' nel log il ripristino
+                    watchOnce();      // whatever it finds, the restore already writes in the log
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     return;
@@ -2479,15 +2490,15 @@ public final class UpdateManager {
     }
 
     /**
-     * Un giro del guardiano. Il ripristino dell'avvio solo se l'elenco c'e', non e' quello lasciato
-     * apposta dall'aggiornamento della JVM (lo chiude il riavvio che lui stesso fa), e chi l'ha
-     * scritto non c'e' piu'. Il turno lo controlla poi il ripristino: se lo tiene qualcun altro, non
-     * tocca niente. "" se non c'era niente da fare.
+     * One round of the watchdog. The startup restore only if the list is there, it is not the one left
+     * on purpose by the JVM update (the restart that the update itself performs closes it), and whoever
+     * wrote it is gone. The turn is then checked by the restore: if someone else holds it, it does not
+     * touch anything. "" if there was nothing to do.
      */
     static String watchOnce() {
         String relock = relockOnce();
-        // Poi, protetti i pacchetti e fermo pkg, il lavoro interrotto si completa: servizi rimessi in servizio e
-        // verificati (InterruptedJobRecovery). Solo qui, nel pannello in servizio: non nel menu da console.
+        // Then, with the packages locked and pkg stopped, the interrupted job is completed: services put back in
+        // service and checked (InterruptedJobRecovery). Only here, in the panel in service: not in the console menu.
         String completed = InterruptedJobRecovery.completeIfInterrupted(new RecoveryMachine());
         return relock + completed;
     }
@@ -2498,12 +2509,12 @@ public final class UpdateManager {
         if (job.optBoolean("expectsRestart")) return "";
         long pid = job.optLong("pid", 0);
         long self = ProcessHandle.current().pid();
-        if (pid == self && PackageQueue.holder() != null) return "";     // un lavoro di questo processo
+        if (pid == self && PackageQueue.holder() != null) return "";     // a job of this process
         if (pid > 0 && pid != self && ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) return "";
         return restoreLocksAfterCrash(I18n.tr("server.recovery.turnWatch"));
     }
 
-    /** Il sistema vero per InterruptedJobRecovery: pkg, i servizi rc.d, le ricerche della posta. */
+    /** The real system for InterruptedJobRecovery: pkg, the rc.d services, the mail searches. */
     static final class RecoveryMachine implements InterruptedJobRecovery.Machine {
         @Override public long now() { return java.time.Instant.now().getEpochSecond(); }
         @Override public boolean pkgRunning() { return !PackageRecovery.pkgRunning().isEmpty(); }
@@ -2565,7 +2576,7 @@ public final class UpdateManager {
             Set<String> locked = lockedNames();
             for (String p : pkgs) if (locked.contains(p)) toUnlock.add(p);
             if (!toUnlock.isEmpty()) {
-                // Le regole di ogni sblocco: l'elenco su disco prima, poi lo sblocco; e si riprotegge sempre.
+                // The rules of every unlock: the list on disk first, then the unlock; and it always locks again.
                 String err = PackageQueue.writeState(toUnlock);
                 if (err != null) return err;
                 for (String p : toUnlock) if (!ok("pkg unlock -y " + p, 30)) { relockAll(toUnlock); return "cannot unlock " + p; }
@@ -2600,15 +2611,16 @@ public final class UpdateManager {
     }
 
     static String restoreLocksAfterCrash(String turnDescription) {
-        // PackageQueue.list, non il percorso scritto qui: e' lo stesso file, ma e' quello che
-        // leggono PackageRecovery.statePackages e le prove, che lo spostano in una cartella loro.
+        // PackageQueue.list, not the path written here: it is the same file, but it is the one read
+        // by PackageRecovery.statePackages and by the tests, which move it into a folder of their own.
         Path f = PackageQueue.list;
         if (!Files.exists(f)) return "";
         String refusal = PackageQueue.takeForLocks("startup-restore", turnDescription);
         if (refusal != null) {
-            // In inglese, come sopra: chi lo chiama lo stampa nel registro.
-            // Senza «a job is running there», che c'era prima: chi tiene il turno puo' anche essere il guardiano di un
-            // altro processo che sta rimettendo le protezioni (prova M4, 22/11/2026). Chi e' lo dice holderForLog.
+            // In English, as above: the caller prints it in the log.
+            // Without "a job is running there", which was there before: whoever holds the turn can also be the
+            // watchdog of another process that is putting the locks back (test M4, 2026-11-22). Who it is is said
+            // by holderForLog.
             String msg = "A list of unlocked packages is on disk, but another panel process holds the package turn ("
                     + PackageQueue.holderForLog() + "): the list is not touched.";
             LOGGER.info(msg);
@@ -2621,8 +2633,9 @@ public final class UpdateManager {
             List<String> unlockedNow = new ArrayList<>();
             for (String n : names) if (!lockedNow.contains(n) && ok("pkg info -e " + n, 15)) unlockedNow.add(n);
             String pkgNow = PackageRecovery.pkgRunning();
-            // L'aggiornamento della JVM lascia l'elenco apposta e si fa riavviare dal suo script:
-            // se lo script ha gia' riprotetto tutto e pkg non lavora piu', non e' un'interruzione.
+            // The JVM update leaves the list on purpose and has itself restarted by its script:
+            // if the script has already locked everything again and pkg is no longer working, it
+            // is not an interruption.
             boolean expected = job.optBoolean("expectsRestart") && unlockedNow.isEmpty() && pkgNow.isEmpty();
             if (!expected) PackageRecovery.recordInterruption(job, names, unlockedNow, pkgNow);
             StringBuilder log = new StringBuilder();
@@ -2643,9 +2656,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Riprotegge i pacchetti dell'elenco. Vero se alla fine sono tutti protetti (o non piu'
-     * installati) e l'elenco e' stato tolto; falso se qualcuno non si e' riprotetto, e allora
-     * l'elenco resta.
+     * Locks the packages in the list again. True if at the end they are all locked (or no longer
+     * installed) and the list has been removed; false if some did not get locked again, and then
+     * the list stays.
      */
     static boolean relockFromState(Path f, StringBuilder log) {
         int done = 0, totals = 0, skipped = 0;
@@ -2669,9 +2682,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Un tentativo del ripristino in background (PackageRecovery.retryInBackground): vero quando
-     * l'elenco non c'e' piu', cioe' quando non resta niente da fare. Prende il turno a ogni
-     * tentativo, per non pestare un lavoro partito nel frattempo.
+     * One attempt of the background restore (PackageRecovery.retryInBackground): true when
+     * the list is no longer there, that is, when there is nothing left to do. It takes the turn at
+     * every attempt, so as not to step on a job started in the meantime.
      */
     static boolean retryRelock() {
         Path f = PackageQueue.list;
@@ -2689,31 +2702,31 @@ public final class UpdateManager {
         }
     }
 
-    /** Insieme dei pacchetti protetti adesso, nomi senza versione. */
+    /** Set of the packages locked now, names without version. */
     private static Set<String> lockedNames() {
         return lockedNames(sh("pkg lock -l 2>/dev/null"));
     }
 
-    // ===================== i due lavori =====================
+    // ===================== the two jobs =====================
 
     /**
-     * Riscrive la SOLA configurazione di Dovecot dalla sorgente unica, senza toccare i
-     * pacchetti. Serviva: prima, per applicare una correzione alla configurazione bisognava
-     * passare dalla reinstallazione del pacchetto — `pkg delete` e reinstallazione — che e'
-     * sproporzionato per riscrivere dei file di testo e introduce rischi che non c'entrano.
+     * Rewrites ONLY the Dovecot configuration from the single source, without touching the
+     * packages. It was needed: before, to apply a fix to the configuration one had to go
+     * through the reinstallation of the package -- `pkg delete` and reinstallation -- which is
+     * out of proportion for rewriting some text files and introduces unrelated risks.
      *
-     * Il ricaricamento avviene solo se doveconf ha accettato: se rifiuta, il frammento ha
-     * gia' rimesso la configurazione precedente ed esce diverso da zero, quindi qui non si
-     * ricarica nulla e il servizio prosegue com'era.
+     * The reload happens only if doveconf accepted: if it refuses, the fragment has
+     * already put back the previous configuration and exits non-zero, so here nothing is
+     * reloaded and the service carries on as it was.
      */
     /**
-     * L'attivazione MTA-STS come lavoro in background.
+     * The MTA-STS activation as a background job.
      *
-     * L'emissione del certificato dura piu' del limite di tempo di un proxy: tenuta dentro
-     * una richiesta HTTP, il browser riceve una pagina di errore mentre sul server
-     * l'operazione prosegue, e chi guarda resta senza sapere cosa sia successo a un
-     * certificato di produzione. Qui la richiesta torna subito con un identificativo e la
-     * pagina segue l'avanzamento, come per gli aggiornamenti dei pacchetti.
+     * Issuing the certificate takes longer than a proxy's time limit: kept inside
+     * an HTTP request, the browser receives an error page while on the server
+     * the operation continues, and whoever is watching is left not knowing what happened to a
+     * production certificate. Here the request returns immediately with an identifier and the
+     * page follows the progress, as for the package updates.
      */
     public static JSONObject startMtaStsActivation() {
         String id = "mtasts-" + System.currentTimeMillis();
@@ -2745,12 +2758,12 @@ public final class UpdateManager {
     }
 
     /**
-     * "Configura tutto" per un dominio, come lavoro in background.
+     * "Set up everything" for a domain, as a background job.
      *
-     * Prima era una chiamata sincrona, e andava bene finche' la sequenza si limitava a
-     * scrivere qualche record. Ora include l'attesa della propagazione DNS e l'eventuale
-     * emissione del certificato: minuti, non secondi. Dietro un proxy quella richiesta
-     * scadrebbe, e chi guarda resterebbe senza sapere cosa e' successo.
+     * Before, it was a synchronous call, and that was fine as long as the sequence only
+     * wrote a few records. Now it includes waiting for DNS propagation and, if needed,
+     * issuing the certificate: minutes, not seconds. Behind a proxy that request
+     * would time out, and whoever is watching would be left not knowing what happened.
      */
     public static JSONObject startDomainSetup(int domainId) {
         String id = "domain-" + domainId + "-" + System.currentTimeMillis();
@@ -2769,8 +2782,8 @@ public final class UpdateManager {
                 j.status = outcome.optBoolean("success", false) ? "completed" : "error";
                 if (!outcome.optBoolean("success", false))
                     j.errorMessage = outcome.optString("error", I18n.tr("server.um.x.confInterrupted"));
-                // Arrivato in fondo con dei passi non in ordine: la pagina lo dice, non «Setup completed» in verde con un
-                // passo su dieci (reperto 250).
+                // Reached the end with some steps not in order: the page says so, not "Setup completed" in green
+                // with one step out of ten (finding 250).
                 else if (outcome.optInt("succeeded", 0) < outcome.optInt("total", 0))
                     j.outcome = I18n.tr("server.cfgdom.partial", java.util.Map.of("ok", String.valueOf(outcome.optInt("succeeded", 0)),
                             "tot", String.valueOf(outcome.optInt("total", 0))));
@@ -2817,8 +2830,8 @@ public final class UpdateManager {
             job.advance(2, 3);
             job.write("");
             job.write(I18n.tr("server.um.runDovecotRegeneration.2"));
-            // La password passa dall'AMBIENTE: non nel testo dello script (che finisce su
-            // disco) ne' sulla riga di comando (visibile nell'elenco dei processi).
+            // The password goes through the ENVIRONMENT: not in the text of the script (which ends
+            // up on disk) nor on the command line (visible in the process list).
             Map<String, String> environment = new LinkedHashMap<>();
             String pw = panelDbPassword();
             if (!pw.isEmpty()) environment.put("DB_PASS", pw);
@@ -2853,16 +2866,17 @@ public final class UpdateManager {
                 job.errorMessage = I18n.tr("server.um.runDovecotRegeneration.6");
                 return;
             }
-            // La configurazione appena scritta consegna dal socket nella coda di Postfix: Postfix si allinea (reperto 234).
+            // The configuration just written delivers from the socket into the Postfix queue: Postfix is brought
+            // in line (finding 234).
             String lmtp = LmtpSocket.alignPostfix();
             if (!lmtp.isEmpty()) job.write("    " + lmtp);
 
-            // === Prova funzionale: l'autenticazione funziona ancora? ===
-            // Questo passo riscrive dovecot-sql.conf, cioe' il file con cui Dovecot interroga
-            // il database per autenticare. "Il servizio e' attivo" non dice niente al riguardo:
-            // Dovecot resta attivo anche con credenziali sbagliate, e se ne accorgono gli utenti.
-            // Si esegue la STESSA query che il pannello ha appena scritto nella configurazione,
-            // con le STESSE credenziali, su una casella vera.
+            // === Functional test: does authentication still work? ===
+            // This step rewrites dovecot-sql.conf, that is, the file with which Dovecot queries
+            // the database to authenticate. "The service is running" says nothing about that:
+            // Dovecot stays running even with wrong credentials, and it is the users who notice.
+            // The SAME query that the panel has just written in the configuration is run,
+            // with the SAME credentials, on a real mailbox.
             job.write("");
             job.write(I18n.tr("server.um.x.authTest"));
             String mailbox = mysqlOut(org.daemoxcp.mail.database.SqlCatalog.UM_FIRST_ACTIVE_MAILBOX).trim();
@@ -2878,8 +2892,8 @@ public final class UpdateManager {
                 job.status = "completed";
                 return;
             }
-            // La stessa condizione della password_query scritta nel file, senza estrarre la
-            // password: interessa che la riga ci sia e sia raggiungibile, non il suo contenuto.
+            // The same condition as the password_query written in the file, without extracting the
+            // password: what matters is that the row is there and reachable, not its content.
             String found = mysqlOut(org.daemoxcp.mail.database.SqlCatalog.UM_ACTIVE_MAILBOX_COUNT, mailbox).trim();
             if ("1".equals(found)) {
                 job.write(I18n.tr("server.um.runDovecotRegeneration.10", java.util.Map.of("mailbox", String.valueOf(mailbox))));
@@ -2897,18 +2911,18 @@ public final class UpdateManager {
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
             if (script != null) try { java.nio.file.Files.deleteIfExists(script); } catch (Exception ignored) {}
-            // La rigenerazione scrive la connessione con l'utente del pannello: si torna a quello di Dovecot
-            // (MailDbUsers), che legge solo indirizzo, hash e stato delle caselle.
+            // The regeneration writes the connection with the panel's user: we go back to Dovecot's
+            // (MailDbUsers), which reads only address, hash and state of the mailboxes.
             if ("completed".equals(job.status)) MailDbUsers.ensureAtBoot();
             job.finish();
         }
     }
 
     /**
-     * Una domanda del catalogo con le credenziali del pannello, prese dalla configurazione, da JDBC: i
-     * valori come parametri. Le righe una per riga e le colonne separate da un tab, come le scriveva il
-     * client mysql che si usava prima; "" se MySQL non risponde. Prima passava da "sh -c" col testo
-     * dell'SQL dentro la riga di comando.
+     * A catalog query with the panel's credentials, taken from the configuration, via JDBC: the
+     * values as parameters. The rows one per line and the columns separated by a tab, as the
+     * mysql client used before wrote them; "" if MySQL does not respond. Before, it went through
+     * "sh -c" with the SQL text inside the command line.
      */
     private static String mysqlOut(String sql, Object... params) {
         String user = Product.ID, pass = "", db = Product.ID, host = "127.0.0.1", port = "3306";
@@ -2929,9 +2943,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Una domanda del catalogo da JDBC, con quell'utente su quel database: le righe una per riga, le colonne
-     * separate da un tab; "" se non entra o MySQL rifiuta. Host, porta e database sono gia' passati da una forma
-     * stretta; i valori vanno come parametri.
+     * A catalog query via JDBC, with that user on that database: the rows one per line, the columns
+     * separated by a tab; "" if it cannot log in or MySQL refuses. Host, port and database have already
+     * passed a strict format; the values go as parameters.
      */
     static String jdbcRows(String host, String port, String db, String user, String password, String sql, Object... params) {
         Shell.Result r = org.daemoxcp.mail.database.MysqlRoot.jdbc(host, port, db, user, password, sql, params);
@@ -2939,31 +2953,32 @@ public final class UpdateManager {
     }
 
     /**
-     * Query privilegiata come root, con la password del file dei segreti (MysqlRoot).
+     * Privileged query as root, with the password from the secrets file (MysqlRoot).
      *
-     * Serve per leggere mysql.user, che l'utente applicativo non puo' vedere: l'alternativa
-     * sarebbe chiedere di eseguire una GRANT a mano, cioe' esattamente il dettare comandi che si
-     * vuole evitare. Prima entrava dal socket senza password, che su FreeBSD funziona solo dove
-     * root una password non ce l'ha: cioe' dove entra chiunque. Dal 07/11/2026 root ha la sua
-     * password anche sui server installati prima (MysqlRoot.ensureAtBoot).
+     * It is needed to read mysql.user, which the application user cannot see: the alternative
+     * would be to ask for a GRANT to be run by hand, that is, exactly the dictating of commands
+     * that we want to avoid. Before, it got in through the socket without a password, which on
+     * FreeBSD works only where root has no password: that is, where anyone gets in. Since
+     * 2026-11-07 root has its own password also on the servers installed before
+     * (MysqlRoot.ensureAtBoot).
      */
     private static String mysqlRootOut(String sql) {
         return org.daemoxcp.mail.database.MysqlRoot.query(sql);
     }
 
     /**
-     * Il pannello si collega come utente applicativo, non come root: potrebbe non avere il
-     * permesso di leggere mysql.user. La differenza e' decisiva — "nessun account usa
-     * mysql_native_password" e "non ho potuto guardare" producono lo stesso vuoto ma
-     * significano l'opposto, e prendere il secondo per il primo vuol dire migrare convinti
-     * che non ci sia nessuno da salvare.
+     * The panel connects as the application user, not as root: it might not have the
+     * permission to read mysql.user. The difference is decisive -- "no account uses
+     * mysql_native_password" and "I could not look" produce the same emptiness but
+     * mean the opposite, and taking the second for the first means migrating convinced
+     * that there is nobody to save.
      */
     private static boolean canReadMysqlUsers() {
         if (!mysqlRootOut(org.daemoxcp.mail.database.SqlCatalog.UM_CAN_READ_ACCOUNTS).trim().isEmpty()) return true;
         return !mysqlOut(org.daemoxcp.mail.database.SqlCatalog.UM_CAN_READ_ACCOUNTS).trim().isEmpty();
     }
 
-    /** La lettura di mysql.user, con l'utenza che riesce a farla. */
+    /** The read of mysql.user, with the account that manages to do it. */
     private static String usersWithNativePlugin() {
         String q = org.daemoxcp.mail.database.SqlCatalog.UM_NATIVE_PASSWORD_ACCOUNTS;
         String r = mysqlRootOut(q);
@@ -2971,12 +2986,12 @@ public final class UpdateManager {
     }
 
     /**
-     * Quali plugin di autenticazione sono in uso, con quanti account ciascuno.
+     * Which authentication plugins are in use, with how many accounts each.
      *
-     * Dire "nessuno usa mysql_native_password" e' dimostrare un'assenza, e un'assenza si
-     * confonde con un errore silenzioso. Elencare i plugin presenti e' una prova positiva:
-     * se la somma degli account torna e i nomi sono quelli attesi, la lettura e' avvenuta
-     * davvero. Serve anche a vedere sha256_password, deprecato anche lui.
+     * Saying "nobody uses mysql_native_password" is proving an absence, and an absence is
+     * easily mistaken for a silent error. Listing the plugins present is a positive proof:
+     * if the sum of the accounts adds up and the names are the expected ones, the read really
+     * took place. It also serves to see sha256_password, which is deprecated too.
      */
     private static JSONArray pluginInUse() {
         String q = org.daemoxcp.mail.database.SqlCatalog.UM_AUTH_PLUGINS;
@@ -2993,7 +3008,7 @@ public final class UpdateManager {
         return arr;
     }
 
-    /** I plugin trovati, in forma leggibile. */
+    /** The plugins found, in readable form. */
     private static String describePlugin(JSONArray a) {
         if (a.length() == 0) return I18n.tr("server.um.describePlugin.1");
         StringBuilder sb = new StringBuilder();
@@ -3007,46 +3022,46 @@ public final class UpdateManager {
         return I18n.tr("server.um.describePlugin.2", java.util.Map.of("sb", String.valueOf(sb), "tot", String.valueOf(tot)));
     }
 
-    /** Numero da output di comando; 0 se non contiene cifre. */
+    /** Number from command output; 0 if it contains no digits. */
     private static long number(String v) {
         try { return Long.parseLong(v == null ? "" : v.trim().replaceAll("[^0-9]", "")); }
         catch (Exception e) { return 0L; }
     }
 
-    /** Due frasi in una nota, senza righe vuote se la seconda non c'e'. */
+    /** Two sentences in a note, without blank lines if the second one is missing. */
     private static String joinNotes(String a, String b) {
         return b == null || b.isEmpty() ? a : a + "\n\n" + b;
     }
 
     /**
-     * Scarica i pacchetti che l'aggiornamento installera' e ricalcola il piano: il piano
-     * dipende da cio' che e' nella CACHE di pkg.
+     * Downloads the packages that the update will install and recomputes the plan: the plan
+     * depends on what is in the pkg CACHE.
      *
-     * Misurato sulla VM FreeBSD 15.1 il 23/10/2026, due volte sullo stesso pacchetto e sullo
-     * stesso catalogo, a due minuti di distanza:
+     * Measured on the FreeBSD 15.1 VM on 2026-10-23, twice on the same package and on the
+     * same catalog, two minutes apart:
      *
-     *   senza i file in /var/cache/pkg -> 3 cambi: installa lmdb0, installa mysql97-client,
-     *                                     aggiorna postfix-mysql
-     *   con i file in /var/cache/pkg   -> 4 cambi: gli stessi PIU' "rimuove lmdb 1.0.2,1"
+     *   without the files in /var/cache/pkg -> 3 changes: installs lmdb0, installs mysql97-client,
+     *                                          upgrades postfix-mysql
+     *   with the files in /var/cache/pkg    -> 4 changes: the same PLUS "removes lmdb 1.0.2,1"
      *
-     * Il controllo di integrita' di pkg trova i conflitti sui file solo quando i pacchetti
-     * sono scaricati: senza, `pkg upgrade -n` non puo' vedere che lmdb0 e lmdb si contendono
-     * /usr/local/bin/mdb_copy, e la rimozione che ne segue non compare nel piano. Compare
-     * durante l'esecuzione, quando il solver rifa' il conto.
+     * The integrity check of pkg finds file conflicts only when the packages are
+     * downloaded: without them, `pkg upgrade -n` cannot see that lmdb0 and lmdb both claim
+     * /usr/local/bin/mdb_copy, and the removal that follows does not appear in the plan. It
+     * appears during the run, when the solver redoes its sums.
      *
-     * Non e' un dettaglio: il pannello RIFIUTA i piani che rimuovono pacchetti ("Il piano
-     * rimuove pacchetti: pkg rimuoverebbe lmdb 1.0.2,1. Il pannello non esegue aggiornamenti
-     * che tolgono pacchetti dal server"), e quel rifiuto veniva scavalcato ogni volta che i
-     * pacchetti non erano ancora stati scaricati — cioe' al primo tentativo, sempre. E' la
-     * spiegazione del reperto 14: il piano firmato 465385a9d669def8 non conteneva rimozioni e
-     * l'esecuzione ha rimosso lmdb.
+     * It is not a detail: the panel REFUSES the plans that remove packages ("The plan
+     * removes packages: pkg would remove lmdb 1.0.2,1. The panel does not run updates
+     * that take packages off the server"), and that refusal was bypassed every time the
+     * packages had not been downloaded yet -- that is, at the first attempt, always. It is the
+     * explanation of finding 14: the signed plan 465385a9d669def8 contained no removals and
+     * the run removed lmdb.
      *
-     * Lo scaricamento non aggiunge lavoro: sono gli stessi byte che servirebbero un istante
-     * dopo. Quello che aggiunge e' la possibilita' di fermarsi prima.
+     * The download does not add work: it is the same bytes that would be needed an instant
+     * later. What it adds is the chance to stop before.
      *
-     * @return null se pkg farebbe le stesse cose, altrimenti il motivo per fermarsi
+     * @return null if pkg would do the same things, otherwise the reason to stop
      */
-    /** Cosa ha deciso fetchAndRecheck: fermarsi (stop non nullo) o andare avanti col piano dato. */
+    /** What fetchAndRecheck decided: stop (stop not null) or go ahead with the given plan. */
     record Recheck(String stop, JSONObject plan) {}
 
     private static Recheck fetchAndRecheck(Job job, String fetchCommand, JSONObject approved,
@@ -3054,8 +3069,8 @@ public final class UpdateManager {
         job.write("  " + I18n.tr("server.um.x.fetchFirst"));
         int fetchCode = runLogged(job, fetchCommand, 1800);
         if (fetchCode != 0) {
-            // Senza i file, il piano resta quello incompleto: lo si dice, non si prosegue
-            // facendo finta che il controllo sia stato fatto.
+            // Without the files, the plan remains the incomplete one: that is said, instead of
+            // carrying on pretending the check was done.
             job.write("  " + I18n.tr("server.um.x.fetchFailed", java.util.Map.of("code", String.valueOf(fetchCode))));
             return new Recheck(I18n.tr("server.um.x.fetchFailed", java.util.Map.of("code", String.valueOf(fetchCode))), approved);
         }
@@ -3069,9 +3084,9 @@ public final class UpdateManager {
             job.write("  " + I18n.tr("server.um.x.planUnchanged", java.util.Map.of("f", String.valueOf(after))));
             return new Recheck(null, approved);
         }
-        // Cresciuto di sole rimozioni: e' il caso di lmdb -> lmdb0, dove pkg vede il conflitto sui
-        // file solo dopo aver scaricato. Se ognuna e' una sostituzione innocua si va avanti col
-        // piano nuovo, e le prove si scrivono qui, nel registro del lavoro.
+        // Grown by removals only: it is the case of lmdb -> lmdb0, where pkg sees the file conflict
+        // only after downloading. If each one is a harmless replacement we go ahead with the
+        // new plan, and the evidence is written here, in the job's log.
         java.util.List<String> added = onlyAddedRemovals(approved, now);
         if (added != null && !added.isEmpty()) {
             judged(now);
@@ -3093,15 +3108,15 @@ public final class UpdateManager {
                         + "; " + v);
                 return new Recheck(null, now);
             }
-            // Il motivo dell'arresto e' questo, non il generico «il piano e' cambiato»: dice a chi
-            // legge quali rimozioni il pannello non esegue.
+            // The reason for the stop is this one, not the generic "the plan has changed": it tells
+            // whoever reads which removals the panel does not carry out.
             String why = removalsReason(now);
             job.write("  " + why);
             LOGGER.warning("Plan grew after fetching by removals the panel refuses: " + before + " -> " + after + "; " + now.getJSONArray("replacements"));
             return new Recheck(why, approved);
         }
-        // pkg 2.9 trattiene l'aggiornamento (un conflitto sui file che si vede solo coi pacchetti scaricati): il motivo
-        // e' quello, e lo si dice; se nel piano resta altro, va comunque riapprovato.
+        // pkg 2.9 holds back the update (a file conflict that shows only with the packages downloaded): that
+        // is the reason, and it is said; if something else remains in the plan, it must be approved again anyway.
         String held = heldBackReason(now);
         if (held != null) {
             JSONArray left = now == null ? null : now.optJSONArray("changes");
@@ -3121,8 +3136,8 @@ public final class UpdateManager {
     }
 
     /**
-     * "nome versione" delle rimozioni che il piano nuovo aggiunge a quello approvato; null se
-     * cambia anche altro (un'installazione o un aggiornamento in piu', una versione diversa).
+     * "name version" of the removals that the new plan adds to the approved one; null if
+     * something else changes too (one more installation or update, a different version).
      */
     static java.util.List<String> onlyAddedRemovals(JSONObject approved, JSONObject now) {
         java.util.Set<String> a = changeKeys(approved);
@@ -3149,7 +3164,7 @@ public final class UpdateManager {
         return x.optString("type") + "|" + x.optString("name") + "|" + x.optString("from") + "|" + x.optString("to");
     }
 
-    /** JSONArray di stringhe -> lista Java, per poterle unire e ciclare. */
+    /** JSONArray of strings -> Java list, so they can be joined and looped over. */
     private static java.util.List<String> jsonArrayToList(JSONArray a) {
         java.util.List<String> l = new ArrayList<>();
         for (int i = 0; a != null && i < a.length(); i++) {
@@ -3160,21 +3175,21 @@ public final class UpdateManager {
     }
 
     /**
-     * I cambiamenti che il pannello NON esegue: rimozioni e retrocessioni.
+     * The changes that the panel does NOT carry out: removals and downgrades.
      *
-     * E' una regola del pannello, non un fatto di pkg: un aggiornamento che toglie un
-     * pacchetto da un server di posta, o che ne riporta indietro la versione, va deciso da
-     * una persona che sa chi lo usa. Stava scritta in un punto solo — la scheda di un
-     * pacchetto protetto — e mancava negli altri due lavori che eseguono un piano.
+     * It is a rule of the panel, not a fact of pkg: an update that takes a
+     * package off a mail server, or takes its version back, must be decided by
+     * a person who knows who uses it. It was written in one place only -- the card of a
+     * locked package -- and was missing from the other two jobs that run a plan.
      *
-     * Misurato sulla VM FreeBSD 15.1 il 23/10/2026, sulla stessa macchina e sullo stesso
-     * pacchetto: l'aggiornamento guidato di postfix-mysql si ferma («Il piano rimuove
-     * pacchetti: pkg rimuoverebbe lmdb 1.0.2,1»), mentre la manutenzione completa dava
-     * runnable=true su un piano che conteneva «rimuove lmdb 1.0.2,1» e nessun impedimento.
-     * Due risposte opposte alla stessa domanda, e quella permissiva stava sul pulsante
-     * «Manutenzione completa», cioe' su quello che si preme per aggiornare tutto.
+     * Measured on the FreeBSD 15.1 VM on 2026-10-23, on the same machine and on the same
+     * package: the guided update of postfix-mysql stops ("The plan removes
+     * packages: pkg would remove lmdb 1.0.2,1"), while the full maintenance gave
+     * runnable=true on a plan that contained "removes lmdb 1.0.2,1" and no obstacle.
+     * Two opposite answers to the same question, and the permissive one was on the button
+     * "Full maintenance", that is, on the one pressed to update everything.
      *
-     * @return {@code removes} e {@code downgrades}: i cambiamenti, gia' in forma leggibile
+     * @return {@code removes} and {@code downgrades}: the changes, already in readable form
      */
     static JSONObject destructiveChanges(JSONObject plan) {
         JSONArray removed = new JSONArray(), downgrades = new JSONArray();
@@ -3182,9 +3197,9 @@ public final class UpdateManager {
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
             String n = x.optString("name");
-            // Le rimozioni che il lavoro stesso dichiara (MySQL 8.0 nella migrazione, il vecchio
-            // Python nel passaggio) sono il lavoro, non un effetto collaterale: stanno nel piano
-            // firmato, chi preme le legge, e l'inventario le verifica. Le altre seguono la regola.
+            // The removals that the job itself declares (MySQL 8.0 in the migration, the old
+            // Python in the switch) are the job, not a side effect: they are in the signed plan,
+            // whoever presses reads them, and the inventory checks them. The others follow the rule.
             if (x.optBoolean("intended")) continue;
             switch (x.optString("type")) {
                 case "remove" -> removed.put(n + " " + x.optString("from"));
@@ -3196,8 +3211,8 @@ public final class UpdateManager {
     }
 
     /**
-     * Il piano col giudizio su ogni rimozione (PackageReplacement), messo una volta sola nella
-     * chiave "replacements": lo leggono la regola qui sotto, la pagina e il registro del lavoro.
+     * The plan with the verdict on each removal (PackageReplacement), put once only in the
+     * "replacements" key: it is read by the rule below, by the page and by the job's log.
      */
     static JSONObject judged(JSONObject plan) {
         if (plan == null || plan.has("replacements")) return plan;
@@ -3205,7 +3220,7 @@ public final class UpdateManager {
         return plan.put("replacements", PackageReplacement.judgePlan(plan));
     }
 
-    /** Il giudizio su ogni rimozione del piano, per "nome versione". */
+    /** The verdict on each removal of the plan, by "name version". */
     private static Map<String, JSONObject> verdictsByKey(JSONObject plan) {
         Map<String, JSONObject> m = new LinkedHashMap<>();
         JSONArray v = plan == null ? null : plan.optJSONArray("replacements");
@@ -3217,10 +3232,10 @@ public final class UpdateManager {
     }
 
     /**
-     * "nome versione" delle rimozioni del piano che il pannello non esegue: tutte quelle che non
-     * sono una sostituzione innocua. Qualcosa che resta installato sparirebbe o smetterebbe di
-     * funzionare, o non si e' potuto misurare (una rimozione senza giudizio conta cosi'). Non c'e'
-     * modo di confermarle: vedi PackageReplacement.
+     * "name version" of the plan's removals that the panel does not carry out: all those that are not
+     * a harmless replacement. Something that stays installed would disappear or stop working, or it
+     * could not be measured (a removal without a verdict counts as such). There is no way to confirm
+     * them: see PackageReplacement.
      */
     static java.util.List<String> removalsRefused(JSONObject plan) {
         Map<String, JSONObject> v = verdictsByKey(plan);
@@ -3232,7 +3247,7 @@ public final class UpdateManager {
         return refused;
     }
 
-    /** Il motivo per le rimozioni che fermano il piano, o null se non ce ne sono. */
+    /** The reason for the removals that stop the plan, or null if there are none. */
     static String removalsReason(JSONObject plan) {
         java.util.List<String> refused = removalsRefused(plan);
         return refused.isEmpty() ? null
@@ -3240,11 +3255,11 @@ public final class UpdateManager {
     }
 
     /**
-     * Perche' pkg trattiene degli aggiornamenti (pkg 2.9, «is held back to solve the problem»: PackagePlan.readPlan), in
-     * parole, o null se non ne trattiene. Per ogni conflitto il pacchetto nuovo, quello installato che ingombra col file in
-     * comune, e chi ha ancora bisogno di quello installato (pkg query %rn: e' il motivo per cui pkg non lo toglie).
-     * Misurato sulla VM il 22/11/2026 con pkg 2.9.2: senza questo la scheda mostrava un piano vuoto senza dire perche', e
-     * il lavoro si fermava col generico «il piano e' cambiato».
+     * Why pkg holds back some updates (pkg 2.9, "is held back to solve the problem": PackagePlan.readPlan),
+     * in words, or null if it holds none back. For each conflict the new package, the installed one that is
+     * in the way with the shared file, and who still needs the installed one (pkg query %rn: it is the reason
+     * why pkg does not remove it). Measured on the VM on 2026-11-22 with pkg 2.9.2: without this the card
+     * showed an empty plan without saying why, and the job stopped with the generic "the plan has changed".
      */
     static String heldBackReason(JSONObject plan) {
         JSONArray held = plan == null ? null : plan.optJSONArray("heldBack");
@@ -3279,8 +3294,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Il motivo da mostrare nelle schede dei pacchetti non protetti e della manutenzione: quello delle modifiche
-     * distruttive; se non ce n'e' e il piano non ha niente da fare perche' pkg trattiene tutto, quello di pkg.
+     * The reason to show in the cards of the unlocked packages and of the maintenance: the one of the
+     * destructive changes; if there is none and the plan has nothing to do because pkg holds everything
+     * back, the one from pkg.
      */
     static String cardBlockedReason(JSONObject plan) {
         String destructive = destructivePlanReason(plan);
@@ -3290,19 +3306,19 @@ public final class UpdateManager {
     }
 
     /**
-     * Il motivo per cui un piano non si esegue, o null se non tocca niente in quel modo.
-     * Lo chiedono i tre lavori che eseguono un piano, cosi' la regola e' una sola.
+     * The reason why a plan is not run, or null if it touches nothing in that way.
+     * The three jobs that run a plan ask for it, so there is only one rule.
      *
-     * Una rimozione passa solo se e' una sostituzione innocua (il giudizio sta nel piano, vedi
-     * judged); le retrocessioni non passano mai.
+     * A removal passes only if it is a harmless replacement (the verdict is in the plan, see
+     * judged); downgrades never pass.
      */
     static String destructivePlanReason(JSONObject plan) {
         JSONObject d = destructiveChanges(plan);
         java.util.List<String> reasons = new ArrayList<>();
         String removals = removalsReason(plan);
         if (removals != null) reasons.add(removals);
-        // Un piano che puo' cambiare la libreria di un tipo di mappa di Postfix, se una mappa di quel
-        // tipo non si potrebbe rigenerare uguale a prima (PostfixMaps).
+        // A plan that can change the library of a Postfix map type, if a map of that
+        // type could not be rebuilt identical to before (PostfixMaps).
         String maps = PostfixMaps.planBlocker(plan);
         if (maps != null) reasons.add(maps);
         if (!d.getJSONArray("downgrades").isEmpty())
@@ -3311,14 +3327,14 @@ public final class UpdateManager {
         return reasons.isEmpty() ? null : String.join(" ", reasons);
     }
 
-    /** I nomi delle divergenze, per il messaggio d'errore di un lavoro. */
+    /** The names of the divergences, for the error message of a job. */
     private static String divergenceList(JSONArray divergences) {
         java.util.List<String> names = new ArrayList<>();
         for (int i = 0; i < divergences.length(); i++) names.add(divergences.getJSONObject(i).optString("name"));
         return String.join(", ", names);
     }
 
-    /** Il messaggio d'errore di un lavoro che ha trovato cambiamenti fuori dal piano. */
+    /** The error message of a job that found changes outside the plan. */
     private static String divergenceMessage(JSONArray d) {
         return d.length() == 1
             ? I18n.tr("server.um.x.divergenceFound.one", java.util.Map.of("list", String.valueOf(divergenceList(d))))
@@ -3327,14 +3343,14 @@ public final class UpdateManager {
     }
 
     /**
-     * Confronta l'inventario dei pacchetti con quello di prima dell'aggiornamento e scrive
-     * nel log del lavoro che cosa e' cambiato DAVVERO.
+     * Compares the package inventory with the one from before the update and writes
+     * in the job's log what REALLY changed.
      *
-     * Sta in un punto solo perche' la fanno due lavori (l'aggiornamento guidato e la
-     * manutenzione completa) e una decisione scritta due volte diventa due decisioni.
+     * It lives in one place only because two jobs do it (the guided update and the
+     * full maintenance) and a decision written twice becomes two decisions.
      *
-     * @param chi per il registro del pannello: quale lavoro ha trovato la divergenza
-     * @return le divergenze, vuote se tutto cio' che e' cambiato era nel piano
+     * @param who for the panel log: which job found the divergence
+     * @return the divergences, empty if everything that changed was in the plan
      */
     private static JSONArray compareWithInventory(Job job, Map<String, String> before,
                                                      JSONObject plan, String who) {
@@ -3348,31 +3364,31 @@ public final class UpdateManager {
         for (int i = 0; i < outside.length(); i++)
             job.write("    NO  " + PackagePlan.divergenceInLine(outside.getJSONObject(i)));
         job.write("  " + I18n.tr("server.um.x.divergenceNote"));
-        // Fuori dal log del lavoro, che vive in memoria e se ne va col pannello: un
-        // cambiamento che nessuno ha approvato su un server di posta deve restare scritto.
-        // Solo nomi di pacchetto e versioni, nessun segreto (r19).
+        // Outside the job's log, which lives in memory and goes away with the panel: a
+        // change that nobody approved on a mail server must stay written down.
+        // Only package names and versions, no secrets (r19).
         LOGGER.warning(who + ": " + outside.length() + " change(s) outside the signed plan: " + outside);
         return outside;
     }
 
-    // ===================== il piano firmato, in ogni lavoro che esegue pkg =====================
+    // ===================== the signed plan, in every job that runs pkg =====================
     //
-    // L'aggiornamento guidato, l'aggiornamento di Roundcube, il passaggio di Python e la migrazione
-    // a MySQL 8.4 eseguono pkg, e devono dare le stesse garanzie: un piano esatto calcolato su una
-    // copia del database di pkg, firmato e approvato da chi preme; ricalcolato all'avvio e dopo aver
-    // scaricato i pacchetti; l'inventario prima e dopo, ogni riga del piano verificata. Le regole
-    // stanno qui una volta: scritte in quattro lavori diventerebbero quattro regole.
+    // The guided update, the Roundcube update, the Python switch and the migration to
+    // MySQL 8.4 run pkg, and they must give the same guarantees: an exact plan computed on a
+    // copy of the pkg database, signed and approved by whoever presses; recomputed at the start
+    // and after downloading the packages; the inventory before and after, every line of the plan
+    // checked. The rules live here once: written in four jobs they would become four rules.
 
     /**
-     * I controlli sul piano, uguali per ogni lavoro che ne esegue uno: impedimenti, errori di pkg,
-     * rimozioni (salvo quelle che il lavoro dichiara, vedi PackagePlan.planRemoveThenInstall),
-     * mappe di Postfix, retrocessioni, pacchetti chiesti che non cambierebbero.
+     * The checks on the plan, the same for every job that runs one: obstacles, pkg errors,
+     * removals (except those the job declares, see PackagePlan.planRemoveThenInstall),
+     * Postfix maps, downgrades, requested packages that would not change.
      *
-     * @param asked        i pacchetti che il lavoro chiede a pkg: se uno non cambia, il piano non fa il suo mestiere
-     * @param family       i pacchetti del lavoro: le protezioni da togliere fuori da questi si segnalano
-     * @param blockedBefore vero se un controllo precedente ha gia' fermato il lavoro: allora la riga
-     *                     verde «piano esatto» non si scrive, perche' il lavoro non partira'
-     * @return vero se il piano non si puo' eseguire
+     * @param asked        the packages the job asks pkg for: if one does not change, the plan does not do its job
+     * @param family       the job's packages: locks to be removed outside these are reported
+     * @param blockedBefore true if an earlier check has already stopped the job: then the green
+     *                     "exact plan" line is not written, because the job will not start
+     * @return true if the plan cannot be run
      */
     static boolean addPlanChecks(JSONArray checks, JSONObject plan, java.util.List<String> asked,
                                  java.util.Collection<String> family, boolean blockedBefore) {
@@ -3383,8 +3399,8 @@ public final class UpdateManager {
             block = true;
         } else {
             JSONArray changes = plan.getJSONArray("changes");
-            // Rimozioni e retrocessioni dalla funzione condivisa: la regola e' la stessa dei
-            // due lavori, e scritta due volte diventerebbe due regole (e lo era).
+            // Removals and downgrades from the shared function: the rule is the same for the
+            // two jobs, and written twice it would become two rules (and it did).
             JSONObject destructive = destructiveChanges(plan);
             java.util.List<String> removed = jsonArrayToList(destructive.getJSONArray("removes"));
             java.util.List<String> downgrades = jsonArrayToList(destructive.getJSONArray("downgrades"));
@@ -3410,7 +3426,7 @@ public final class UpdateManager {
                 block = true;
             }
             if (!removed.isEmpty()) {
-                // Una sostituzione innocua e' un avviso; le altre fermano, e la pagina mostra le prove.
+                // A harmless replacement is a warning; the others stop, and the page shows the evidence.
                 if (removalsRefused(plan).isEmpty()) {
                     addCheck(checks, "plan-removals", I18n.tr("server.um.packagePreflight.18"), "review",
                             I18n.tr("server.um.x.removalsAccepted", java.util.Map.of("list", String.join(", ", removed))));
@@ -3432,7 +3448,7 @@ public final class UpdateManager {
             }
             java.util.List<String> stoppedAsked = new ArrayList<>(asked);
             stoppedAsked.retainAll(jsonArrayToList(plan.getJSONArray("unchangedPackages")));
-            // pkg 2.9 che trattiene l'aggiornamento per un conflitto sui file: il perche' al posto di «non cambia».
+            // pkg 2.9 holding back the update because of a file conflict: the why instead of "does not change".
             String heldBack = heldBackReason(plan);
             if (heldBack != null) {
                 addCheck(checks, "plan-held-back", I18n.tr("server.um.x.pkgHeldBackCheck"), "block", heldBack);
@@ -3451,8 +3467,8 @@ public final class UpdateManager {
             }
             java.util.List<String> extra = new ArrayList<>(jsonArrayToList(plan.getJSONArray("unlockedPackages")));
             extra.removeAll(family);
-            // Quelle che pkg cambia, e quelle che usa cosi' come sono ma solo senza protezione (mysql84-client per la 2.4
-            // di Dovecot, reperto 213): dire che pkg le «cambia» era falso.
+            // The ones pkg changes, and the ones it uses as they are but only without a lock (mysql84-client for
+            // Dovecot 2.4, finding 213): saying that pkg "changes" them was false.
             java.util.List<String> asTheyAre = new ArrayList<>();
             for (String n : extra) {
                 boolean changed = false;
@@ -3479,21 +3495,25 @@ public final class UpdateManager {
     }
 
     /**
-     * I cambiamenti che la conferma di «Aggiorna tutto» ha mostrato, nome -> versione di arrivo: esistono solo nel filo del
-     * suo lavoro (reperto 207). I passi di quel lavoro calcolano il loro piano quando tocca a loro, e lo trovano spesso
-     * diverso da quello letto prima: i passi precedenti hanno gia' aggiornato qualcosa che lui avrebbe aggiornato
-     * (postfix-mysql e lmdb, nginx e pcre2). Con la sola impronta il passo si fermerebbe; cosi' parte se ogni suo
-     * cambiamento e' fra quelli mostrati, alla stessa versione, e niente si toglie o torna indietro.
+     * The changes that the confirmation of "Update everything" showed, name -> target version: they exist only in
+     * the thread of its job (finding 207). The steps of that job compute their plan when their turn comes, and
+     * often find it different from the one read before: the previous steps have already updated something it
+     * would have updated (postfix-mysql and lmdb, nginx and pcre2). With the fingerprint alone the step would
+     * stop; this way it starts if each of its changes is among those shown, at the same version, and nothing
+     * is removed or goes back.
      */
     static final ThreadLocal<Map<String, String>> APPROVED_CHANGES = new ThreadLocal<>();
 
-    /** Il piano si esegue? Se l'impronta e' quella letta si'; dentro «Aggiorna tutto», anche se resta fra il mostrato. */
+    /**
+     * Is the plan run? If the fingerprint is the one read, yes; inside "Update everything", also if it stays
+     * within what was shown.
+     */
     static boolean planAccepted(String approvedSignature, String currentSignature, JSONObject plan) {
         if (currentSignature != null && !currentSignature.isEmpty() && currentSignature.equals(approvedSignature)) return true;
         return withinApproved(plan, APPROVED_CHANGES.get());
     }
 
-    /** Ogni cambiamento del piano e' fra quelli approvati, alla stessa versione? Niente rimozioni ne' ritorni indietro. */
+    /** Is every change of the plan among the approved ones, at the same version? No removals and no going back. */
     static boolean withinApproved(JSONObject plan, Map<String, String> approved) {
         if (approved == null || plan == null || !plan.optBoolean("measured", false)) return false;
         JSONArray changes = plan.optJSONArray("changes");
@@ -3503,10 +3523,10 @@ public final class UpdateManager {
     }
 
     /**
-     * I cambiamenti del piano che la conferma non ha mostrato, come righe del registro («install lmdb0 -> 0.9.36_1»):
-     * vuoto se tutti erano li'. Sul server vero, il 09/11/2026, postfix-mysql aspettava mysql84-client e il suo piano
-     * completo non si conosceva: quando e' toccato a lui installava anche lmdb0, una libreria nuova, e il passo si e'
-     * fermato dicendo solo «il piano e' cambiato» (reperto 208). Adesso si dice quale riga.
+     * The changes of the plan that the confirmation did not show, as log lines ("install lmdb0 -> 0.9.36_1"):
+     * empty if they were all there. On the production server, on 2026-11-09, postfix-mysql was waiting for
+     * mysql84-client and its complete plan was not known: when its turn came it also installed lmdb0, a new
+     * library, and the step stopped saying only "the plan has changed" (finding 208). Now it says which line.
      */
     static List<String> outsideApproved(JSONObject plan, Map<String, String> approved) {
         List<String> out = new ArrayList<>();
@@ -3524,9 +3544,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Il rifiuto di un piano che non e' quello letto, scritto per intero nel registro: le due impronte, il piano com'e'
-     * adesso, e dentro «Aggiorna tutto» i cambiamenti che la conferma non ha mostrato. Restituisce il motivo: dentro la
-     * catena quei cambiamenti; fuori, 'standaloneKey'.
+     * The refusal of a plan that is not the one read, written in full in the log: the two fingerprints, the
+     * plan as it is now, and inside "Update everything" the changes that the confirmation did not show.
+     * Returns the reason: inside the chain, those changes; outside, 'standaloneKey'.
      */
     static String planRefused(Job job, JSONObject plan, String approvedSignature, String currentSignature, String standaloneKey) {
         job.write(I18n.tr("server.um.runGuidedUpdate.3", java.util.Map.of("approvedSignature", String.valueOf(approvedSignature),
@@ -3546,8 +3566,8 @@ public final class UpdateManager {
     }
 
     /**
-     * Il piano ricalcolato all'avvio del lavoro e' quello approvato? null se si', e allora lo
-     * scrive nel registro riga per riga; altrimenti il motivo per non partire.
+     * Is the plan recomputed at the start of the job the approved one? null if yes, and then it
+     * writes it in the log line by line; otherwise the reason not to start.
      */
     static String approvedPlanMismatch(Job job, JSONObject plan, String currentSignature, String approvedSignature) {
         if (plan == null || !planAccepted(approvedSignature, currentSignature, plan))
@@ -3557,21 +3577,21 @@ public final class UpdateManager {
         return null;
     }
 
-    /** Il formato dell'impronta che arriva dalla pagina: sedici cifre esadecimali, o niente. */
+    /** The format of the fingerprint that comes from the page: sixteen hexadecimal digits, or nothing. */
     static boolean validSignature(String s) {
         return s != null && s.matches("[0-9a-f]{16}");
     }
 
     /**
-     * Cio' che si fotografa subito prima di eseguire il piano: l'inventario dei pacchetti, la
-     * configurazione con gli indirizzi in ascolto (InstallSideEffects), le mappe di Postfix.
+     * What is snapshotted right before running the plan: the package inventory, the
+     * configuration with the listening addresses (InstallSideEffects), the Postfix maps.
      */
     record PlanWatch(Map<String, String> inventoryBefore, InstallSideEffects.Watch sideEffects,
                      PostfixMaps.Before mapsBefore) {
         /**
-         * Solo per le prove (SignedJobsE2ETest, -Doutside): un cambiamento vero fra la fotografia e pkg, come qualcuno
-         * che installa un pacchetto da SSH mentre il lavoro gira. Lo imposta solo chi ha il processo in mano: nel
-         * pannello in servizio e' sempre null.
+         * Only for the tests (SignedJobsE2ETest, -Doutside): a real change between the snapshot and pkg, like
+         * someone installing a package from SSH while the job is running. Only whoever controls the process sets
+         * it: in the panel in service it is always null.
          */
         static volatile Runnable afterTaken;
 
@@ -3586,24 +3606,25 @@ public final class UpdateManager {
     }
 
     /**
-     * Com'e' andata l'esecuzione del piano: i cambiamenti fuori piano, le righe del piano non
-     * rispettate, il problema delle mappe di Postfix (null se non ce n'e').
+     * How the run of the plan went: the changes outside the plan, the lines of the plan not
+     * respected, the Postfix maps problem (null if there is none).
      */
     record PlanOutcome(JSONArray outsidePlan, boolean planNotFollowed, String mapsProblem) {
         boolean clean() { return outsidePlan.isEmpty() && !planNotFollowed && mapsProblem == null; }
     }
 
     /**
-     * Dopo pkg, anche se e' uscito con un errore (e' proprio il caso in cui la macchina puo' essere
-     * rimasta a meta'): inventario contro piano, configurazione toccata dagli script, mappe di
-     * Postfix, e ogni riga del piano alla versione che diceva.
+     * After pkg, even if it exited with an error (that is precisely the case in which the machine may
+     * have been left halfway): inventory against plan, configuration touched by the scripts, Postfix
+     * maps, and every line of the plan at the version it stated.
      *
-     * @param restartFollows vero se il lavoro riavvia i servizi subito dopo (vedi InstallSideEffects)
+     * @param restartFollows true if the job restarts the services right afterwards (see InstallSideEffects)
      */
-    // I motivi d'arresto gia' tradotti (il testo delle mappe, PostfixMaps.Outcome.problem, e quello di fetchAndRecheck,
-    // Recheck.stop) arrivano alla pagina con ShownException.translated: con IllegalStateException ErrorText li
-    // sostituiva con «i dettagli sono nel log del pannello», e la pagina non diceva piu' quale mappa ne' che il piano
-    // era cambiato (trovato da PostfixMapsJobsE2ETest e PackageReplacementE2ETest sulla 1.0.0 build 793, 22/11/2026).
+    // The stop reasons already translated (the maps text, PostfixMaps.Outcome.problem, and the one of
+    // fetchAndRecheck, Recheck.stop) reach the page with ShownException.translated: with IllegalStateException
+    // ErrorText replaced them with "the details are in the panel log", and the page no longer said which map
+    // nor that the plan had changed (found by PostfixMapsJobsE2ETest and PackageReplacementE2ETest on 1.0.0
+    // build 793, 2026-11-22).
     static PlanOutcome checkPlanOutcome(Job job, PlanWatch watch, JSONObject plan, String who, boolean restartFollows) {
         JSONArray outside = compareWithInventory(job, watch.inventoryBefore(), plan, who);
         watch.sideEffects().checkConfig(job, plan, outside, restartFollows);
@@ -3622,7 +3643,7 @@ public final class UpdateManager {
         return new PlanOutcome(outside, notFollowed, maps);
     }
 
-    /** Le frasi dell'esito per un piano non rispettato o con cambiamenti fuori piano; vuote se e' andato come diceva. */
+    /** The outcome sentences for a plan not respected or with changes outside the plan; empty if it went as it said. */
     static java.util.List<String> planProblems(PlanOutcome o) {
         java.util.List<String> p = new ArrayList<>();
         if (o == null) return p;
@@ -3633,8 +3654,8 @@ public final class UpdateManager {
     }
 
     /**
-     * I pacchetti installati e scaricabili che il piano installa, aggiorna o reinstalla: quelli che
-     * pkg scarichera'. Per pkg fetch, prima di ricalcolare il piano (vedi fetchAndRecheck).
+     * The installed and downloadable packages that the plan installs, upgrades or reinstalls: the ones
+     * pkg will download. For pkg fetch, before recomputing the plan (see fetchAndRecheck).
      */
     static java.util.List<String> planDownloads(JSONObject plan) {
         java.util.List<String> out = new ArrayList<>();
@@ -3649,11 +3670,11 @@ public final class UpdateManager {
     }
 
     /**
-     * Riprotegge i pacchetti dell'elenco che sono installati adesso; quelli che il lavoro ha tolto
-     * (o che non sono mai arrivati) si saltano, come fa il ripristino all'avvio. L'elenco su disco
-     * si chiude solo se tutti gli installati risultano protetti.
+     * Locks again the packages in the list that are installed now; those that the job removed
+     * (or that never arrived) are skipped, as the startup restore does. The list on disk
+     * is closed only if all the installed ones turn out locked.
      *
-     * @return i pacchetti che non si e' riusciti a riproteggere
+     * @return the packages that could not be locked again
      */
     static java.util.List<String> relockListed(Job job, java.util.List<String> names) {
         java.util.List<String> failed = new ArrayList<>();
@@ -3672,10 +3693,10 @@ public final class UpdateManager {
     }
 
     /**
-     * Toglie le protezioni che il piano toglie, dopo aver scritto l'elenco su disco (con 'alsoListed',
-     * i pacchetti che il lavoro protegge alla fine). Se l'elenco non si scrive non si sblocca niente.
+     * Removes the locks that the plan removes, after writing the list on disk (with 'alsoListed',
+     * the packages that the job locks at the end). If the list is not written nothing is unlocked.
      *
-     * @return l'elenco scritto, da passare a relockListed nel finally anche se lo sblocco fallisce a meta'
+     * @return the list written, to be passed to relockListed in the finally even if the unlock fails halfway
      */
     static java.util.List<String> unlockForPlan(Job job, JSONObject plan, java.util.List<String> alsoListed) {
         java.util.List<String> toUnlock = jsonArrayToList(plan.optJSONArray("unlockedPackages"));
@@ -3696,21 +3717,21 @@ public final class UpdateManager {
     }
 
     /**
-     * La famiglia MySQL che la versione NEL REPOSITORY di un pacchetto pretende, quando e'
-     * diversa da quella installata; null se non c'e' conflitto.
+     * The MySQL family that the version IN THE REPOSITORY of a package requires, when it is
+     * different from the installed one; null if there is no conflict.
      *
-     * Sta in un metodo solo perche' lo usano sia il preflight sia il piano: se il vincolo
-     * vivesse in un posto solo, il piano proporrebbe un passo che il preflight poi rifiuta,
-     * e una guida che propone cio' che poi nega non guida niente.
+     * It lives in a single method because both the preflight and the plan use it: if the constraint
+     * lived in only one of them, the plan would propose a step that the preflight then refuses,
+     * and a guide that proposes what it then denies guides nothing.
      */
     static String mysqlFamilyConflict(String name) {
         if (!isValidName(name)) return null;
         String installed = sh("pkg query %n 2>/dev/null | grep -E '^mysql[0-9]+-client$' | head -1", 20);
         if (installed.isEmpty()) return null;
-        // Si guarda TUTTA la famiglia, non il solo pacchetto nominato: php84 non dipende da
-        // MySQL, ma php84-mysqli e php84-pdo_mysql si', e vengono aggiornati insieme a lui.
-        // Controllare solo il nome scritto nel passo lascerebbe passare esattamente la stessa
-        // trappola di postfix, con la differenza che qui nessuno la vedrebbe arrivare.
+        // The WHOLE family is looked at, not only the named package: php84 does not depend on
+        // MySQL, but php84-mysqli and php84-pdo_mysql do, and they are updated together with it.
+        // Checking only the name written in the step would let through exactly the same
+        // trap as postfix, with the difference that here nobody would see it coming.
         for (String member : familyMembers(name)) {
             if (!isValidName(member)) continue;
             String deps = sh("pkg rquery -U %dn " + member + " 2>/dev/null", 30);
@@ -3722,29 +3743,29 @@ public final class UpdateManager {
         return null;
     }
 
-    /** Una riga del referto di controlli: esito, cosa si e' controllato, perche' conta. */
+    /** A line of the checks report: outcome, what was checked, why it matters. */
     private static void addCheck(JSONArray a, String id, String label, String level, String detail) {
         a.put(new JSONObject().put("id", id).put("label", label)
                 .put("level", level).put("detail", detail));
     }
 
-    // ===================== migrazione MySQL 8.0 -> 8.4 =====================
+    // ===================== MySQL 8.0 -> 8.4 migration =====================
 
     /**
-     * Controlli preliminari per il passaggio a MySQL 8.4, tutti in SOLA LETTURA.
+     * Preliminary checks for the switch to MySQL 8.4, all READ-ONLY.
      *
-     * Su questa macchina la migrazione ha un ostacolo che sul pannello web non esisteva:
-     * Postfix e Dovecot leggono le caselle virtuali dal database attraverso la LIBRERIA di
-     * mysql80-client. Se i pacchetti che il repository fornisce sono compilati contro la 8.0,
-     * sostituire quella libreria li lascerebbe senza, e il server di posta non ripartirebbe.
-     * Non e' una cosa da scoprire a meta' migrazione: si chiede a pkg prima.
+     * On this machine the migration has an obstacle that did not exist on the web panel:
+     * Postfix and Dovecot read the virtual mailboxes from the database through the LIBRARY of
+     * mysql80-client. If the packages that the repository provides are built against 8.0,
+     * replacing that library would leave them without it, and the mail server would not start again.
+     * It is not something to find out halfway through the migration: pkg is asked beforehand.
      */
     public static JSONObject mysql84Preflight() {
         JSONObject r = new JSONObject();
         JSONArray checks = new JSONArray();
         boolean block = false;
 
-        // --- 1. Da dove si parte ---
+        // --- 1. Where we start from ---
         String srvPkg = sh("pkg query %n 2>/dev/null | grep -E '^mysql[0-9]+-server$' | head -1", 20);
         String cliPkg = sh("pkg query %n 2>/dev/null | grep -E '^mysql[0-9]+-client$' | head -1", 20);
         r.put("srvPkg", srvPkg).put("cliPkg", cliPkg);
@@ -3762,7 +3783,7 @@ public final class UpdateManager {
                     I18n.tr("server.um.mysql84Preflight.4", java.util.Map.of("srvPkg", String.valueOf(srvPkg), "v", String.valueOf(v), "cliPkg", String.valueOf(cliPkg))));
         }
 
-        // --- 2. La destinazione esiste ---
+        // --- 2. The target exists ---
         String srv84 = sh("pkg rquery -U %v mysql84-server 2>/dev/null", 30);
         String cli84 = sh("pkg rquery -U %v mysql84-client 2>/dev/null", 30);
         r.put("target", srv84);
@@ -3775,15 +3796,15 @@ public final class UpdateManager {
                     I18n.tr("server.um.x.my84Avail", java.util.Map.of("s", String.valueOf(srv84), "c", String.valueOf(cli84))));
         }
 
-        // --- 3. IL PUNTO CRITICO: chi usa la libreria del client, e cosa pretende dal repository ---
+        // --- 3. THE CRITICAL POINT: who uses the client library, and what it requires from the repository ---
         JSONArray dependents = new JSONArray();
         boolean conflict = false;
         if (!cliPkg.isEmpty()) {
             for (String line : sh("pkg query %rn " + cliPkg + " 2>/dev/null", 30).split("\n")) {
                 String d = line.trim();
                 if (!isValidName(d) || d.equals(srvPkg)) continue;
-                // Cosa pretende la versione del repository di questo dipendente: se nomina
-                // ancora mysql80-client, la 8.4 non lo soddisfa e il pacchetto va ricostruito.
+                // What the repository version of this dependent requires: if it still names
+                // mysql80-client, 8.4 does not satisfy it and the package must be rebuilt.
                 String deps = sh("pkg rquery -U %dn " + d + " 2>/dev/null", 30);
                 boolean wants80 = deps.contains(cliPkg);
                 boolean wants84 = deps.contains("mysql84-client");
@@ -3806,7 +3827,7 @@ public final class UpdateManager {
                         : I18n.tr("server.um.mysql84Preflight.11", java.util.Map.of("length", String.valueOf(dependents.length()))));
         }
 
-        // --- 4. Il processo in esecuzione e' quello del pacchetto? ---
+        // --- 4. Is the running process the one from the package? ---
         boolean su = ok("service mysql-server status", 15);
         String runVer = su ? mysqlOut(org.daemoxcp.mail.database.SqlCatalog.MAIL_SERVER_VERSION) : "";
         if (!su) {
@@ -3827,7 +3848,7 @@ public final class UpdateManager {
             r.put("runningVersion", runVer);
         }
 
-        // --- 5. my.cnf: opzioni rimosse nella 8.4 ---
+        // --- 5. my.cnf: options removed in 8.4 ---
         JSONObject cm = mysqlCompatibility();
         JSONArray issues = cm.optJSONArray("issues");
         if (issues != null && issues.length() > 0) {
@@ -3841,7 +3862,7 @@ public final class UpdateManager {
                     I18n.tr("server.um.mysql84Preflight.18"));
         }
 
-        // --- 6. Account con il plugin che la 8.4 non attiva piu' ---
+        // --- 6. Accounts with the plugin that 8.4 no longer enables ---
         JSONArray nativeOnes = new JSONArray();
         boolean readable = su && !runVer.isEmpty() && canReadMysqlUsers();
         if (readable) {
@@ -3862,7 +3883,7 @@ public final class UpdateManager {
                         : I18n.tr("server.um.x.nativeUsers", java.util.Map.of("n", String.valueOf(nativeOnes.length()), "list", String.valueOf(String.join(", ", jsonArrayToList(nativeOnes))))));
         }
 
-        // --- 7. Spazio per la copia fredda ---
+        // --- 7. Space for the cold copy ---
         String dataDir = sh("grep -E '^[[:space:]]*datadir[[:space:]]*=' /usr/local/etc/mysql/my.cnf 2>/dev/null | tail -1 | cut -d= -f2 | tr -d ' '", 15);
         if (dataDir.isEmpty()) dataDir = "/var/db/mysql";
         long dirKb = number(sh("du -sk " + dataDir + " 2>/dev/null | awk '{print $1}'", 120));
@@ -3878,7 +3899,7 @@ public final class UpdateManager {
                     I18n.tr("server.um.x.dataDirSpace", java.util.Map.of("dir", String.valueOf(dataDir), "mb", String.valueOf((dirKb / 1024)), "free", String.valueOf((freeKb / 1024)))));
         }
 
-        // --- 8. Inventario, per riconfrontare a fine migrazione ---
+        // --- 8. Inventory, to compare again at the end of the migration ---
         long schemes = 0, tables = 0, mailboxes = 0;
         if (su && !runVer.isEmpty()) {
             schemes = number(mysqlOut(org.daemoxcp.mail.database.SqlCatalog.UM_COUNT_SCHEMATA));
@@ -3890,14 +3911,14 @@ public final class UpdateManager {
                 schemes > 0 ? I18n.tr("server.um.mysql84Preflight.25", java.util.Map.of("schemas", String.valueOf(schemes), "tables", String.valueOf(tables), "mailboxes", String.valueOf(mailboxes)))
                            : I18n.tr("server.um.mysql84Preflight.26"));
 
-        // --- 9. Cosa si ferma, e per quanto ---
+        // --- 9. What stops, and for how long ---
         addCheck(checks, "services", I18n.tr("server.um.x.servicesInvolved"), "review",
                 I18n.tr("server.um.mysql84Preflight.27"));
 
-        // --- 10. Il piano ESATTO, come nell'aggiornamento guidato ---
-        // Su una copia del database di pkg si dimenticano server e client di adesso (il lavoro li
-        // toglie con pkg delete -f) e si chiede a pkg che cosa farebbe installando la 8.4: cio'
-        // che fara' davvero, dipendenze comprese. Lo si firma e lo si approva.
+        // --- 10. The EXACT plan, as in the guided update ---
+        // On a copy of the pkg database the current server and client are forgotten (the job
+        // removes them with pkg delete -f) and pkg is asked what it would do installing 8.4: what
+        // it will really do, dependencies included. It is signed and approved.
         if (!r.optBoolean("alreadyDone", false) && isValidName(srvPkg) && isValidName(cliPkg)) {
             JSONObject plan = mysql84Plan(srvPkg, cliPkg);
             if (addPlanChecks(checks, plan, MYSQL84_PACKAGES,
@@ -3910,18 +3931,19 @@ public final class UpdateManager {
         return r;
     }
 
-    /** I pacchetti che la migrazione installa. */
+    /** The packages that the migration installs. */
     static final java.util.List<String> MYSQL84_PACKAGES = java.util.List.of("mysql84-server", "mysql84-client");
 
     /**
-     * I pacchetti della posta legati al client MySQL: Postfix e Dovecot nel sapore MySQL, che per Dovecot cambia nome
-     * con la versione (dovecot-mysql la 2.3, dovecot24-mysql la 2.4). Dopo la sostituzione del client devono esserci
-     * ancora quelli che c'erano prima: sulla VM installata da zero (Dovecot 2.4) il 21/11/2026 la migrazione cercava
-     * solo dovecot-mysql, lo dava per «MANCANTE» e chiudeva con un errore su una posta che funzionava.
+     * The mail packages tied to the MySQL client: Postfix and Dovecot in the MySQL flavor, which for Dovecot
+     * changes name with the version (dovecot-mysql for 2.3, dovecot24-mysql for 2.4). After the client is
+     * replaced, the ones that were there before must still be there: on the VM after a clean install
+     * (Dovecot 2.4), on 2026-11-21, the migration looked only for dovecot-mysql, reported it as "MISSING"
+     * and ended with an error on a mail system that worked.
      */
     static final java.util.List<String> MAIL_MYSQL_PACKAGES = java.util.List.of("postfix-mysql", "dovecot-mysql", "dovecot24-mysql");
 
-    /** Il piano esatto della migrazione: togliere server e client di adesso, poi installare la 8.4. */
+    /** The exact plan of the migration: remove the current server and client, then install 8.4. */
     private static JSONObject mysql84Plan(String srvPkg, String cliPkg) {
         return judged(PackagePlan.planRemoveThenInstall(java.util.List.of(srvPkg, cliPkg), MYSQL84_PACKAGES,
                 lockedNames(), UpdateManager::reasonNotToUnlock));
@@ -3929,7 +3951,7 @@ public final class UpdateManager {
 
     private static final String MYSQL84_BACKUP = "/var/db/daemoxcp-mail/mysql84";
 
-    /** Inserisce una direttiva subito dopo [mysqld], se non c'e' gia'. Scrittura atomica. */
+    /** Inserts a directive right after [mysqld], if it is not already there. Atomic write. */
     private static boolean addMysqldDirective(String line) {
         java.nio.file.Path f = Paths.get("/usr/local/etc/mysql/my.cnf");
         try {
@@ -3957,7 +3979,7 @@ public final class UpdateManager {
         }
     }
 
-    /** File e byte logici di un albero: si misura con stat, MAI con du. */
+    /** Files and logical bytes of a tree: measured with stat, NEVER with du. */
     private static long[] measure(String dir) {
         long file = number(sh("find " + dir + " -type f 2>/dev/null | wc -l", 120));
         long logicalBytes = number(sh("find " + dir + " -type f -exec stat -f %z {} + 2>/dev/null "
@@ -3966,31 +3988,31 @@ public final class UpdateManager {
     }
 
     /**
-     * Avvia un lavoro sui pacchetti nel suo thread, dopo aver preso il turno: uno alla volta
-     * (vedi PackageQueue). Se il turno e' di un altro, o c'e' l'elenco di un lavoro che non si
-     * e' chiuso, il lavoro non parte e la risposta dice perche'.
+     * Starts a package job in its own thread, after taking the turn: one at a time
+     * (see PackageQueue). If the turn belongs to someone else, or there is the list of a job that did not
+     * close, the job does not start and the response says why.
      */
     /**
-     * Un thread di lavoro che scrive nella lingua di chi l'ha avviato: il ThreadLocal di I18n non
-     * passa da solo ai thread nuovi, e senza questo il log di un lavoro uscirebbe sempre in italiano.
+     * A job thread that writes in the language of whoever started it: the I18n ThreadLocal does not
+     * pass to new threads by itself, and without this the log of a job would always come out in Italian.
      */
     private static Thread localizedThread(Runnable work, String name) {
         return new Thread(I18n.withCurrent(work), name);
     }
 
-    /** Il thread di un Job: come sopra, e con la fine scritta comunque (withEndMarked). */
+    /** The thread of a Job: as above, and with the end written in any case (withEndMarked). */
     private static Thread localizedThread(Job j, Runnable work, String name) {
         return localizedThread(withEndMarked(j, work), name);
     }
 
     /**
-     * Il lavoro di un Job, con la fine scritta comunque quando il thread esce.
+     * The work of a Job, with the end written in any case when the thread exits.
      *
-     * Un esito diventa visibile solo con la fine scritta (Job.visibleStatus): un lavoro che
-     * desse un esito e uscisse senza scrivere la fine — per un ritorno dimenticato, o per
-     * un'eccezione fuori dal suo try — resterebbe "running" per sempre agli occhi della
-     * pagina. Ogni lavoro scrive gia' la propria fine come ultima cosa; questo e' il
-     * pavimento, e non sposta la fine di chi l'ha scritta.
+     * An outcome becomes visible only once the end is written (Job.visibleStatus): a job that
+     * gave an outcome and exited without writing the end -- because of a forgotten return, or of
+     * an exception outside its try -- would stay "running" forever in the eyes of the
+     * page. Every job already writes its own end as its last step; this is the
+     * floor, and it does not move the end of a job that wrote it.
      */
     static Runnable withEndMarked(Job j, Runnable work) {
         return () -> {
@@ -4000,9 +4022,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Il lavoro con la sua via di ritorno (PackageWayBack): il boot environment prima, e dopo la
-     * pulizia (tolto se nessun pacchetto e' cambiato, altrimenti i piu' vecchi). Se il boot
-     * environment non si crea su un sistema che li ha, il lavoro finisce in errore senza partire.
+     * The job with its way back (PackageWayBack): the boot environment before, and the cleanup
+     * after (it is removed if no package changed, otherwise the oldest ones are). If the boot
+     * environment cannot be created on a system that has them, the job ends in error without starting.
      */
     static Runnable withWayBack(Job j, String kind, Runnable work) {
         return () -> {
@@ -4016,7 +4038,7 @@ public final class UpdateManager {
                 return;
             }
             j.write("");
-            // Prima della fine scritta: se il lavoro la scrive da se', la pulizia gira li'; se no, qui.
+            // Before the end is written: if the job writes it itself, the cleanup runs there; if not, here.
             j.beforeEnd(() -> PackageWayBack.after(j::write, wb));
             try { work.run(); }
             finally { j.runBeforeEnd(); }
@@ -4026,10 +4048,10 @@ public final class UpdateManager {
     private static JSONObject startOnTurn(String id, Job j, String description, String threadName, Runnable work) {
         String refusal = PackageQueue.take(id, description);
         if (refusal != null) return new JSONObject().put("success", false).put("error", refusal);
-        // Prima di tutto la via di ritorno: un boot environment, o il lavoro non tocca niente.
+        // First of all the way back: a boot environment, or the job touches nothing.
         work = withWayBack(j, threadName, work);
-        // Ogni lavoro del turno puo' aver tolto e rimesso protezioni, o aggiornato pacchetti
-        // protetti (che cosi' perdono l'annotazione): la traccia si rimette in pari alla fine.
+        // Every job of the turn may have removed and restored locks, or upgraded locked
+        // packages (which lose the annotation that way): the record is brought up to date at the end.
         work = withLockTrace(work);
         work = withWebmailOwnership(work);
         JOBS.put(id, j);
@@ -4038,8 +4060,8 @@ public final class UpdateManager {
     }
 
     /**
-     * @param approvedSignature l'impronta del piano che chi preme ha letto: il lavoro ricalcola il
-     *                          piano e parte solo se e' lo stesso (vedi startGuidedUpdate)
+     * @param approvedSignature the signature of the plan that whoever presses has read: the job recomputes the
+     *                          plan and starts only if it is the same (see startGuidedUpdate)
      */
     public static JSONObject startMysql84Migration(String approvedSignature) {
         if (!validSignature(approvedSignature))
@@ -4051,27 +4073,27 @@ public final class UpdateManager {
     }
 
     /**
-     * Migrazione a MySQL 8.4.
+     * Migration to MySQL 8.4.
      *
-     * Rispetto alla stessa operazione sul pannello web ci sono due differenze che vengono
-     * dalla natura di questa macchina: Postfix e Dovecot leggono le caselle dal database
-     * attraverso la libreria client, quindi si fermano PRIMA e si riverificano DOPO; e la
-     * verifica finale non si accontenta di "il servizio e' attivo" ma chiede a Postfix e a
-     * Dovecot di risolvere davvero una casella. Un servizio avviato che non legge piu' gli
-     * utenti e' il modo peggiore di sembrare a posto.
+     * Compared with the same operation on the web panel there are two differences that come
+     * from the nature of this machine: Postfix and Dovecot read the mailboxes from the database
+     * through the client library, so they are stopped BEFORE and checked again AFTER; and the
+     * final check is not satisfied with "the service is running" but asks Postfix and
+     * Dovecot to actually resolve a mailbox. A service that is up but no longer reads the
+     * users is the worst way of looking fine.
      */
     private static void runMigration84(Job job, String approvedSignature) {
         job.status = "running";
         final int TOT = 12;
-        // L'elenco su disco di questo lavoro, da riproteggere nel finally: vuoto finche' non e' scritto.
+        // The on-disk list of this job, to lock again in the finally: empty until it is written.
         java.util.List<String> listed = new ArrayList<>();
         InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
         PlanOutcome outcome = null;
         String backupDir = "", dataDir = "/var/db/mysql", srvPkg = "", cliPkg = "";
         boolean mysqlStopped = false, replacedPackages = false, reachedEnd = false;
         boolean postfixWasActive = false, dovecotWasActive = false;
-        // Lo stato dei servizi PRIMA: senza questo, "non attivo adesso" verrebbe preso per
-        // "caduto adesso" anche per chi non era mai partito.
+        // The state of the services BEFORE: without this, "not running now" would be taken for
+        // "gone down now" even for a service that had never started.
         Map<String, Boolean> servicesBefore = servicesState();
         long schemesBefore = 0, tablesBefore = 0, mailboxesBefore = 0;
         String testMailbox = "";
@@ -4103,7 +4125,7 @@ public final class UpdateManager {
             mailboxesBefore = pf.optLong("mailboxCount", 0);
             testMailbox = mysqlOut(org.daemoxcp.mail.database.SqlCatalog.UM_FIRST_ACTIVE_MAILBOX).trim();
             job.write("  " + srvPkg + " + " + cliPkg + " -> mysql84-server + mysql84-client");
-            // Si esegue il piano che e' stato letto, o niente: prima di fermare la posta.
+            // The plan that was read is carried out, or nothing is: before stopping the mail.
             JSONObject plan = pf.optJSONObject("plan");
             String mismatch = approvedPlanMismatch(job, plan, pf.optString("signature", null), approvedSignature);
             if (mismatch != null) {
@@ -4111,9 +4133,9 @@ public final class UpdateManager {
                 job.errorMessage = mismatch;
                 return;
             }
-            // Si scaricano i pacchetti che il piano installa e lo si ricalcola: finche' non sono
-            // nella cache pkg non vede i conflitti sui file (vedi fetchAndRecheck). Tutto con la
-            // posta ancora in servizio: un piano cresciuto si ferma qui, senza aver toccato niente.
+            // The packages the plan installs are downloaded and the plan is computed again: until they
+            // are in the cache pkg does not see the file conflicts (see fetchAndRecheck). All with the
+            // mail still in service: a plan that has grown stops here, without having touched anything.
             final String srv0 = srvPkg, cli0 = cliPkg;
             java.util.List<String> downloads = planDownloads(plan);
             if (!downloads.isEmpty()) {
@@ -4122,10 +4144,10 @@ public final class UpdateManager {
                 if (grown.stop() != null) throw org.daemoxcp.mail.util.ShownException.translated(grown.stop());
                 plan = grown.plan();
             }
-            // L'inventario, la configurazione e gli indirizzi in ascolto adesso, con tutto in
-            // servizio: e' cio' con cui si confronta alla fine.
+            // The inventory, the configuration and the addresses listening now, with everything in
+            // service: it is what the end is compared against.
             PlanWatch watch = PlanWatch.take(sideEffects);
-            // I pacchetti della posta legati al client MySQL che ci sono adesso: quelli che il passo 6 cerca dopo.
+            // The mail packages tied to the MySQL client that are there now: the ones step 6 looks for later.
             java.util.List<String> mailMysqlBefore = new ArrayList<>();
             for (String d : MAIL_MYSQL_PACKAGES) if (ok("pkg info -e " + d, 20)) mailMysqlBefore.add(d);
             job.write(I18n.tr("server.um.runMigration84.5", java.util.Map.of("schemasBefore", String.valueOf(schemesBefore), "tablesBefore", String.valueOf(tablesBefore), "mailboxesBefore", String.valueOf(mailboxesBefore))));
@@ -4194,20 +4216,21 @@ public final class UpdateManager {
             job.advance(5, TOT);
             job.write("");
             job.write("[5/" + TOT + "] " + I18n.tr("server.um.x.replacingPkgs"));
-            // Le protezioni che il piano toglie (server e client di adesso, e le dipendenze che il
-            // piano aggiorna), con l'elenco su disco prima: nell'elenco anche la 8.4, che alla fine
-            // si protegge. Il finally riprotegge cio' che c'e', anche se il lavoro si ferma a meta'.
+            // The locks the plan removes (current server and client, and the dependencies the
+            // plan upgrades), with the on-disk list first: the list also includes 8.4, which is
+            // locked at the end. The finally locks again what is there, even if the job stops halfway.
             listed = unlockForPlan(job, plan, MYSQL84_PACKAGES);
             int delCode = runLogged(job, "pkg delete -f -y " + srvPkg + " " + cliPkg + " 2>&1", 300);
             replacedPackages = true;
-            // -U: lo stesso catalogo su cui e' stato calcolato il piano.
+            // -U: the same catalog the plan was computed on.
             int insCode = delCode != 0 ? -1 : runLogged(job, "pkg install -y -U " + String.join(" ", MYSQL84_PACKAGES) + " 2>&1", 900);
             if (insCode == 4) {
                 job.write(I18n.tr("server.um.runGuidedUpdate.10"));
                 insCode = runLogged(job, "pkg install -y -U " + String.join(" ", MYSQL84_PACKAGES) + " 2>&1", 900);
             }
-            // Il confronto col piano prima di decidere se fermarsi: un pkg uscito male e' proprio il
-            // caso in cui la macchina puo' essere rimasta a meta'. I servizi ripartono piu' sotto.
+            // The comparison with the plan before deciding whether to stop: a pkg that ended badly is
+            // exactly the case in which the machine may have been left halfway. The services restart
+            // further down.
             outcome = checkPlanOutcome(job, watch, plan, "MySQL 8.4 migration", true);
             if (delCode != 0) throw new IllegalStateException("pkg delete exited with code " + delCode
                     + ": the data is intact, the copy is in " + backupDir);
@@ -4238,11 +4261,11 @@ public final class UpdateManager {
             JSONArray nativeOnes = pf.optJSONArray("nativePasswordUsers");
             if (nativeOnes != null && nativeOnes.length() > 0) {
                 job.write("    " + I18n.tr("server.um.x.nativeAdd", java.util.Map.of("n", String.valueOf(nativeOnes.length()))));
-                // In Java riga per riga, NON con sed: il sed di BSD non interpreta \n nella
-                // sostituzione e inserirebbe la lettera "n" al posto di un a capo, producendo
-                // un my.cnf malformato proprio nel passo che serve a non far restare fuori
-                // nessun account. Su questa macchina il ramo non scatta, ma un difetto che non
-                // si vede oggi e' solo un difetto che aspetta.
+                // In Java line by line, NOT with sed: BSD sed does not interpret \n in the
+                // replacement and would insert the letter "n" instead of a line break, producing
+                // a malformed my.cnf precisely in the step meant to keep any account from
+                // being locked out. On this machine the branch does not trigger, but a defect
+                // that cannot be seen today is just a defect that is waiting.
                 job.write("    " + (addMysqldDirective("mysql-native-password=ON")
                         ? I18n.tr("server.um.runMigration84.17") : I18n.tr("server.um.runMigration84.18")));
             }
@@ -4299,13 +4322,13 @@ public final class UpdateManager {
             job.advance(12, TOT);
             job.write("");
             job.write(I18n.tr("server.um.runMigration84.27", java.util.Map.of("total", String.valueOf(TOT))));
-            // "Il servizio e' attivo" non basta: dopo aver sostituito la libreria client il
-            // punto e' se Postfix e Dovecot RIESCONO ANCORA a interrogare il database.
+            // "The service is running" is not enough: after replacing the client library the
+            // point is whether Postfix and Dovecot CAN STILL query the database.
             boolean testOk = true;
-            // L'indirizzo finisce dentro un comando: si accetta solo cio' che e' davvero un
-            // indirizzo. Viene dal database e non da fuori, ma la convalida costa una riga e
-            // nel job di Dovecot c'era gia': trattare due volte la stessa cosa in due modi
-            // diversi e' il modo in cui una svista sopravvive.
+            // The address ends up inside a command: only what really is an address is
+            // accepted. It comes from the database and not from outside, but the validation
+            // costs one line and the Dovecot job already had it: treating the same thing
+            // twice in two different ways is how an oversight survives.
             if (!testMailbox.isEmpty()
                     && !testMailbox.matches("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}")) {
                 job.write(I18n.tr("server.um.runMigration84.28"));
@@ -4314,15 +4337,15 @@ public final class UpdateManager {
             if (testMailbox.isEmpty()) {
                 job.write(I18n.tr("server.um.runMigration84.29"));
             } else {
-                // QUESTA e' la prova che conta: postmap interroga MySQL attraverso la
-                // libreria client appena sostituita. Se funziona, la sostituzione ha retto.
+                // THIS is the test that counts: postmap queries MySQL through the client
+                // library that was just replaced. If it works, the replacement held.
                 String mapFile = "/usr/local/etc/postfix/mysql-virtual-mailboxes.cf";
                 if (ok("test -f " + mapFile, 15)) {
                     String q = sh("postmap -q '" + testMailbox + "' mysql:" + mapFile + " 2>&1", 60);
-                    // Cercare la sola parola "error" era sbagliato: postmap scrive "fatal:",
-                    // e il controllo ha dichiarato riuscito un fallimento mentre ne stampava
-                    // la prova. Si riconoscono tutte le forme, e soprattutto si pretende che
-                    // la risposta SIA un risultato: un indirizzo, non un messaggio.
+                    // Looking only for the word "error" was wrong: postmap writes "fatal:",
+                    // and the check declared a failure successful while printing the
+                    // proof of it. All the forms are recognized, and above all the
+                    // answer is required to BE a result: an address, not a message.
                     String ql = q.toLowerCase();
                     boolean pOk = !q.trim().isEmpty()
                             && !ql.contains("error") && !ql.contains("fatal")
@@ -4338,9 +4361,10 @@ public final class UpdateManager {
                     testOk = false;
                 }
 
-                // Questa invece prova meno di quanto sembri, e va detto: lo userdb qui e'
-                // "static", quindi doveadm risponde senza interrogare il database. Dimostra
-                // che Dovecot e' vivo e risolve gli utenti, non che il suo passdb SQL funzioni.
+                // This one, instead, proves less than it seems, and that must be said: the
+                // userdb here is "static", so doveadm answers without querying the database.
+                // It shows that Dovecot is alive and resolves users, not that its SQL passdb
+                // works.
                 String du = sh("doveadm user '" + testMailbox + "' 2>&1 | head -5", 60);
                 boolean dOk = du.toLowerCase().contains("uid") || du.toLowerCase().contains("home");
                 job.write("    " + (dOk
@@ -4348,8 +4372,8 @@ public final class UpdateManager {
                         : I18n.tr("server.um.x.dcResolveNo", java.util.Map.of("mailbox", String.valueOf(testMailbox), "r", String.valueOf(du.trim())))));
                 if (!dOk) testOk = false;
 
-                // Il percorso SQL di Dovecot si prova cosi': la stessa query che sta nel suo
-                // dovecot-sql.conf, eseguita con le stesse credenziali.
+                // Dovecot's SQL path is tested like this: the same query that is in its
+                // dovecot-sql.conf, run with the same credentials.
                 String lines = mysqlOut(org.daemoxcp.mail.database.SqlCatalog.UM_ACTIVE_MAILBOX_COUNT, testMailbox).trim();
                 boolean sOk = "1".equals(lines);
                 job.write("    " + (sOk
@@ -4384,8 +4408,8 @@ public final class UpdateManager {
             job.write("");
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
-            // Si protegge ogni pacchetto dell'elenco che e' installato adesso: la 8.4 se e' arrivata,
-            // la 8.0 se il lavoro si e' fermato prima di toglierla, le dipendenze sbloccate.
+            // Every package on the list that is installed now gets locked: 8.4 if it arrived,
+            // 8.0 if the job stopped before removing it, the unlocked dependencies.
             if (!listed.isEmpty() && !relockListed(job, listed).isEmpty() && "completed".equals(job.status)) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runGuidedUpdate.42");
@@ -4407,20 +4431,20 @@ public final class UpdateManager {
         }
     }
 
-    // ===================== passaggio a Dovecot 2.4 (reperto 213) =====================
+    // ===================== switch to Dovecot 2.4 (finding 213) =====================
 
     /**
-     * Dove il passaggio tiene la configurazione e i pacchetti della 2.3 com'erano: la strada per tornare indietro, una
-     * cartella per passaggio, solo per root.
+     * Where the move keeps the configuration and the 2.3 packages as they were: the road back, one
+     * folder per move, root only.
      */
     private static final String DOVECOT24_BACKUP = "/var/db/daemoxcp-mail/dovecot24";
 
-    /** I pacchetti di Dovecot installati, per origine (server e Pigeonhole, della 2.3 e della 2.4): {nome, versione}. */
+    /** The installed Dovecot packages, by origin (server and Pigeonhole, of 2.3 and of 2.4): {name, version}. */
     static Map<String, String[]> dovecotPackages() {
         return dovecotPackages(sh("pkg query '%o %n %v' 2>/dev/null", 30));
     }
 
-    /** Lo stesso dalle righe di «pkg query '%o %n %v'»: si prova senza pkg. */
+    /** The same from the lines of "pkg query '%o %n %v'": testable without pkg. */
     static Map<String, String[]> dovecotPackages(String pkgQuery) {
         Map<String, String[]> m = new LinkedHashMap<>();
         for (String line : pkgQuery.split("\n")) {
@@ -4432,8 +4456,8 @@ public final class UpdateManager {
     }
 
     /**
-     * I pacchetti della 2.4 al posto di quelli della 2.3: lo stesso sapore, Pigeonhole solo se c'era. Il pannello scrive
-     * nella configurazione la connessione a MySQL, quindi il sapore e' MySQL o niente: null per tutto il resto.
+     * The 2.4 packages in place of the 2.3 ones: the same flavor, Pigeonhole only if it was there. The panel writes
+     * the MySQL connection into the configuration, so the flavor is MySQL or nothing: null for everything else.
      */
     static java.util.List<String> dovecot24Targets(String server23, String sieve23) {
         if (!"dovecot-mysql".equals(server23)) return null;
@@ -4445,7 +4469,7 @@ public final class UpdateManager {
         return t;
     }
 
-    /** La password MySQL del pannello, dalla sua configurazione: "" se non si legge. */
+    /** The panel's MySQL password, from its configuration: "" if it cannot be read. */
     private static String panelDbPassword() {
         try (java.sql.ResultSet rs = org.daemoxcp.mail.Main.dbManager.get_data_config()) {
             if (rs.next()) {
@@ -4456,7 +4480,7 @@ public final class UpdateManager {
         return "";
     }
 
-    /** La password dell'utente principale di Dovecot (quello di Roundcube), o null se non c'e'. */
+    /** The password of Dovecot's main user (the Roundcube one), or null if there is none. */
     private static String dovecotMasterPassword() {
         try {
             Path p = Paths.get(org.daemoxcp.mail.integration.RoundcubeSsoManager.MASTER_PASSWORD_FILE);
@@ -4468,7 +4492,7 @@ public final class UpdateManager {
         }
     }
 
-    /** Il file del certificato che Dovecot presenta (ssl_server_cert_file nella 2.4, ssl_cert nella 2.3), o null. */
+    /** The certificate file Dovecot presents (ssl_server_cert_file in 2.4, ssl_cert in 2.3), or null. */
     private static Path dovecotCertificatePath() {
         for (String key : new String[]{"ssl_server_cert_file", "ssl_cert"}) {
             String v = sh("doveconf -h " + key + " 2>/dev/null", 20).trim();
@@ -4478,7 +4502,7 @@ public final class UpdateManager {
         return null;
     }
 
-    /** L'utente MySQL con cui Dovecot legge le caselle, dalla sua configurazione (2.4 o 2.3); "" se non si legge. */
+    /** The MySQL user Dovecot reads the mailboxes with, from its configuration (2.4 or 2.3); "" if it cannot be read. */
     static String dovecotDbUser() {
         try {
             Path auth = Paths.get(DOVECOT_DIR, "conf.d", "auth-sql.conf.ext"), sql = Paths.get(DOVECOT_DIR, "dovecot-sql.conf");
@@ -4495,8 +4519,8 @@ public final class UpdateManager {
     }
 
     /**
-     * Dove Postfix consegna con LMTP, dal suo virtual_transport: {host, porta}. Null se non e' un indirizzo TCP (un
-     * socket, o un altro trasporto): allora la prova LMTP non si fa, e il registro lo dice.
+     * Where Postfix delivers with LMTP, from its virtual_transport: {host, port}. Null if it is not a TCP address (a
+     * socket, or another transport): then the LMTP test is not done, and the log says so.
      */
     static String[] lmtpTarget(String transport) {
         Matcher m = Pattern.compile("^lmtp:(?:inet:)?(127\\.0\\.0\\.1|localhost|\\[::1\\]|::1):([0-9]{1,5})$")
@@ -4507,8 +4531,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Il socket Unix con cui Postfix consegna con LMTP, dal suo virtual_transport e dalla sua coda: lmtp:unix:private/X
-     * e' relativo alla coda (reperto 234). Null se non e' un socket Unix, o se i nomi non hanno la forma attesa.
+     * The Unix socket Postfix delivers to with LMTP, from its virtual_transport and its queue: lmtp:unix:private/X
+     * is relative to the queue (finding 234). Null if it is not a Unix socket, or if the names do not have the
+     * expected form.
      */
     static Path lmtpSocket(String transport, String queueDirectory) {
         Matcher m = Pattern.compile("^lmtp:unix:([A-Za-z0-9._/-]{1,200})$").matcher(transport == null ? "" : transport.trim());
@@ -4520,7 +4545,7 @@ public final class UpdateManager {
         return Paths.get(q, p);
     }
 
-    /** Il socket di autenticazione di Dovecot che Postfix usa per l'invio; null se Postfix non chiede a Dovecot. */
+    /** The Dovecot authentication socket Postfix uses for sending; null if Postfix does not ask Dovecot. */
     private static Path postfixAuthSocket() {
         if (!"dovecot".equals(sh("postconf -h smtpd_sasl_type 2>/dev/null", 20).trim())) return null;
         String p = sh("postconf -h smtpd_sasl_path 2>/dev/null", 20).trim();
@@ -4530,9 +4555,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Cio' che le prove della posta hanno visto: per ogni prova null se e' passata, altrimenti il perche'; gli
-     * indirizzi su cui Dovecot ascolta; le estensioni Sieve annunciate (null senza ManageSieve); l'utente con cui gira
-     * il processo che cerca le password (auth-worker, "" se root: DovecotAuthWorker).
+     * What the mail tests saw: for each test null if it passed, otherwise the reason; the addresses Dovecot
+     * listens on; the Sieve extensions announced (null without ManageSieve); the user the process that looks up
+     * passwords runs as (auth-worker, "" if root: DovecotAuthWorker).
      */
     record MailState(LinkedHashMap<String, String> results, Set<String> listeners, Set<String> sieve, String workerUser) {
         java.util.List<String> failed() {
@@ -4543,10 +4568,10 @@ public final class UpdateManager {
     }
 
     /**
-     * Le prove vere della posta, le stesse prima (sulla 2.3) e dopo (sulla 2.4), scritte nel registro una per riga:
-     * la configurazione secondo Dovecot, il socket con cui Postfix fa entrare chi spedisce, la casella secondo doveadm,
-     * la consegna LMTP fermata prima del messaggio, l'accesso IMAP su 993 con l'utente principale (come Roundcube) e il
-     * saluto di ManageSieve. Nessuna cambia niente (MailProbes).
+     * The real mail tests, the same before (on 2.3) and after (on 2.4), written to the log one per line: the
+     * configuration according to Dovecot, the socket through which Postfix lets senders in, the mailbox according
+     * to doveadm, the LMTP delivery stopped before the message, the IMAP login on 993 with the main user (like
+     * Roundcube) and the ManageSieve greeting. None of them changes anything (MailProbes).
      */
     private static MailState mailTests(Job job, String mailbox, String masterPassword, boolean sieve) {
         LinkedHashMap<String, String> res = new LinkedHashMap<>();
@@ -4578,12 +4603,12 @@ public final class UpdateManager {
                 res.put(I18n.tr("server.um.dv24move.tImap", Map.of("mailbox", mailbox)), imap);
             } else job.write("    " + I18n.tr("server.um.dv24move.noImap"));
         }
-        // Gli utenti dei processi di Dovecot (ServiceUsers): sulla 2.4 un privilegio in piu' non e' un guasto che
-        // si vede, ma il passaggio non lo deve portare.
+        // The users of the Dovecot processes (ServiceUsers): on 2.4 one privilege too many is not a fault that
+        // shows, but the move must not bring it in.
         java.util.List<String> su = new ArrayList<>();
         for (ServiceUsers.Problem p : ServiceUsers.now().problems()) if (p.service().contains("dovecot")) su.add(p.logText());
         res.put(I18n.tr("server.um.dv24move.tUsers"), su.isEmpty() ? null : String.join("; ", su));
-        // POP3, se e' acceso: la porta aperta non basta (sulla 2.4 pop3-login puo' morire a ogni connessione, Pop3).
+        // POP3, if it is on: the open port is not enough (on 2.4 pop3-login can die at every connection, Pop3).
         if (listeners.stream().anyMatch(l -> l.endsWith(":110")))
             res.put("POP3 110", MailProbes.pop3Greeting("127.0.0.1", 110, 10_000));
         Set<String> ext = null;
@@ -4608,9 +4633,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Cio' che ferma il passaggio, confrontando le prove dopo con quelle di prima: una prova fallita, un indirizzo in
-     * ascolto perso o comparso, un'estensione Sieve sparita (le regole degli utenti la usano). Vuoto se e' tutto come
-     * prima o meglio.
+     * What stops the move, comparing the tests after with those before: a failed test, a listening address lost
+     * or newly appeared, a Sieve extension gone (the users' rules use it). Empty if everything is as before or
+     * better.
      */
     static java.util.List<String> mailStateProblems(MailState before, MailState after) {
         java.util.List<String> p = new ArrayList<>(after.failed());
@@ -4626,7 +4651,7 @@ public final class UpdateManager {
             gone.removeAll(after.sieve());
             if (!gone.isEmpty()) p.add(I18n.tr("server.um.dv24move.sieveLost", Map.of("list", String.join(" ", gone))));
         }
-        // Il processo che cerca le password non torna root: chi girava da utente interno resta cosi'.
+        // The process that looks up passwords does not go back to root: if it ran as an internal user it stays so.
         String wb = before.workerUser() == null ? "" : before.workerUser(), wa = after.workerUser() == null ? "" : after.workerUser();
         if (!wb.isEmpty() && !"root".equals(wb) && !wb.equals(wa))
             p.add(I18n.tr("server.um.dv24move.workerChanged", Map.of("before", wb, "after", wa.isEmpty() ? "root" : wa)));
@@ -4634,12 +4659,12 @@ public final class UpdateManager {
     }
 
     /**
-     * Prima del passaggio a Dovecot 2.4: che cosa c'e', che cosa lo sostituirebbe, se la configurazione e' del pannello,
-     * se le prove si possono fare, e il piano esatto di pkg da approvare. Non cambia niente.
+     * Before the move to Dovecot 2.4: what is there, what would replace it, whether the configuration is the
+     * panel's, whether the tests can be run, and the exact pkg plan to approve. Changes nothing.
      *
-     * La 2.4 e' un pacchetto a parte (dovecot24-mysql nel ramo latest): niente ci passa da solo. Non legge le
-     * configurazioni della 2.3, quindi il passaggio cambia insieme pacchetti e configurazione, a posta ferma, e prova la
-     * posta prima e dopo; come la migrazione a MySQL 8.4.
+     * 2.4 is a separate package (dovecot24-mysql in the latest branch): nothing moves to it by itself. It does not
+     * read the 2.3 configurations, so the move changes packages and configuration together, with the mail stopped,
+     * and tests the mail before and after; like the migration to MySQL 8.4.
      */
     public static JSONObject dovecot24Preflight() {
         JSONObject r = new JSONObject();
@@ -4671,7 +4696,7 @@ public final class UpdateManager {
         r.put("remove", new JSONArray(remove)).put("install", new JSONArray(install == null ? java.util.List.of() : install));
         if (install == null) return r.put("success", true).put("checks", checks).put("canProceed", false).put("blocked", block);
 
-        // La 2.4 nel catalogo: nel ramo quarterly non c'e' ancora.
+        // 2.4 in the catalog: the quarterly branch does not have it yet.
         java.util.List<String> offered = new ArrayList<>(), missing = new ArrayList<>();
         for (String n : install) {
             String v = sh("pkg rquery -U %v " + n + " 2>/dev/null", 30).trim();
@@ -4684,13 +4709,13 @@ public final class UpdateManager {
         } else addCheck(checks, "target", I18n.tr("server.um.dv24move.cTarget"), "ok",
                 I18n.tr("server.um.dv24move.offered", Map.of("list", String.join(", ", offered))));
 
-        // La configurazione si riscrive da capo: una scritta a mano andrebbe persa.
+        // The configuration is rewritten from scratch: one written by hand would be lost.
         boolean ours = ok("grep -qF" + dovecotSignatureOptions() + " " + DOVECOT_DIR + "/dovecot.conf", 15);
         if (!ours) block = true;
         addCheck(checks, "config", I18n.tr("server.um.dv24move.cConfig"), ours ? "ok" : "block",
                 I18n.tr(ours ? "server.um.dv24move.configOurs" : "server.um.dv24move.configNotOurs"));
 
-        // Chi altro usa i pacchetti della 2.3: il passaggio li toglie con -f, e resterebbe senza.
+        // Who else uses the 2.3 packages: the move removes them with -f, and they would be left without them.
         java.util.List<String> users = new ArrayList<>();
         for (String n : remove)
             for (String d : sh("pkg query %rn " + n + " 2>/dev/null", 20).split("\n"))
@@ -4710,7 +4735,7 @@ public final class UpdateManager {
         addCheck(checks, "dbpass", I18n.tr("server.um.dv24move.cDbPass"), pw ? "ok" : "block",
                 I18n.tr(pw ? "server.um.dv24move.dbPass" : "server.um.dv24move.noDbPass"));
 
-        // Le prove: che cosa si potra' provare prima e dopo.
+        // The tests: what can be tested before and after.
         String mailbox = mysqlOut(org.daemoxcp.mail.database.SqlCatalog.UM_FIRST_ACTIVE_MAILBOX).trim();
         if (!MailProbes.MAILBOX.matcher(mailbox).matches()) mailbox = "";
         boolean master = dovecotMasterPassword() != null, cert = dovecotCertificatePath() != null;
@@ -4718,7 +4743,7 @@ public final class UpdateManager {
         String tests = mailbox.isEmpty() ? I18n.tr("server.um.dv24move.testsNoMailbox")
                 : I18n.tr("server.um.dv24move.tests", Map.of("mailbox", mailbox))
                   + (master && cert ? "" : " " + I18n.tr("server.um.dv24move.testsNoImap"));
-        // Sempre fra le cose da sapere prima di partire: le prove entrano in una casella vera (in sola lettura).
+        // Also among the things to know before starting: the tests go into a real mailbox (read-only).
         addCheck(checks, "tests", I18n.tr("server.um.dv24move.cTests"), "review", tests);
 
         addCheck(checks, "services", I18n.tr("server.um.x.servicesInvolved"), "review", I18n.tr("server.um.dv24move.downtime"));
@@ -4738,9 +4763,10 @@ public final class UpdateManager {
     }
 
     /**
-     * Il piano esatto: togliere i pacchetti della 2.3, poi installare quelli della 2.4, con cio' che si portano dietro. Le
-     * dipendenze gia' installate e protette alla versione che la 2.4 chiede si sbloccano per pkg, che altrimenti ne
-     * cercherebbe altre (PackagePlan.planRemoveThenInstall); restano come sono e si riproteggono alla fine.
+     * The exact plan: remove the 2.3 packages, then install the 2.4 ones, with what they bring along. The
+     * dependencies already installed and locked at the version 2.4 asks for are unlocked for pkg, which would
+     * otherwise look for others (PackagePlan.planRemoveThenInstall); they stay as they are and are locked again at
+     * the end.
      */
     private static JSONObject dovecot24Plan(java.util.List<String> remove, java.util.List<String> install) {
         Set<String> locked = lockedNames();
@@ -4751,8 +4777,8 @@ public final class UpdateManager {
     }
 
     /**
-     * Fra le dipendenze («pkg rquery '%dn %dv'», una per riga) quelle installate, protette, e proprio alla versione
-     * chiesta: pkg le userebbe cosi' come sono, se non fossero protette. Funzione pura.
+     * Among the dependencies ("pkg rquery '%dn %dv'", one per line) the ones that are installed, locked, and
+     * exactly at the requested version: pkg would use them as they are, if they were not locked. Pure function.
      */
     static java.util.List<String> dependenciesAsTheyAre(String rquery, Set<String> locked, Map<String, String> installed) {
         java.util.List<String> out = new ArrayList<>();
@@ -4765,8 +4791,9 @@ public final class UpdateManager {
     }
 
     /**
-     * I MySQL che il piano installerebbe accanto a quello che c'e' («mysql267-client 26.7.0»): due client MySQL, e
-     * Postfix e Dovecot che potrebbero caricare quello sbagliato. Vuoto se non ce ne sono, o se non c'e' un MySQL.
+     * The MySQL packages the plan would install next to the one that is there ("mysql267-client 26.7.0"): two
+     * MySQL clients, and Postfix and Dovecot that could load the wrong one. Empty if there are none, or if there
+     * is no MySQL.
      */
     static java.util.List<String> otherMysqlInPlan(JSONObject plan, Set<String> installedNames) {
         java.util.List<String> out = new ArrayList<>();
@@ -4782,15 +4809,15 @@ public final class UpdateManager {
     }
 
     /**
-     * Solo per le prove (Dovecot24MoveE2ETest): problemi in piu' dopo le prove sulla 2.4, per far tornare indietro il
-     * passaggio sulla VM con un guasto vero. Lo imposta solo chi ha il processo in mano: nel pannello in servizio e'
-     * sempre null.
+     * Only for the tests (Dovecot24MoveE2ETest): extra problems after the tests on 2.4, to make the move roll back
+     * on the VM with a real fault. Only whoever holds the process sets it: in the running panel it is always
+     * null.
      */
     static volatile java.util.function.Supplier<java.util.List<String>> dovecot24ProblemsForTest;
 
     /**
-     * @param approvedSignature l'impronta del piano che chi preme ha letto: il lavoro ricalcola il piano e parte solo se
-     *                          e' lo stesso
+     * @param approvedSignature the signature of the plan that whoever presses has read: the job recomputes the plan
+     *                          and starts only if it is the same
      */
     public static JSONObject startDovecot24Move(String approvedSignature) {
         if (!validSignature(approvedSignature))
@@ -4801,14 +4828,15 @@ public final class UpdateManager {
     }
 
     /**
-     * Il passaggio a Dovecot 2.4, guidato e provato.
+     * The move to Dovecot 2.4, guided and tested.
      *
-     * Le prove della posta girano prima, sulla 2.3: se una non passa gia' adesso il lavoro si ferma senza toccare
-     * niente, perche' dopo non potrebbe dimostrare nulla. Poi la copia (configurazione e pacchetti della 2.3, rifatti da
-     * quelli installati con pkg create), Dovecot fermo, i pacchetti cambiati secondo il piano firmato, la configurazione
-     * 2.4 scritta e approvata da doveconf, Dovecot acceso, l'utente MySQL di Dovecot rimesso (MailDbUsers), e le stesse
-     * prove. Se una sola non passa, o una porta cambia, o un'estensione Sieve sparisce, la 2.3 torna al suo posto dalla
-     * copia, e si riprova anche lei. Intanto Postfix resta acceso e tiene la posta in coda; alla fine la consegna.
+     * The mail tests run first, on 2.3: if one already fails now the job stops without touching anything,
+     * because afterwards it could not prove anything. Then the copy (configuration and 2.3 packages, rebuilt from
+     * the installed ones with pkg create), Dovecot stopped, the packages changed according to the signed plan, the
+     * 2.4 configuration written and approved by doveconf, Dovecot started, Dovecot's MySQL user put back
+     * (MailDbUsers), and the same tests. If even one fails, or a port changes, or a Sieve extension disappears,
+     * 2.3 goes back in place from the copy, and it is tested too. Meanwhile Postfix stays on and keeps the mail in
+     * the queue; at the end it delivers it.
      */
     private static void runDovecot24Move(Job job, String approvedSignature) {
         job.status = "running";
@@ -4936,7 +4964,8 @@ public final class UpdateManager {
             script = Files.createTempFile("dovecot24-config-", ".sh");
             Files.setPosixFilePermissions(script, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
             Files.writeString(script, "#!/bin/sh\nset -e\n" + org.daemoxcp.mail.scripts.DovecotConfig.fromPanelConfig().scriptFragment() + "\n");
-            // La password dall'AMBIENTE, come nella rigenerazione: non nel testo dello script ne' sulla riga di comando.
+            // The password from the ENVIRONMENT, as in the regeneration: not in the text of the script nor on the
+            // command line.
             Map<String, String> env = new LinkedHashMap<>();
             env.put("DB_PASS", panelDbPassword());
             if (runLogged(job, "sh " + script, 300, null, env) != 0)
@@ -4947,16 +4976,16 @@ public final class UpdateManager {
             job.write("[6/" + TOT + "] " + I18n.tr("server.um.dv24move.s6"));
             if (!startDovecot(job)) throw org.daemoxcp.mail.util.ShownException.of("server.um.dv24move.notStarted");
             dovecotStopped = false;
-            // La configurazione scritta legge con l'utente del pannello: si torna a quello di Dovecot, come dopo la
-            // rigenerazione (MailDbUsers), prima delle prove, cosi' si prova cio' che resta.
+            // The written configuration reads with the panel's user: it goes back to Dovecot's own, as after the
+            // regeneration (MailDbUsers), before the tests, so that what is tested is what remains.
             MailDbUsers.ensureAtBoot();
-            // POP3 come l'ha scelto l'amministratore: la configurazione scritta ha solo IMAP (Pop3).
+            // POP3 as the administrator chose it: the written configuration has only IMAP (Pop3).
             Pop3.ensureAtBoot();
-            // E Postfix sul socket LMTP della configurazione scritta (reperto 234), prima delle prove.
+            // And Postfix on the LMTP socket of the written configuration (finding 234), before the tests.
             String lmtp = LmtpSocket.alignPostfix();
             if (!lmtp.isEmpty()) job.write("    " + lmtp);
-            // Le regole Sieve del pannello compilate dal Pigeonhole della 2.4: il compilato della 2.3 non vale piu', e
-            // Dovecot le ricompilerebbe a ogni messaggio con due errori nel maillog (reperto 241).
+            // The panel's Sieve rules compiled by the 2.4 Pigeonhole: the 2.3 compiled ones are no longer valid, and
+            // Dovecot would recompile them at every message with two errors in the maillog (finding 241).
             SieveBinaries.Result sieveBinaries = SieveBinaries.refreshNow();
             job.write("    " + I18n.tr("server.um.dv24move.sieveBinaries", Map.of("done", String.valueOf(sieveBinaries.recompiled()),
                     "same", String.valueOf(sieveBinaries.unchanged()))));
@@ -4979,7 +5008,7 @@ public final class UpdateManager {
             java.util.function.Supplier<java.util.List<String>> forTest = dovecot24ProblemsForTest;
             if (forTest != null) problems.addAll(forTest.get());
             if (!problems.isEmpty()) throw new IllegalStateException(String.join(" ", problems));
-            // La password del database in un file che nessuno legge piu': la copia del passaggio basta per tornare indietro.
+            // The database password in a file nobody reads any more: the copy of the move is enough to go back.
             ok("rm -f " + DOVECOT_DIR + "/dovecot-sql.conf.pre-2.4", 15);
             ok("postqueue -f", 60);
             job.write("    " + I18n.tr("server.um.dv24move.queueFlushed"));
@@ -5018,7 +5047,7 @@ public final class UpdateManager {
             if (outcome != null && !outcome.outsidePlan().isEmpty()) job.errorMessage += " " + divergenceMessage(outcome.outsidePlan());
         } finally {
             if (script != null) try { Files.deleteIfExists(script); } catch (Exception ignored) {}
-            // Si protegge ogni pacchetto dell'elenco installato adesso: la 2.4 se e' rimasta, la 2.3 se e' tornata.
+            // Every package on the list installed now gets locked: 2.4 if it stayed, 2.3 if it came back.
             if (!listed.isEmpty() && !relockListed(job, listed).isEmpty() && "completed".equals(job.status)) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runGuidedUpdate.42");
@@ -5027,7 +5056,7 @@ public final class UpdateManager {
         }
     }
 
-    /** Accende Dovecot e aspetta che risponda, fino a 30 secondi. */
+    /** Starts Dovecot and waits for it to answer, up to 30 seconds. */
     private static boolean startDovecot(Job job) {
         ok("service dovecot start", 120);
         for (int i = 0; i < 30; i++) {
@@ -5041,11 +5070,11 @@ public final class UpdateManager {
     }
 
     /**
-     * Rimette la 2.3 com'era, dalla copia del passaggio: via i pacchetti della 2.4 e cio' che il piano ha portato solo
-     * per loro, dentro quelli della 2.3 rifatti da pkg create, la configurazione di prima, Dovecot acceso, e di nuovo le
-     * prove di prima. La configurazione della 2.4 resta nella copia (etc-2.4-refused), da leggere.
+     * Puts 2.3 back as it was, from the copy of the move: out with the 2.4 packages and what the plan brought only
+     * for them, in with the 2.3 ones rebuilt by pkg create, the previous configuration, Dovecot started, and again
+     * the tests of before. The 2.4 configuration stays in the copy (etc-2.4-refused), to be read.
      *
-     * @return vero se la 2.3 e' tornata e passa le prove di prima
+     * @return true if 2.3 came back and passes the tests of before
      */
     private static boolean dovecot23Back(Job job, String backupDir, java.util.List<String> pkgFiles, java.util.List<String> install,
                                          JSONObject plan, String mailbox, String masterPassword, boolean sieve, MailState before) {
@@ -5061,7 +5090,7 @@ public final class UpdateManager {
             for (String n : install) if (ok("pkg info -e " + n, 15)) present.add(n);
             if (!present.isEmpty() && runLogged(job, "pkg delete -f -y " + String.join(" ", present) + " 2>&1", 300) != 0)
                 return false;
-            // Le dipendenze che il piano ha installato per la 2.4 e che nessuno usa piu'.
+            // The dependencies the plan installed for 2.4 and that nobody uses any more.
             JSONArray changes = plan == null ? null : plan.optJSONArray("changes");
             for (int i = 0; changes != null && i < changes.length(); i++) {
                 JSONObject c = changes.getJSONObject(i);
@@ -5075,7 +5104,7 @@ public final class UpdateManager {
                     + backupDir + "/etc " + DOVECOT_DIR, 120)) return false;
             job.write("    " + I18n.tr("server.um.dv24move.configBack"));
             if (!startDovecot(job)) return false;
-            // Le regole del pannello di nuovo compilate dalla 2.3, se la 2.4 le aveva gia' ricompilate (reperto 241).
+            // The panel's rules compiled again by 2.3, if 2.4 had already recompiled them (finding 241).
             SieveBinaries.Result sieveBinaries = SieveBinaries.refreshNow();
             job.write("    " + I18n.tr("server.um.dv24move.sieveBinaries", Map.of("done", String.valueOf(sieveBinaries.recompiled()),
                     "same", String.valueOf(sieveBinaries.unchanged()))));
@@ -5091,20 +5120,20 @@ public final class UpdateManager {
         }
     }
 
-    // ===================== aggiornamento guidato di Roundcube =====================
+    // ===================== guided Roundcube update =====================
 
     private static final String RC_DIR = "/usr/local/www/roundcube";
 
     /**
-     * Credenziali del database della webmail, lette da config.inc.php.
+     * Credentials of the webmail database, read from config.inc.php.
      *
-     * Non si indovinano: quello autorevole e' cio' che Roundcube usa davvero, cioe' il DSN
-     * nella sua configurazione -- roundcube, l'utente suo, dopo RoundcubeDbUser; quello del
-     * pannello sui server dove la migrazione non e' ancora riuscita. La lettura si fa in Java
-     * e non con una catena di grep e sed: niente da proteggere in una shell, e la password
-     * non passa mai da una riga di comando. E' la stessa di RoundcubeDbUser.activeDsn (righe
-     * commentate escluse, vince l'ultima assegnazione): la copia del database e la migrazione
-     * devono vedere lo stesso collegamento.
+     * They are not guessed: the authoritative ones are what Roundcube really uses, that is the DSN
+     * in its configuration -- roundcube, its own user, after RoundcubeDbUser; the panel's one
+     * on servers where the migration has not succeeded yet. The reading is done in Java
+     * and not with a chain of grep and sed: nothing to protect in a shell, and the password
+     * never goes through a command line. It is the same as RoundcubeDbUser.activeDsn (commented
+     * lines excluded, the last assignment wins): the database copy and the migration
+     * must see the same connection.
      */
     static JSONObject dsnRoundcube() {
         JSONObject r = new JSONObject().put("ok", false);
@@ -5120,7 +5149,7 @@ public final class UpdateManager {
         }
     }
 
-    /** Una domanda del catalogo sul database della webmail, con le credenziali che usa Roundcube stesso (JDBC). */
+    /** A catalog query on the webmail database, with the credentials Roundcube itself uses (JDBC). */
     private static String rcQuery(String sql, Object... params) {
         JSONObject d = dsnRoundcube();
         if (!d.optBoolean("ok")) return "";
@@ -5133,20 +5162,20 @@ public final class UpdateManager {
     }
 
     /**
-     * Controlli preliminari per il salto di versione maggiore di Roundcube. Sola lettura.
+     * Preliminary checks for the Roundcube major version jump. Read-only.
      *
-     * Il punto delicato non e' il pacchetto ma lo SCHEMA del database: la 1.7 lo cambia, e
-     * finche' non si esegue bin/updatedb.sh la webmail non funziona. E l'aggiornamento dello
-     * schema non si annulla, quindi serve una copia del database presa prima.
+     * The delicate point is not the package but the database SCHEMA: 1.7 changes it, and
+     * until bin/updatedb.sh is run the webmail does not work. And the schema upgrade
+     * cannot be undone, so a copy of the database taken beforehand is needed.
      */
     /**
-     * Le righe "root ...roundcube" nelle configurazioni di nginx, con la posizione esatta.
+     * The "root ...roundcube" lines in the nginx configurations, with the exact position.
      *
-     * Dalla 1.7 Roundcube pretende che il server web punti alla sottocartella public_html:
-     * tutto il resto dell'installazione smette di essere servibile, ed e' voluto — e' una
-     * protezione. Ma su questo server nginx punta alla radice dell'applicazione (il pannello
-     * stesso la scrive cosi' in cinque punti), quindi dopo l'aggiornamento la webmail
-     * smetterebbe di funzionare. Va trovato PRIMA, non scoperto dopo.
+     * From 1.7 Roundcube requires the web server to point to the public_html subfolder:
+     * all the rest of the installation stops being servable, and that is intended -- it is a
+     * protection. But on this server nginx points to the root of the application (the panel
+     * itself writes it that way in five places), so after the upgrade the webmail
+     * would stop working. It must be found BEFORE, not discovered after.
      */
     private static JSONArray nginxRoundcubeRoots() {
         JSONArray outside = new JSONArray();
@@ -5163,7 +5192,7 @@ public final class UpdateManager {
         return outside;
     }
 
-    /** Vero se la versione e' 1.7 o successiva, cioe' se pretende la radice public_html. */
+    /** True if the version is 1.7 or later, that is if it requires the public_html root. */
     static boolean wantsPublicHtml(String version) {
         Matcher m = Pattern.compile("^([0-9]+)\\.([0-9]+)").matcher(version == null ? "" : version);
         if (!m.find()) return false;
@@ -5184,9 +5213,9 @@ public final class UpdateManager {
             addCheck(checks, "pkg", I18n.tr("server.um.roundcubePreflight.1"), "block", I18n.tr("server.um.roundcubePreflight.2"));
             block = true;
         } else if (available.isEmpty() || available.equals(ver)) {
-            // Non e' un impedimento da risolvere: non c'e' niente da fare. Chiamarlo "blocco"
-            // e poi scrivere "risolvi le righe rosse" mette l'utente a cercare un guasto che
-            // non esiste — ed e' il contrario di cio' che la riga vuole dire.
+            // It is not an obstacle to solve: there is nothing to do. Calling it a "block"
+            // and then writing "resolve the red lines" sets the user looking for a fault that
+            // does not exist -- and it is the opposite of what the line means to say.
             addCheck(checks, "pkg", I18n.tr("server.um.roundcubePreflight.1"), "ok",
                     available.isEmpty()
                         ? I18n.tr("server.um.roundcubePreflight.3", java.util.Map.of("pkg", String.valueOf(pkg), "ver", String.valueOf(ver)))
@@ -5197,7 +5226,7 @@ public final class UpdateManager {
             addCheck(checks, "pkg", I18n.tr("server.um.roundcubePreflight.1"), "ok", pkg + " " + ver + " -> " + available);
         }
 
-        // La famiglia PHP richiesta dalla versione nuova deve essere quella installata.
+        // The PHP family required by the new version must be the installed one.
         String phpInst = sh("pkg query %n 2>/dev/null | grep -E '^php[0-9]+$' | head -1", 20);
         Matcher mp = Pattern.compile("roundcube-php([0-9]+)").matcher(pkg);
         String phpRc = mp.find() ? "php" + mp.group(1) : "";
@@ -5207,7 +5236,7 @@ public final class UpdateManager {
                       : I18n.tr("server.um.roundcubePreflight.6", java.util.Map.of("phpRc", String.valueOf(phpRc), "phpInst", String.valueOf(phpInst))));
         if (!phpOk) block = true;
 
-        // Lo script che aggiorna lo schema: senza, il passo non si puo' completare.
+        // The script that upgrades the schema: without it, the step cannot be completed.
         boolean updatedb = ok("test -x " + RC_DIR + "/bin/updatedb.sh", 15)
                         || ok("test -f " + RC_DIR + "/bin/updatedb.sh", 15);
         addCheck(checks, "updatedb", I18n.tr("server.um.roundcubePreflight.7"), updatedb ? "ok" : "block",
@@ -5215,7 +5244,7 @@ public final class UpdateManager {
                          : I18n.tr("server.um.roundcubePreflight.8", java.util.Map.of("rcDir", String.valueOf(RC_DIR))));
         if (!updatedb) block = true;
 
-        // Credenziali e stato del database, letti dalla configurazione di Roundcube.
+        // Credentials and state of the database, read from Roundcube's configuration.
         JSONObject dsn = dsnRoundcube();
         long tables = 0;
         if (!dsn.optBoolean("ok")) {
@@ -5235,7 +5264,7 @@ public final class UpdateManager {
             }
         }
 
-        // Non si annuncia una via di ritorno: si prova, adesso, davvero.
+        // A way back is not announced: it is tested, now, for real.
         JSONObject test = testCopy();
         String dbName = dsn.optBoolean("ok") ? dsn.getString("db") : "roundcubemail";
         if (!test.optBoolean("ok")) {
@@ -5259,18 +5288,18 @@ public final class UpdateManager {
                     I18n.tr("server.um.roundcubePreflight.11", java.util.Map.of("dbName", String.valueOf(dbName))));
         }
 
-        // Non chiede niente a chi legge: dice cosa fa la procedura. Sotto l'etichetta gialla
-        // "VERIFICA" sembrava una cosa rimasta da fare, in mezzo a righe tutte verdi.
+        // It asks nothing of the reader: it says what the procedure does. Under the yellow "CHECK"
+        // label it looked like something still to do, among lines that were all green.
         addCheck(checks, "opcache", I18n.tr("server.um.roundcubePreflight.12"), "note",
                 I18n.tr("server.um.roundcubePreflight.13"));
 
-        // Radice di nginx: dalla 1.7 deve puntare a public_html, altrimenti la webmail
-        // smette di funzionare subito dopo l'aggiornamento.
+        // nginx root: from 1.7 it must point to public_html, otherwise the webmail
+        // stops working right after the upgrade.
         JSONArray roots = nginxRoundcubeRoots();
-        // La domanda giusta non e' "sto passando alla 1.7?" ma "la versione che avro' pretende
-        // public_html, e nginx ci punta?". Un server GIA' sulla 1.7 con la radice vecchia ha la
-        // webmail gia' guasta adesso: chiedendo solo del passaggio non me ne accorgerei, e
-        // direi "non va toccata" proprio nel caso in cui va toccata subito.
+        // The right question is not "am I moving to 1.7?" but "does the version I will have require
+        // public_html, and does nginx point to it?". A server ALREADY on 1.7 with the old root has
+        // the webmail already broken now: asking only about the move I would not notice it, and
+        // I would say "must not be touched" precisely in the case where it must be touched at once.
         java.util.List<String> toMove = new ArrayList<>();
         for (int i = 0; i < roots.length(); i++) {
             JSONObject x = roots.getJSONObject(i);
@@ -5299,9 +5328,9 @@ public final class UpdateManager {
                     + I18n.tr("server.um.x.rcRootFix", java.util.Map.of("n", String.valueOf(toMove.size()), "lines", String.valueOf(String.join(" ; ", toMove)))));
         }
 
-        // Il piano ESATTO, come nell'aggiornamento guidato: che cosa farebbe pkg aggiornando la
-        // webmail, calcolato su una copia del suo database con le stesse protezioni tolte. Si
-        // calcola solo se c'e' davvero un aggiornamento: altrimenti non c'e' niente da firmare.
+        // The EXACT plan, as in the guided update: what pkg would do upgrading the
+        // webmail, computed on a copy of its database with the same locks removed. It is
+        // computed only if there really is an update: otherwise there is nothing to sign.
         if (!pkg.isEmpty() && !available.isEmpty() && !available.equals(ver)) {
             JSONObject plan = roundcubePlan(pkg);
             if (addPlanChecks(checks, plan, java.util.List.of(pkg), java.util.List.of(pkg), block)) block = true;
@@ -5312,18 +5341,18 @@ public final class UpdateManager {
         return r;
     }
 
-    /** Il piano esatto per aggiornare la webmail: lo stesso calcolo del guidato. */
+    /** The exact plan to upgrade the webmail: the same computation as the guided one. */
     private static JSONObject roundcubePlan(String pkg) {
         return judged(PackagePlan.planFor(java.util.List.of(pkg), lockedNames(),
                 UpdateManager::reasonNotToUnlock, UpdateManager::installedFamilyTwin));
     }
 
     /**
-     * Sposta la radice di nginx su public_html, come pretende Roundcube dalla 1.7.
+     * Moves the nginx root to public_html, as Roundcube requires from 1.7.
      *
-     * Riscrittura riga per riga e riscrittura atomica del file: niente sed, che su BSD si
-     * comporta diversamente da come si e' abituati e ha gia' scritto una "n" letterale al
-     * posto di un a capo in questo stesso progetto.
+     * Line-by-line rewriting and atomic rewrite of the file: no sed, which on BSD
+     * behaves differently from what one is used to and has already written a literal "n" in
+     * place of a line break in this very project.
      */
     private static String moveNginxRoot(Job job, String backupDir) {
         JSONArray roots = nginxRoundcubeRoots();
@@ -5334,10 +5363,10 @@ public final class UpdateManager {
                 if (x.getBoolean("already")) continue;
                 String file = x.getString("file"), root = x.getString("root");
                 if (!ok("test -f " + file, 10)) continue;
-                // Se public_html non c'e', questa build non lo usa: non e' un guasto, e
-                // dichiararlo tale bocciarebbe un aggiornamento riuscito — che e' il modo di
-                // farsi tornare indietro senza motivo. Chi giudica resta la prova finale: se
-                // la webmail non risponde, lo dice quella.
+                // If public_html is not there, this build does not use it: it is not a fault,
+                // and declaring it one would fail a successful upgrade -- which is the way
+                // to get rolled back for no reason. The judge remains the final test: if
+                // the webmail does not answer, that test says so.
                 if (!ok("test -d " + root + "/public_html", 10)) {
                     job.write(I18n.tr("server.um.moveNginxRoot.1", java.util.Map.of("root", String.valueOf(root))));
                     job.write(I18n.tr("server.um.moveNginxRoot.2"));
@@ -5350,7 +5379,7 @@ public final class UpdateManager {
                 if (n < 0 || n >= lines.size()) { job.write(I18n.tr("server.um.moveNginxRoot.3", java.util.Map.of("file", String.valueOf(file), "p", String.valueOf((n + 1))))); return "failed"; }
                 String old = lines.get(n);
                 if (!old.contains(root)) { job.write("    " + I18n.tr("server.um.x.lineNoLonger", java.util.Map.of("file", String.valueOf(file), "line", String.valueOf((n + 1)), "root", String.valueOf(root)))); return "failed"; }
-                // Puntare a una cartella che esiste non basta: dev'esserci cosa servire.
+                // Pointing to a folder that exists is not enough: there must be something to serve.
                 if (!ok("test -f " + root + "/public_html/index.php", 10)) {
                     job.write(I18n.tr("server.um.moveNginxRoot.4", java.util.Map.of("root", String.valueOf(root))));
                     job.write(I18n.tr("server.um.moveNginxRoot.5"));
@@ -5363,7 +5392,7 @@ public final class UpdateManager {
             }
             if (touched.isEmpty()) { job.write(I18n.tr("server.um.moveNginxRoot.6")); return "unneeded"; }
 
-            // Prima di ricaricare: nginx accetta questa configurazione?
+            // Before reloading: does nginx accept this configuration?
             String test = sh("nginx -t 2>&1", 60);
             boolean good = test.toLowerCase().contains("syntax is ok") && test.toLowerCase().contains("test is successful");
             if (!good) {
@@ -5387,40 +5416,43 @@ public final class UpdateManager {
         }
     }
 
-    /** Copia del database della webmail. Il marcatore finale di mysqldump prova che e' completa. */
+    /** Copy of the webmail database. The final marker of mysqldump proves it is complete. */
     /**
-     * Copia del database della webmail, con il motivo del fallimento quando fallisce.
+     * Copy of the webmail database, with the reason for the failure when it fails.
      *
-     * La versione precedente mandava stderr in /dev/null e tornava true/false: quando non
-     * riusciva, il pannello sapeva soltanto che non era riuscita — cioe' esattamente niente di
-     * utile. L'errore di mysqldump E' la diagnosi, buttarlo via era il difetto piu' grave qui.
+     * The previous version sent stderr to /dev/null and returned true/false: when it did not
+     * succeed, the panel only knew that it had not succeeded -- that is, exactly nothing
+     * useful. The mysqldump error IS the diagnosis; throwing it away was the worst defect here.
      *
-     * Due opzioni meritano una spiegazione, perche' sembrano dettagli e non lo sono:
-     *  - --no-tablespaces: senza, mysqldump di MySQL 8 interroga le informazioni sui tablespace
-     *    e per farlo pretende il privilegio PROCESS, che un utente di applicazione non ha e non
-     *    deve avere. E' la causa piu' comune di un "Access denied" che non c'entra nulla con le
-     *    tabelle da copiare.
-     *  - --routines e --triggers chiedono altri privilegi ancora (SHOW_ROUTINE, TRIGGER). Sullo
-     *    schema di Roundcube non c'e' niente di tutto cio', quindi se il primo tentativo cade li
-     *    si riprova senza — e lo si SCRIVE, invece di consegnare una copia piu' povera di quella
-     *    promessa facendo finta di niente.
+     * Two options deserve an explanation, because they look like details and they are not:
+     *  - --no-tablespaces: without it, the MySQL 8 mysqldump queries the tablespace information
+     *    and to do so requires the PROCESS privilege, which an application user does not have and
+     *    must not have. It is the most common cause of an "Access denied" that has nothing to do
+     *    with the tables to copy.
+     *  - --routines and --triggers require still more privileges (SHOW_ROUTINE, TRIGGER). On the
+     *    Roundcube schema there is none of that, so if the first attempt fails there it is
+     *    retried without them -- and that is WRITTEN DOWN, instead of delivering a poorer copy
+     *    than the one promised while pretending nothing happened.
      */
-    /** I modi di copiare, dal piu' completo al meno esigente. Una lista sola per la prova e per la copia vera. */
     /**
-     * I modi di copiare, dal meno privilegiato al piu' potente. Terza colonna: con quale utente.
+     * The ways of copying, from the most complete to the least demanding. One list for both the test and the
+     * real copy.
+     */
+    /**
+     * The ways of copying, from the least privileged to the most powerful. Third column: with which user.
      *
-     * --no-tablespaces: senza, mysqldump di MySQL 8 legge le informazioni sui tablespace e per
-     *   farlo pretende PROCESS, che un utente di applicazione non ha e non deve avere.
-     * --set-gtid-purged=OFF: se il server ha i GTID attivi, mysqldump in modalita' AUTO (il
-     *   default) vuole registrare quali GTID sono gia' applicati, e per prenderli coerenti fa
-     *   FLUSH TABLES + FLUSH TABLES WITH READ LOCK, che pretendono RELOAD. Nessun file di
-     *   opzioni c'entra: lo decide mysqldump guardando il server. Per una copia da rimettere
-     *   sullo stesso server quell'informazione non serve, quindi si spegne.
-     * --skip-lock-all-tables --skip-flush-logs: le altre due strade che portano allo stesso
-     *   FLUSH. Spegnerle esplicitamente e' l'unico modo di sapere cosa si sta eseguendo.
-     * --no-defaults: ignora ogni file di opzioni. Va per forza per prima sulla riga di comando.
-     * root sul socket: ultima spiaggia, e funziona sempre perche' root ha tutti i privilegi.
-     *   Sta per ultima apposta: una copia si fa col minimo necessario, non col massimo possibile.
+     * --no-tablespaces: without it, the MySQL 8 mysqldump reads the tablespace information and to
+     *   do so requires PROCESS, which an application user does not have and must not have.
+     * --set-gtid-purged=OFF: if the server has GTIDs enabled, mysqldump in AUTO mode (the
+     *   default) wants to record which GTIDs are already applied, and to get them consistent it
+     *   runs FLUSH TABLES + FLUSH TABLES WITH READ LOCK, which require RELOAD. No options file
+     *   is involved: mysqldump decides it by looking at the server. For a copy to be put back
+     *   on the same server that information is not needed, so it is turned off.
+     * --skip-lock-all-tables --skip-flush-logs: the other two roads that lead to the same
+     *   FLUSH. Turning them off explicitly is the only way to know what is being run.
+     * --no-defaults: ignores every options file. It must come first on the command line.
+     * root on the socket: last resort, and it always works because root has all the privileges.
+     *   It is last on purpose: a copy is made with the minimum necessary, not the maximum possible.
      */
     private static final String[][] COPY_MODES = {
         {"--single-transaction --no-tablespaces --skip-lock-all-tables --skip-flush-logs "
@@ -5434,38 +5466,38 @@ public final class UpdateManager {
     };
 
     /**
-     * Il pannello riesce a entrare in MySQL come root dal socket unix?
+     * Can the panel get into MySQL as root through the unix socket?
      *
-     * Si prova, non si presume: si esegue una domanda banale e si guarda se risponde. Presumerlo
-     * significherebbe offrire come ultima spiaggia una strada che non c'e', e scoprirlo nel
-     * momento in cui e' l'unica rimasta.
+     * It is tested, not presumed: a trivial query is run and we look at whether it answers. Presuming
+     * it would mean offering as a last resort a road that is not there, and finding that out at the
+     * moment it is the only one left.
      */
     private static boolean mysqlRootAvailable() {
         return "1".equals(mysqlRootOut(org.daemoxcp.mail.database.SqlCatalog.MYSQL_ROOT_PING).trim());
     }
 
-    /** La parte di connessione della riga, secondo l'utente scelto dal modo. */
+    /** The connection part of the line, according to the user chosen by the mode. */
     private static String copyConnection(String who, JSONObject dsn) {
         String h = dsn.getString("host");
         String host = h.contains(":") ? h.substring(0, h.indexOf(':')) : h;
         return "root".equals(who)
-                ? "-u root " + dsn.getString("db")                       // socket unix, nessuna password
+                ? "-u root " + dsn.getString("db")                       // unix socket, no password
                 : "-u " + dsn.getString("user") + " -h " + host + " " + dsn.getString("db");
     }
 
-    /** Perche' mysqldump fa quel FLUSH: si guarda il server, non si deduce. */
+    /** Why mysqldump does that FLUSH: we look at the server, we do not deduce it. */
     private static String gtidState() {
         String r = mysqlRootOut(org.daemoxcp.mail.database.SqlCatalog.UM_GTID_STATE);
         return r == null ? "" : r.trim();
     }
 
     /**
-     * Da dove arrivano le opzioni che non ho chiesto io.
+     * Where the options I did not ask for come from.
      *
-     * "--print-defaults" stampa la riga di comando che mysqldump si costruisce davvero, opzioni
-     * dei file di configurazione comprese. Serve perche' un errore su un FLUSH TABLES che nessuno
-     * ha chiesto e' incomprensibile finche' non si vede chi lo ha chiesto: e a quel punto smette
-     * di essere un mistero e diventa una riga in un file.
+     * "--print-defaults" prints the command line mysqldump really builds for itself, options
+     * from the configuration files included. It is needed because an error on a FLUSH TABLES that
+     * nobody asked for is incomprehensible until you see who asked for it: and at that point it
+     * stops being a mystery and becomes a line in a file.
      */
     private static String inheritedOptions() {
         String o = sh("mysqldump --print-defaults 2>&1 | tail -2", 30).replace("\n", " ").trim();
@@ -5473,13 +5505,13 @@ public final class UpdateManager {
     }
 
     /**
-     * Prova la copia PRIMA di averne bisogno, senza i dati.
+     * Tests the copy BEFORE it is needed, without the data.
      *
-     * Una via di ritorno che non si e' mai percorsa non e' una via di ritorno: e' una speranza.
-     * Qui si esegue davvero un mysqldump --no-data, che costa un istante e mette alla prova
-     * esattamente cio' che conta — che il comando ci sia, che le credenziali entrino, che i
-     * privilegi bastino e che il file arrivi in fondo. Se questo non passa, non ha senso
-     * cominciare: e' quello che e' successo il 31/08/2026, scoperto al passo 2 invece che qui.
+     * A way back that has never been traveled is not a way back: it is a hope.
+     * Here a mysqldump --no-data is really run, which takes an instant and tests
+     * exactly what matters -- that the command is there, that the credentials get in, that the
+     * privileges are enough and that the file reaches the end. If this does not pass, there is no
+     * point starting: that is what happened on 2026-08-31, discovered at step 2 instead of here.
      */
     private static JSONObject testCopy() {
         String tmp = "/var/db/daemoxcp-mail/test-dump.sql";
@@ -5551,8 +5583,8 @@ public final class UpdateManager {
             ProcessBuilder pb = new ProcessBuilder("sh", "-c",
                     "mysqldump " + options + " " + connection + " > " + dest + " 2> " + err);
             org.daemoxcp.mail.util.Shell.applyPath(pb);
-            // La password sta nell'ambiente e non nella riga di comando: cosi' non compare in ps.
-            // Per il tentativo da root non c'e' password: entra dal socket unix.
+            // The password is in the environment and not on the command line: that way it does not show in ps.
+            // For the attempt as root there is no password: it gets in through the unix socket.
             if (pass != null && !pass.isEmpty()) pb.environment().put("MYSQL_PWD", pass);
             Process pr = pb.start();
             if (!pr.waitFor(1800, java.util.concurrent.TimeUnit.SECONDS)) {
@@ -5564,8 +5596,8 @@ public final class UpdateManager {
                 return r.put("error", message.isEmpty()
                         ? I18n.tr("server.um.x.exitNoMsg", java.util.Map.of("c", String.valueOf(pr.exitValue())))
                         : I18n.tr("server.um.x.exitMsg", java.util.Map.of("c", String.valueOf(pr.exitValue()), "m", String.valueOf(message))));
-            // mysqldump chiude con "Dump completed": senza quella riga il file e' troncato,
-            // e un file troncato che sembra un backup e' peggio di nessun backup.
+            // mysqldump ends with "Dump completed": without that line the file is truncated,
+            // and a truncated file that looks like a backup is worse than no backup.
             if (!ok("tail -3 " + dest + " | grep -q 'Dump completed'", 60))
                 return r.put("error", I18n.tr("server.um.x.dumpTruncated")
                         + (message.isEmpty() ? "" : " (" + message + ")"));
@@ -5577,22 +5609,22 @@ public final class UpdateManager {
     }
 
     /**
-     * Perche' la webmail non risponde. Sola lettura.
+     * Why the webmail does not answer. Read-only.
      *
-     * Un 403 non si indovina: nginx scrive nel suo log di errore la ragione esatta, e le due
-     * ragioni possibili portano a rimedi opposti — "Permission denied" e' un problema di
-     * permessi sul file, "directory index of ... is forbidden" vuol dire che nginx non trova
-     * nessun file indice da servire. Confonderle significa aggiustare la cosa sbagliata.
+     * A 403 is not guessed: nginx writes the exact reason in its error log, and the two
+     * possible reasons lead to opposite remedies -- "Permission denied" is a problem of
+     * permissions on the file, "directory index of ... is forbidden" means that nginx finds
+     * no index file to serve. Confusing them means fixing the wrong thing.
      */
     /**
-     * Interroga la webmail SULL'ORIGINE, non attraverso quello che sta davanti.
+     * Queries the webmail ON THE ORIGIN, not through whatever stands in front of it.
      *
-     * Il 31/08/2026 la prova finale ha bocciato un aggiornamento riuscito perche' chiedeva alla
-     * porta 443 mentre nginx ascolta sulla 8443: rispondeva Cloudflare, con un 403 suo, e nel
-     * log di nginx non compariva nulla perche' la richiesta non era mai arrivata al server.
-     * Qui la porta si legge dal blocco server vero, e ci si risolve su 127.0.0.1 per scavalcare
-     * qualunque cosa stia davanti. Se malgrado tutto risponde una CDN, lo si dice invece di
-     * scambiare la sua risposta per quella del server.
+     * On 2026-08-31 the final test failed a successful upgrade because it asked port
+     * 443 while nginx listens on 8443: Cloudflare answered, with a 403 of its own, and nothing
+     * appeared in the nginx log because the request had never reached the server.
+     * Here the port is read from the real server block, and the name is resolved to 127.0.0.1
+     * to bypass whatever stands in front. If despite everything a CDN answers, that is said
+     * instead of mistaking its answer for the server's.
      */
     private static JSONObject testWebmailOrigin() {
         JSONObject r = new JSONObject().put("ok", false);
@@ -5600,7 +5632,7 @@ public final class UpdateManager {
         if (roots.length() == 0) return r.put("error", I18n.tr("server.um.testWebmailOrigin.1"));
         String file = roots.getJSONObject(0).getString("file");
         int line = roots.getJSONObject(0).getInt("line");
-        // listen e server_name stanno nello stesso blocco, poche righe sopra la radice.
+        // listen and server_name are in the same block, a few lines above the root.
         int from = Math.max(1, line - 10);
         String head = sh("sed -n '" + from + "," + line + "p' " + file + " 2>/dev/null", 30);
         String port = "", name = "";
@@ -5616,8 +5648,8 @@ public final class UpdateManager {
         }
         if (name == null || !name.matches("[A-Za-z0-9._-]{1,255}"))
             return r.put("error", I18n.tr("server.um.testWebmailOrigin.3"));
-        // --resolve mette a posto sia il nome nell'intestazione Host sia quello nel TLS,
-        // ma manda la richiesta all'indirizzo locale: e' il modo di parlare col server e basta.
+        // --resolve sets right both the name in the Host header and the one in TLS,
+        // but sends the request to the local address: it is the way to talk to the server and nothing else.
         String url = "https://" + name + ":" + port + "/";
         String out = sh("curl -sk -m 20 -D - -o /dev/null --resolve " + name + ":" + port
                 + ":127.0.0.1 " + url + " 2>&1", 60);
@@ -5630,17 +5662,17 @@ public final class UpdateManager {
     }
 
     /**
-     * Cosa riceve DAVVERO PHP quando la richiesta passa da nginx.
+     * What PHP REALLY receives when the request goes through nginx.
      *
-     * E' l'ultima incognita rimasta: static.php risolve il file con
-     * realpath(INSTALL_PATH . PATH_INFO), il file c'e', i permessi ci sono, e risponde 404
-     * lo stesso. Quindi o PATH_INFO non arriva come credo, o arriva vuoto — e "vuoto" non e'
-     * la stessa cosa di "assente", perche' l'operatore ?? di PHP non ripiega su una stringa
-     * vuota e static.php si ritroverebbe con un percorso nullo.
+     * It is the last unknown left: static.php resolves the file with
+     * realpath(INSTALL_PATH . PATH_INFO), the file is there, the permissions are there, and it
+     * answers 404 anyway. So either PATH_INFO does not arrive as I think, or it arrives empty --
+     * and "empty" is not the same as "absent", because the PHP ?? operator does not fall back on
+     * an empty string and static.php would end up with a null path.
      *
-     * Si scrive una sonda con un nome imprevedibile, le si fa una sola richiesta e la si
-     * elimina subito, anche se qualcosa va storto. Stampa solo le sei variabili che servono,
-     * non tutto l'ambiente.
+     * A probe with an unpredictable name is written, it gets a single request and it is deleted
+     * at once, even if something goes wrong. It prints only the six variables that are needed,
+     * not the whole environment.
      */
     public static JSONObject probePathInfo() {
         String name = "rc-probe-" + Long.toHexString(System.nanoTime()) + ".php";
@@ -5667,14 +5699,14 @@ public final class UpdateManager {
         } catch (Exception e) {
             return new JSONObject().put("ok", false).put("error", org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e));
         } finally {
-            // La sonda sparisce comunque: non deve restare un file PHP nella radice del web.
+            // The probe disappears in any case: no PHP file must remain in the web root.
             ok("rm -f " + file, 20);
         }
     }
 
     /**
-     * Un CSS in uscita e' 160 KB di testo: stamparlo per intero nasconde la risposta invece di
-     * mostrarla. Qui si dice cosa e' uscito, non lo si riversa.
+     * An output CSS is 160 KB of text: printing it in full hides the answer instead of
+     * showing it. Here we say what came out, we do not pour it out.
      */
     private static String summarizeOutput(String out) {
         if (out == null) return I18n.tr("server.um.x.nothing");
@@ -5689,11 +5721,11 @@ public final class UpdateManager {
     }
 
     /**
-     * Scarica davvero un foglio di stile e guarda com'e' fatto.
+     * Really downloads a stylesheet and looks at what it is like.
      *
-     * E' l'unica prova che distingue "la webmail risponde" da "la webmail si vede": nella 1.7
-     * gli asset passano da static.php con il percorso DENTRO l'URI, e se nginx non se ne accorge
-     * ogni CSS torna come pagina HTML — la pagina si apre, e non c'e' niente.
+     * It is the only test that tells "the webmail answers" apart from "the webmail shows": in 1.7
+     * the assets go through static.php with the path INSIDE the URI, and if nginx does not notice
+     * every CSS comes back as an HTML page -- the page opens, and there is nothing.
      */
     private static JSONObject testCssAsset(String name, String port) {
         JSONObject r = new JSONObject().put("ok", false);
@@ -5703,16 +5735,16 @@ public final class UpdateManager {
         Matcher m = Pattern.compile("href=\"([^\"]*\\.css[^\"]*)\"").matcher(html);
         if (!m.find()) return r.put("error", I18n.tr("server.um.testCssAsset.1"));
         String css = m.group(1).replace("&amp;", "&");
-        // Il link e' relativo ("static.php/skins/..."): va reso assoluto, altrimenti curl
-        // non ha un URL da chiamare e risponde 000 — che sembrerebbe un guasto del server.
+        // The link is relative ("static.php/skins/..."): it must be made absolute, otherwise curl
+        // has no URL to call and answers 000 -- which would look like a server fault.
         String url = css.startsWith("http") ? css
                    : css.startsWith("/") ? base + css
                    : base + "/" + css;
         String out = sh("curl -sk -m 20 -o /dev/null -w '%{http_code} %{content_type}' " + res
                 + "'" + url + "' 2>&1", 60).trim();
-        // Le intestazioni intere dicono CHI ha risposto: "X-Powered-By: PHP" vuol dire che la
-        // richiesta e' arrivata a PHP e il problema e' dentro l'applicazione; la sua assenza
-        // vuol dire che l'ha fermata nginx, e allora il problema e' nell'instradamento.
+        // The full headers say WHO answered: "X-Powered-By: PHP" means that the
+        // request reached PHP and the problem is inside the application; its absence
+        // means that nginx stopped it, and then the problem is in the routing.
         String head = sh("curl -sk -m 20 -D - -o /dev/null " + res + "'" + url + "' 2>&1", 60).trim();
         boolean good = out.startsWith("200") && out.contains("text/css");
         return r.put("ok", good).put("url", url).put("answer", out)
@@ -5721,26 +5753,26 @@ public final class UpdateManager {
     }
 
     /**
-     * Insegna a nginx a servire gli asset di Roundcube 1.7.
+     * Teaches nginx to serve the Roundcube 1.7 assets.
      *
-     * Il problema in una riga: la 1.7 chiede i fogli di stile come
+     * The problem in one line: 1.7 asks for the stylesheets as
      *   /static.php/skins/elastic/deps/bootstrap.min.css
-     * cioe' uno script PHP seguito da un percorso. Un "location ~ \.php$" non lo intercetta,
-     * perche' quell'URI finisce in .css e non in .php: finisce in "location /", che lo manda a
-     * index.php, che risponde HTML. La pagina si apre e non ha ne' grafica ne' JavaScript.
+     * that is a PHP script followed by a path. A "location ~ \.php$" does not catch it,
+     * because that URI ends in .css and not in .php: it ends up in "location /", which sends it to
+     * index.php, which answers HTML. The page opens and has neither graphics nor JavaScript.
      *
-     * La cura e' un location che riconosce lo script anche quando ha un percorso attaccato, e
-     * che passa a PHP il percorso separato (PATH_INFO), che e' come static.php sa quale file
-     * servire. Niente altro: la configurazione e' quella del wiki ufficiale, senza aggiunte.
-     * Ci avevo messo un "try_files $fastcgi_script_name =404" per fermare i sondaggi automatici
-     * prima di PHP, e quella riga era la causa del guasto: la sua redirezione interna riscrive
-     * l'URI al solo nome dello script, PATH_INFO arriva vuota e ogni asset diventa un 404.
-     * Se un giorno si volesse quella protezione, la forma che NON rompe il percorso e'
+     * The cure is a location that recognizes the script even when it has a path attached, and
+     * that passes the separate path to PHP (PATH_INFO), which is how static.php knows which file
+     * to deliver. Nothing else: the configuration is the one from the official wiki, without additions.
+     * I had put a "try_files $fastcgi_script_name =404" in it to stop automated probes
+     * before PHP, and that line was the cause of the fault: its internal redirect rewrites
+     * the URI to the script name alone, PATH_INFO arrives empty and every asset becomes a 404.
+     * If one day that protection were wanted, the form that does NOT break the path is
      *   if (!-f $document_root$fastcgi_script_name) { return 404; }
-     * verificata con nginx e PHP veri. Ma non e' nella documentazione, quindi non e' qui.
+     * verified with real nginx and PHP. But it is not in the documentation, so it is not here.
      *
-     * fastcgi_pass NON viene inventato: si riprende dal blocco che c'e', perche' su un'altra
-     * installazione potrebbe essere un indirizzo TCP invece di un socket.
+     * fastcgi_pass is NOT invented: it is taken from the block that is there, because on another
+     * installation it could be a TCP address instead of a socket.
      */
     public static JSONObject repairNginxPathInfo(boolean run) {
         JSONObject r = new JSONObject();
@@ -5752,7 +5784,7 @@ public final class UpdateManager {
             int rootLine = roots.getJSONObject(0).getInt("line");
             java.util.List<String> lines = Files.readAllLines(Paths.get(file));
 
-            // Il location del PHP dentro questo blocco server.
+            // The PHP location inside this server block.
             int start = -1;
             for (int i = rootLine; i < Math.min(lines.size(), rootLine + 60); i++) {
                 String t = lines.get(i);
@@ -5761,13 +5793,13 @@ public final class UpdateManager {
             if (start < 0)
                 return r.put("success", false).put("error",
                         I18n.tr("server.um.repairNginxPathInfo.1"));
-            // Gia' a posto? Si guarda TUTTO il blocco, non la riga dopo: dopo una riparazione
-            // precedente la seconda riga puo' essere il rewrite degli URL sicuri, e cercando
-            // solo li' il pannello riparerebbe una seconda volta cio' che e' gia' riparato.
+            // Already in place? The WHOLE block is looked at, not the next line: after a previous
+            // repair the second line may be the rewrite for the secure URLs, and by looking
+            // only there the panel would repair a second time what is already repaired.
             boolean haSplit = false, haTryFiles = false;
             for (int i = start; i < Math.min(lines.size(), start + 25); i++) {
                 if (lines.get(i).contains("fastcgi_split_path_info")) haSplit = true;
-                // Questa riga ANNULLA la precedente: c'e' ma non basta, anzi rompe.
+                // This line CANCELS the previous one: it is there but it is not enough, in fact it breaks things.
                 if (lines.get(i).contains("try_files") && lines.get(i).contains("fastcgi_script_name"))
                     haTryFiles = true;
                 if (lines.get(i).trim().equals("}")) break;
@@ -5778,9 +5810,9 @@ public final class UpdateManager {
             if (haSplit && haTryFiles)
                 r.put("reason", I18n.tr("server.um.repairNginxPathInfo.3"));
 
-            // Le graffe dentro le virgolette NON sono blocchi: la riga di rewrite per gli URL
-            // sicuri contiene "{16}", e contarla chiuderebbe il blocco nel punto sbagliato,
-            // riscrivendo mezza configurazione. Anche il testo dopo # e' commento, non codice.
+            // Braces inside quotes are NOT blocks: the rewrite line for the secure
+            // URLs contains "{16}", and counting it would close the block in the wrong place,
+            // rewriting half the configuration. The text after # is also a comment, not code.
             int braces = 0, end = -1;
             for (int i = start; i < lines.size(); i++) {
                 boolean quotes = false;
@@ -5796,9 +5828,9 @@ public final class UpdateManager {
             if (end < 0)
                 return r.put("success", false).put("error", I18n.tr("server.um.repairNginxPathInfo.4"));
 
-            // use_secure_urls mette un prefisso di 16 caratteri davanti a ogni URL: se e' attivo
-            // serve la riga di rewrite, in ENTRAMBI i blocchi, altrimenti nulla combacia piu'.
-            // Non si presume: si legge dalla configurazione di Roundcube.
+            // use_secure_urls puts a 16-character prefix in front of every URL: if it is on
+            // the rewrite line is needed, in BOTH blocks, otherwise nothing matches any more.
+            // It is not presumed: it is read from Roundcube's configuration.
             boolean safeUrls = ok("grep -qE \"^[^/]*.use_secure_urls.*=.*(true|1)\" "
                     + RC_DIR + "/config/config.inc.php", 20);
             r.put("safeUrls", safeUrls);
@@ -5814,14 +5846,14 @@ public final class UpdateManager {
 
             String ind = lines.get(start).replaceAll("[^ \t].*$", "");
             String i2 = ind + "    ";
-            // Ricalcata sull'esempio del wiki ufficiale di Roundcube (pagina Installation),
-            // SENZA aggiunte. Ci avevo messo un "try_files $fastcgi_script_name =404" per
-            // impedire che i sondaggi automatici arrivassero a PHP: quella riga fa una
-            // redirezione interna che riscrive l'URI al solo nome dello script, e da quel
-            // momento $fastcgi_path_info si ricalcola su un URI che il percorso non ce l'ha
-            // piu'. Risultato: PATH_INFO arriva a static.php VUOTA, e siccome l'operatore ??
-            // di PHP non ripiega su una stringa vuota, ogni foglio di stile diventa un 404.
-            // Riprodotto con nginx e un PHP veri: e' esattamente il guasto del 31/08/2026.
+            // Modeled on the example of the official Roundcube wiki (Installation page),
+            // WITHOUT additions. I had put a "try_files $fastcgi_script_name =404" in it to
+            // prevent automated probes from reaching PHP: that line does an internal
+            // redirect that rewrites the URI to the script name alone, and from that
+            // moment $fastcgi_path_info is recomputed on a URI that no longer has the
+            // path. Result: PATH_INFO reaches static.php EMPTY, and since the PHP ??
+            // operator does not fall back on an empty string, every stylesheet becomes a 404.
+            // Reproduced with real nginx and PHP: it is exactly the fault of 2026-08-31.
             java.util.List<String> fresh = new ArrayList<>(java.util.List.of(
                 ind + "# Roundcube 1.7 serves its assets as /static.php/path/to/file.css:",
                 ind + "# a PHP script with a path attached. A location that wants .php",
@@ -5870,7 +5902,7 @@ public final class UpdateManager {
                         .put("error", I18n.tr("server.um.repairNginxPathInfo.12"));
             }
 
-            // La prova che conta: il CSS torna come CSS?
+            // The test that counts: does the CSS come back as CSS?
             JSONObject pw = testWebmailOrigin();
             String name = pw.optString("url", "").replaceAll("^https://", "").replaceAll(":.*$", "");
             String port = pw.optString("url", "").replaceAll(".*:", "").replaceAll("/.*$", "");
@@ -5890,14 +5922,14 @@ public final class UpdateManager {
         JSONObject r = new JSONObject();
         JSONArray entries = new JSONArray();
         try {
-            // 1. Dove punta nginx adesso
+            // 1. Where nginx points now
             JSONArray roots = nginxRoundcubeRoots();
             String root = roots.length() > 0 ? roots.getJSONObject(0).getString("root") : RC_DIR;
             String file = roots.length() > 0 ? roots.getJSONObject(0).getString("file") : "?";
             entries.put(new JSONObject().put("title", I18n.tr("server.um.roundcubeDiagnostics.1"))
                     .put("text", I18n.tr("server.um.roundcubeDiagnostics.2", java.util.Map.of("root", String.valueOf(root), "file", String.valueOf(file)))));
 
-            // 2. Il log di errore: e' li' che nginx dice PERCHE'
+            // 2. The error log: that is where nginx says WHY
             String logPath = sh("grep -hE '^[[:space:]]*error_log' /usr/local/etc/nginx/nginx.conf "
                     + "2>/dev/null | head -1 | awk '{print $2}' | tr -d ';'", 30).trim();
             if (!logPath.matches("/[A-Za-z0-9._/-]{1,200}")) logPath = "/var/log/nginx/error.log";
@@ -5905,7 +5937,7 @@ public final class UpdateManager {
             entries.put(new JSONObject().put("title", I18n.tr("server.um.roundcubeDiagnostics.3", java.util.Map.of("logPath", String.valueOf(logPath))))
                     .put("text", log.isEmpty() ? I18n.tr("server.um.x.empty") : log));
 
-            // 3. Permessi lungo tutto il cammino: basta una cartella non attraversabile
+            // 3. Permissions along the whole path: a single non-traversable folder is enough
             StringBuilder perm = new StringBuilder();
             String[] pieces = root.split("/");
             StringBuilder acc = new StringBuilder();
@@ -5917,11 +5949,11 @@ public final class UpdateManager {
             entries.put(new JSONObject().put("title", I18n.tr("server.um.roundcubeDiagnostics.4"))
                     .put("text", perm.toString().trim()));
 
-            // 4. Cosa c'e' davvero nella cartella servita
+            // 4. What is really in the served folder
             entries.put(new JSONObject().put("title", I18n.tr("server.um.roundcubeDiagnostics.5", java.util.Map.of("root", String.valueOf(root))))
                     .put("text", sh("ls -la " + root + " 2>&1 | head -25", 30)));
 
-            // 5. Con quale utente gira nginx: e' lui che deve poter leggere
+            // 5. Which user nginx runs as: it is the one that must be able to read
             String user = sh("grep -hE '^[[:space:]]*user[[:space:]]' /usr/local/etc/nginx/nginx.conf "
                     + "2>/dev/null | head -1 | awk '{print $2}' | tr -d ';'", 20).trim();
             String proc = sh("ps -axo user,command 2>/dev/null | grep '[n]ginx: worker' | head -2", 30);
@@ -5929,7 +5961,7 @@ public final class UpdateManager {
                     .put("text", I18n.tr("server.um.x.nginxUserDeclared", java.util.Map.of("u", String.valueOf(user.isEmpty() ? I18n.tr("server.um.x.nginxUserNobody") : user)))
                             + "\n" + (proc.isEmpty() ? I18n.tr("server.um.x.noWorker") : proc)));
 
-            // 6. La risposta del SERVER, scavalcando qualunque cosa stia davanti
+            // 6. The SERVER's answer, bypassing whatever stands in front
             JSONObject pw = testWebmailOrigin();
             entries.put(new JSONObject().put("title", I18n.tr("server.um.roundcubeDiagnostics.8"))
                     .put("text", pw.optBoolean("ok")
@@ -5939,11 +5971,11 @@ public final class UpdateManager {
                               + (pw.optBoolean("viaCdn") ? "  " + I18n.tr("server.um.x.cdnAnswered") : "")
                               + "\n\n" + pw.optString("headers")));
 
-            // 6b. Il .htaccess dice come Roundcube vuole essere servita: e' la fonte autorevole
+            // 6b. The .htaccess says how Roundcube wants to be served: it is the authoritative source
             entries.put(new JSONObject().put("title", I18n.tr("server.um.roundcubeDiagnostics.9", java.util.Map.of("root", String.valueOf(root))))
                     .put("text", sh("cat " + root + "/.htaccess 2>&1", 30)));
 
-            // 6c. Gli asset: nella 1.7 passano da static.php, ed e' li' che nginx sbaglia di solito.
+            // 6c. The assets: in 1.7 they go through static.php, and that is where nginx usually gets it wrong.
             if (pw.optBoolean("ok")) {
                 String u = pw.optString("url");
                 String hName = u.replaceAll("^https://", "").replaceAll(":.*$", "");
@@ -5959,7 +5991,7 @@ public final class UpdateManager {
                                 : I18n.tr("server.um.roundcubeDiagnostics.13"))
                             + "\n\n" + css.optString("headers", "")));
 
-                // Il file che static.php dovrebbe servire esiste davvero sul disco?
+                // Does the file static.php should serve really exist on disk?
                 String pathInfo = css.optString("url", "").replaceAll(".*/static\\.php", "").replaceAll("\\?.*$", "");
                 if (!pathInfo.isEmpty() && pathInfo.matches("/[A-Za-z0-9._/-]{1,200}")) {
                     String expected = RC_DIR + pathInfo;
@@ -5969,10 +6001,10 @@ public final class UpdateManager {
                                 + sh("ls -d " + RC_DIR + "/skins/*/ 2>&1 | head -5", 20)));
                 }
 
-                // L'esperimento che separa le due possibilita': static.php eseguito a mano,
-                // con un PATH_INFO noto e senza web server di mezzo. Se qui il file esce,
-                // l'applicazione funziona e il problema e' in cio' che nginx le manda; se
-                // fallisce anche qui, il problema e' dentro static.php o nei suoi percorsi.
+                // The experiment that separates the two possibilities: static.php run by hand,
+                // with a known PATH_INFO and no web server in between. If the file comes out
+                // here, the application works and the problem is in what nginx sends it; if
+                // it fails here too, the problem is inside static.php or its paths.
                 if (!pathInfo.isEmpty() && pathInfo.matches("/[A-Za-z0-9._/-]{1,200}")) {
                     String cd = "cd " + RC_DIR + "/public_html && ";
                     String reqUri = "/static.php" + pathInfo;
@@ -5988,7 +6020,7 @@ public final class UpdateManager {
                                 + summarizeOutput(withoutPathInfo)));
                 }
 
-                // Cosa riceve PHP passando da nginx: e' l'altra meta' della bisezione.
+                // What PHP receives going through nginx: it is the other half of the bisection.
                 JSONObject probe = probePathInfo();
                 entries.put(new JSONObject().put("title", I18n.tr("server.um.roundcubeDiagnostics.16"))
                         .put("text", probe.optBoolean("ok")
@@ -5996,12 +6028,12 @@ public final class UpdateManager {
                               + probe.optString("output")
                             : I18n.tr("server.um.x.notSucceeded", java.util.Map.of("e", String.valueOf(probe.optString("error"))))));
 
-                // Il codice vero installato su QUESTO server, non quello del repository a monte.
+                // The real code installed on THIS server, not the one in the upstream repository.
                 entries.put(new JSONObject().put("title", I18n.tr("server.um.roundcubeDiagnostics.17"))
                         .put("text", sh("head -45 " + RC_DIR + "/public_html/static.php 2>&1", 30)));
 
-                // PHP puo' essere confinato: se non gli e' permesso uscire da public_html,
-                // static.php non raggiunge le skin e risponde 404 pur funzionando.
+                // PHP may be confined: if it is not allowed to go outside public_html,
+                // static.php does not reach the skins and answers 404 while working.
                 entries.put(new JSONObject().put("title", I18n.tr("server.um.roundcubeDiagnostics.18"))
                         .put("text", sh("grep -rhnE '^[^;]*(open_basedir|chroot|chdir)' "
                             + "/usr/local/etc/php.ini /usr/local/etc/php-fpm.conf "
@@ -6013,7 +6045,7 @@ public final class UpdateManager {
                                 + "/usr/local/etc/php-fpm.d/ /usr/local/etc/php/ 2>/dev/null | head -12", 30)));
             }
 
-            // 7. Il blocco server, come sta adesso sul disco
+            // 7. The server block, as it is now on disk
             if (!"?".equals(file)) {
                 int line = roots.getJSONObject(0).getInt("line");
                 int from = Math.max(1, line - 12), a2 = line + 22;
@@ -6027,8 +6059,8 @@ public final class UpdateManager {
     }
 
     /**
-     * @param approvedSignature l'impronta del piano che chi preme ha letto: il lavoro ricalcola il
-     *                          piano e parte solo se e' lo stesso (vedi startGuidedUpdate)
+     * @param approvedSignature the signature of the plan that whoever presses has read: the job recomputes the
+     *                          plan and starts only if it is the same (see startGuidedUpdate)
      */
     public static JSONObject startRoundcubeUpdate(String approvedSignature) {
         if (!validSignature(approvedSignature))
@@ -6040,13 +6072,13 @@ public final class UpdateManager {
     }
 
     /**
-     * Salto di versione maggiore di Roundcube.
+     * Major version jump of Roundcube.
      *
-     * Il pacchetto e' la parte facile. La parte che rompe e' lo SCHEMA del database: la 1.7 lo
-     * cambia, e finche' non si esegue bin/updatedb.sh la webmail non funziona. E quel cambio
-     * non si annulla, quindi la copia del database viene prima di tutto.
-     * L'altra insidia e' OPcache: aggiornati i file PHP, php-fpm continuerebbe a servire il
-     * codice vecchio gia' compilato in memoria — aggiornato sul disco, non in servizio.
+     * The package is the easy part. The part that breaks is the database SCHEMA: 1.7
+     * changes it, and until bin/updatedb.sh is run the webmail does not work. And that change
+     * cannot be undone, so the database copy comes before everything else.
+     * The other pitfall is OPcache: once the PHP files are updated, php-fpm would keep serving the
+     * old code already compiled in memory -- updated on disk, not in service.
      */
     private static void runRoundcubeUpdate(Job job, String approvedSignature) {
         try {
@@ -6056,11 +6088,11 @@ public final class UpdateManager {
         }
     }
 
-    /** I passi dell'aggiornamento di Roundcube, senza chiudere il registro: li usa anche «Aggiorna tutto» (reperto 207). */
+    /** The steps of the Roundcube update, without closing the log: "Update all" uses them too (finding 207). */
     private static void roundcubeSteps(Job job, String approvedSignature) {
         job.status = "running";
         final int TOT = 8;
-        // L'elenco su disco di questo lavoro, da riproteggere nel finally: vuoto finche' non e' scritto.
+        // The on-disk list of this job, to lock again in the finally: empty until it is written.
         java.util.List<String> listed = new ArrayList<>();
         String pkg = "", backupDir = "";
         Map<String, Boolean> servicesBefore = servicesState();
@@ -6088,8 +6120,8 @@ public final class UpdateManager {
             pkg = pf.optString("pkg", "");
             long tablesBefore = pf.optLong("tables", 0);
             job.write("  " + pkg + " " + pf.optString("current") + " -> " + pf.optString("available"));
-            // Si esegue il piano che e' stato letto, o niente: prima della copia del database e di
-            // ogni altra cosa, cosi' un piano cambiato non lascia dietro niente.
+            // The plan that was read is carried out, or nothing is: before the database copy and
+            // everything else, so a changed plan leaves nothing behind.
             JSONObject plan = pf.optJSONObject("plan");
             String mismatch = approvedPlanMismatch(job, plan, pf.optString("signature", null), approvedSignature);
             if (mismatch != null) {
@@ -6124,12 +6156,12 @@ public final class UpdateManager {
             job.advance(3, TOT);
             job.write("");
             job.write(I18n.tr("server.um.runRoundcubeUpdate.5", java.util.Map.of("total", String.valueOf(TOT))));
-            // Le protezioni che il piano toglie, ne' una in meno ne' una in piu'; l'elenco su disco
-            // prima, e da qui il finally riprotegge anche se lo sblocco fallisse a meta'.
+            // The locks the plan removes, not one fewer nor one more; the on-disk list
+            // first, and from here on the finally locks again even if the unlocking failed halfway.
             final String rcPkg = pkg;
             listed = unlockForPlan(job, plan, java.util.List.of());
-            // Prima si scarica e si ricalcola: finche' i pacchetti non sono scaricati pkg non vede
-            // i conflitti sui file (vedi fetchAndRecheck). -U: lo stesso catalogo del piano.
+            // First download and compute again: until the packages are downloaded pkg does not see
+            // the file conflicts (see fetchAndRecheck). -U: the same catalog as the plan.
             Recheck grown = fetchAndRecheck(job, "pkg upgrade -F -y -U " + pkg + " 2>&1", plan,
                     () -> roundcubePlan(rcPkg));
             if (grown.stop() != null) throw org.daemoxcp.mail.util.ShownException.translated(grown.stop());
@@ -6137,13 +6169,13 @@ public final class UpdateManager {
             PlanWatch watch = PlanWatch.take(sideEffects);
             StringBuilder cat = new StringBuilder();
             int code = runLogged(job, "pkg upgrade -y -U " + pkg + " 2>&1", 1800, cat);
-            // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso e si e' fermato li': lo stesso comando, una volta.
+            // 4 = EX_NEEDRESTART: pkg upgraded itself and stopped there: the same command, once more.
             if (code == 4) {
                 job.write(I18n.tr("server.um.runGuidedUpdate.10"));
                 code = runLogged(job, "pkg upgrade -y -U " + pkg + " 2>&1", 1800, cat);
             }
-            // Il confronto prima di decidere se fermarsi: un pkg uscito male e' proprio il caso in
-            // cui la macchina puo' essere rimasta a meta'. php-fpm si riavvia piu' sotto.
+            // The comparison before deciding whether to stop: a pkg that ended badly is exactly the case
+            // in which the machine may have been left halfway. php-fpm restarts further down.
             outcome = checkPlanOutcome(job, watch, plan, "Roundcube update", true);
             if (code != 0) throw new IllegalStateException("pkg upgrade exited with code " + code);
             if (outcome.mapsProblem() != null) throw org.daemoxcp.mail.util.ShownException.translated(outcome.mapsProblem());
@@ -6154,7 +6186,7 @@ public final class UpdateManager {
             job.advance(4, TOT);
             job.write("");
             job.write(I18n.tr("server.um.runRoundcubeUpdate.6", java.util.Map.of("total", String.valueOf(TOT))));
-            // Il pacchetto puo' aver messo un config di esempio al posto del tuo.
+            // The package may have put a sample config in place of yours.
             JSONObject dsnAfter = dsnRoundcube();
             if (!dsnAfter.optBoolean("ok")) {
                 ok("cp -p " + backupDir + "/config.inc.php " + RC_DIR + "/config/config.inc.php", 30);
@@ -6186,19 +6218,19 @@ public final class UpdateManager {
             job.advance(7, TOT);
             job.write("");
             job.write(I18n.tr("server.um.runRoundcubeUpdate.12", java.util.Map.of("total", String.valueOf(TOT))));
-            // Il pacchetto ha appena rimesso logs e temp a www:www: tornano alla webmail prima che
-            // php-fpm riparta, non alla fine del lavoro, perche' la prova qui sotto li usa gia'.
+            // The package has just set logs and temp back to www:www: they go back to the webmail before
+            // php-fpm restarts, not at the end of the job, because the test below already uses them.
             java.util.List<String> given = RoundcubeUser.repairOwnership();
             if (!given.isEmpty())
                 job.write(I18n.tr("server.um.runRoundcubeUpdate.ownership", java.util.Map.of("user", RoundcubeUser.USER,
                         "n", String.valueOf(given.size()))));
             String svc = realServiceName("php_fpm");
-            // php-fpm non riavviato, o ripartito con lo stesso pid: la webmail serve ancora il codice vecchio.
+            // php-fpm not restarted, or back up with the same pid: the webmail is still serving the old code.
             boolean phpHeld = false;
             if (svc != null && sideEffects.configChangedByScript()) {
-                // Uno script ha cambiato la configurazione e il piano non lo diceva: riavviare la
-                // metterebbe in vigore senza che nessuno l'abbia letta (reperto 42). Come nel guidato,
-                // php-fpm resta con quella di prima e chi legge decide.
+                // A script changed the configuration and the plan did not say so: restarting would
+                // put it into effect without anyone having read it (finding 42). As in the guided
+                // update, php-fpm stays with the previous one and the reader decides.
                 phpHeld = true;
                 job.write(I18n.tr("server.drift.restartHeld", java.util.Map.of("list", svc)));
                 job.write(I18n.tr("server.drift.restartHeldCost"));
@@ -6207,7 +6239,7 @@ public final class UpdateManager {
                 String test = testConfigOf(svc);
                 Shell.Result pr = test == null ? null : Shell.runShell(Duration.ofSeconds(60), test + " 2>&1");
                 if (pr != null && !pr.success()) {
-                    // Riavviarlo con una configurazione che rifiuta lo spegnerebbe e basta.
+                    // Restarting it with a configuration it refuses would just shut it down.
                     job.write(I18n.tr("server.um.runGuidedUpdate.22", java.util.Map.of("s", svc)));
                     for (String l : pr.outputTrim().split("\n")) if (!l.trim().isEmpty()) job.write("      " + l);
                     job.write(I18n.tr("server.um.runGuidedUpdate.23"));
@@ -6219,7 +6251,7 @@ public final class UpdateManager {
                     String pidAfter = servicePid(svc);
                     job.write("    " + svc + ": " + (up ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigration84.26"))
                             + (pidBefore.isEmpty() || pidAfter.isEmpty() ? "" : "  (pid " + pidBefore + " -> " + pidAfter + ")"));
-                    // Lo stesso pid e' il processo di prima ancora in piedi: OPcache servirebbe la versione vecchia.
+                    // The same pid is the previous process still standing: OPcache would serve the old version.
                     if (!up || (!pidBefore.isEmpty() && pidBefore.equals(pidAfter))) phpHeld = true;
                 }
             } else job.write(I18n.tr("server.um.runRoundcubeUpdate.13"));
@@ -6232,18 +6264,18 @@ public final class UpdateManager {
             boolean tabOk = tablesAfter >= tablesBefore;
             if (!tabOk) job.write(I18n.tr("server.um.runRoundcubeUpdate.16"));
 
-            // La webmail risponde davvero? Non basta che i file siano aggiornati.
+            // Does the webmail really answer? It is not enough that the files are updated.
             //
-            // E bisogna chiederlo AL SERVER. Chiedendolo al nome pubblico si finisce a parlare
-            // con cio' che sta davanti — una CDN, un proxy — e a prendere la sua risposta per
-            // quella del server: e' successo qui, con un 403 di Cloudflare scambiato per un
-            // guasto della webmail mentre nginx non aveva nemmeno visto la richiesta.
+            // And it must be asked OF THE SERVER. Asking the public name you end up talking
+            // to what stands in front -- a CDN, a proxy -- and taking its answer for the
+            // server's: it happened here, with a Cloudflare 403 mistaken for a webmail
+            // fault while nginx had not even seen the request.
             JSONObject pw = testWebmailOrigin();
             boolean testedWeb = !pw.has("error") || pw.has("code");
             boolean webOk = pw.optBoolean("ok");
             if (!testedWeb) {
                 job.write("    " + I18n.tr("server.um.x.webTestNotRun", java.util.Map.of("e", String.valueOf(pw.optString("error")))));
-                webOk = true;   // non provata non vuol dire guasta: non boccio cio' che non ho misurato
+                webOk = true;   // not tested does not mean broken: I do not fail what I have not measured
             } else if (webOk) {
                 job.write("    " + I18n.tr("server.um.x.urlAnswersOrigin", java.util.Map.of("url", String.valueOf(pw.optString("url")), "code", String.valueOf(pw.optString("code")))));
             } else {
@@ -6269,9 +6301,9 @@ public final class UpdateManager {
             } else if (tabOk && webOk && rootOk) {
                 job.status = "completed";
                 job.write("");
-                // "In servizio" si puo' dire solo se qualcuno l'ha visto rispondere. Senza quella
-                // prova il lavoro puo' essere andato benissimo, ma il verdetto sarebbe piu' verde
-                // delle prove che ho: allora lo dico, e la verifica la fai tu.
+                // "In service" can be said only if someone has seen it answer. Without that
+                // test the job may have gone perfectly well, but the verdict would be greener
+                // than the tests I have: so I say so, and you do the check.
                 job.write(testedWeb
                         ? I18n.tr("server.um.runRoundcubeUpdate.18")
                         : I18n.tr("server.um.runRoundcubeUpdate.19"));
@@ -6288,7 +6320,7 @@ public final class UpdateManager {
         } catch (Exception e) {
             job.status = "error";
             job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
-            // pkg fermo a meta' dopo che uno script ha gia' scritto: si dicono tutte e due.
+            // pkg stopped halfway after a script has already written: both are stated.
             for (String p : sideEffects.problems()) job.errorMessage += " " + p;
             if (outcome != null && !outcome.outsidePlan().isEmpty()) job.errorMessage += " " + divergenceMessage(outcome.outsidePlan());
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
@@ -6300,17 +6332,17 @@ public final class UpdateManager {
         }
     }
 
-    // ===================== aggiornamento della JVM del pannello =====================
+    // ===================== update of the panel JVM =====================
 
     private static final String JDK_DIR = "/var/db/daemoxcp-mail/jdk";
-    /** Dove finisce cio' che il pannello scrive quando riparte staccato dal terminale. */
+    /** Where what the panel writes ends up when it restarts detached from the terminal. */
     private static final String PANEL_LOG = "/var/db/daemoxcp-mail/panel.log";
-    /** Il servizio del pannello: il suo script e il pidfile che vi scrive daemon -p (RcScriptRepair). */
+    /** The panel service: its script and the pidfile that daemon -p writes for it (RcScriptRepair). */
     static final String RC_NAME = PanelRcScript.NAME;
     static String rcScript = PanelRcScript.PATH;
     static String rcPidfile = PanelRcScript.PIDFILE;
 
-    /** Vero se questo processo l'ha acceso il servizio: lo script c'e' e il suo pidfile porta il nostro pid. */
+    /** True if this process was started by the service: the script is there and its pidfile holds our pid. */
     static boolean startedByService(long pid) {
         try {
             return Files.isRegularFile(Paths.get(rcScript))
@@ -6321,18 +6353,18 @@ public final class UpdateManager {
     }
 
     /**
-     * La riga di comando che riavvia QUESTO pannello, ricostruita dal processo vivo.
+     * The command line that restarts THIS panel, rebuilt from the live process.
      *
-     * Non si legge da uno script sul disco: quello potrebbe essere vecchio, assente, o non
-     * essere quello con cui il pannello e' stato davvero acceso. Si prende la java in uso,
-     * le opzioni con cui questa macchina virtuale e' partita e il file jar da cui questa
-     * classe e' stata caricata. Se il pannello e' stato avviato con "java -jar x.jar" e basta,
-     * la riga ricostruita e' altrettanto spoglia — ed e' giusto cosi': si riparte come si era.
+     * It is not read from a script on disk: that might be old, missing, or not be the
+     * one the panel was really started with. What is taken is the java in use, the
+     * options this virtual machine started with and the jar file this class was
+     * loaded from. If the panel was started with just "java -jar x.jar", the rebuilt
+     * line is just as bare -- and that is how it should be: it restarts as it was.
      */
     public static String startCommand(boolean webOnly) {
         StringBuilder c = new StringBuilder(System.getProperty("java.home", "") + "/bin/java");
         for (String a : java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()) {
-            // Le opzioni di misurazione non si riportano: appartengono a chi stava osservando.
+            // The measurement options are not carried over: they belong to whoever was observing.
             if (a.startsWith("-agentlib") || a.startsWith("-javaagent") || a.startsWith("-Xdebug")) continue;
             c.append(' ').append(a);
         }
@@ -6341,25 +6373,25 @@ public final class UpdateManager {
         return webOnly ? c.append(" --web").toString() : c.toString();
     }
 
-    /** Il file jar da cui gira questo pannello, o stringa vuota se non e' un jar. */
+    /** The jar file this panel runs from, or an empty string if it is not a jar. */
     public static String jarPath() {
         try {
             java.io.File f = new java.io.File(
                     UpdateManager.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            // Il jar spostato col nome nuovo da questo processo (PanelServiceRename): la macchina virtuale lo
-            // conosce ancora col nome di prima, il disco col nome di adesso.
+            // The jar moved to the new name by this process (PanelServiceRename): the virtual machine still
+            // knows it by the previous name, the disk by the current one.
             java.io.File now = new java.io.File(PanelServiceRename.current(f.getAbsolutePath()));
             return now.isFile() ? now.getAbsolutePath() : "";
         } catch (Exception e) { return ""; }
     }
 
     /**
-     * Scrive run.sh accanto al jar, se non c'e' gia'.
+     * Writes run.sh next to the jar, if it is not already there.
      *
-     * Non e' un file da distribuire: e' una comodita' che il pannello si crea da solo, e per
-     * questo rispecchia l'avvio VERO invece di una riga scritta a mano mesi fa. Se esiste gia'
-     * non lo tocca: potrebbe essere stato adattato, e sovrascriverlo cancellerebbe l'adattamento
-     * senza dire niente.
+     * It is not a file to distribute: it is a convenience the panel creates for itself, and for
+     * that reason it mirrors the REAL startup instead of a line written by hand months ago. If it
+     * already exists it does not touch it: it might have been adapted, and overwriting it would
+     * erase the adaptation without saying anything.
      */
     public static String createRunSh() {
         try {
@@ -6371,10 +6403,11 @@ public final class UpdateManager {
                 + "# Created by the panel: it mirrors how the panel was really started.\n"
                 + "# Without arguments: the on-screen menu (a terminal is needed).\n"
                 + "# With --web: only the web server, without menu and without terminal.\n"
-                // La cartella non e' quella del jar ma quella da cui il pannello e' PARTITO:
-                // "./database" e "./install_scripts" sono relativi a quella. Nel caso normale
-                // coincidono, ma se non coincidessero un run.sh che entra nella cartella del jar
-                // farebbe nascere un secondo database vuoto accanto al primo, senza dire niente.
+                // The folder is not the jar's but the one the panel STARTED from:
+                // "./database" and "./install_scripts" are relative to it. In the normal case
+                // they coincide, but if they did not, a run.sh that enters the jar's folder
+                // would create a second empty database next to the first, without saying
+                // anything.
                 + "cd '" + System.getProperty("user.dir", ".") + "' || exit 1\n"
                 + "exec " + startCommand(false) + " \"$@\"\n");
             ok("chmod 700 " + f, 15);
@@ -6383,23 +6416,24 @@ public final class UpdateManager {
     }
 
     /**
-     * Come si rilancia il pannello dopo averlo fermato.
+     * How the panel is relaunched after stopping it.
      *
-     * Non si indovina: si ricostruisce la riga di comando di QUESTO processo — stessa java,
-     * stesse opzioni della macchina virtuale, stesso file jar — e le si aggiunge --web.
+     * It is not guessed: the command line of THIS process is rebuilt -- same java,
+     * same virtual machine options, same jar file -- and --web is added to it.
      *
-     * Il --web e' la chiave di tutto. Il pannello ha un'interfaccia a schermo che pretende un
-     * terminale, e uno script staccato non ne ha uno: rilanciarlo normalmente lo farebbe morire
-     * un istante dopo, lasciando il pannello web spento. In modalita' solo-web il terminale non
-     * serve, quindi il ritorno e' certo. Si perde il MENU a schermo, non il pannello: per
-     * riaverlo basta fermare il processo e riavviarlo da SSH senza --web.
+     * The --web is the key to everything. The panel has an on-screen interface that requires a
+     * terminal, and a detached script does not have one: relaunching it normally would make it die
+     * an instant later, leaving the web panel off. In web-only mode the terminal is not
+     * needed, so the return is certain. What is lost is the on-screen MENU, not the panel: to
+     * get it back it is enough to stop the process and restart it from SSH without --web.
      */
     private static JSONObject restartStrategy() {
         String dir = System.getProperty("user.dir", "");
-        // Acceso dal servizio (/usr/local/etc/rc.d/daemoxcp_mail, come all'avvio della macchina): si riaccende col
-        // servizio. Con la riga di daemon(8) ricostruita il pannello tornava su senza il pidfile del servizio:
-        // «service daemoxcp_mail status» lo dava spento, uno stop non lo fermava e uno start ne accendeva un secondo
-        // (reperto 195). Il servizio rifa' la stessa riga di sempre, col suo pidfile e il suo registro.
+        // Started by the service (/usr/local/etc/rc.d/daemoxcp_mail, as at machine boot): it is started again
+        // with the service. With the rebuilt daemon(8) line the panel came back up without the service's
+        // pidfile: "service daemoxcp_mail status" reported it stopped, a stop did not stop it and a start
+        // started a second one (finding 195). The service redoes the same line as always, with its pidfile
+        // and its log.
         if (startedByService(ProcessHandle.current().pid())) {
             String command = "/usr/sbin/service " + RC_NAME + " onestart";
             return new JSONObject()
@@ -6423,12 +6457,13 @@ public final class UpdateManager {
                 .put("menuCommand", startCommand(false))
                 .put("jar", jar)
                 .put("command", command)
-                // -f manda i tre descrittori a /dev/null, e da solo butta via TUTTO cio' che il
-                // pannello scrive: e' successo il 31/08/2026, pannello riacceso e muto, senza
-                // nessun modo di sapere cosa stesse facendo. -o riporta stdout e stderr in un
-                // file, e per daemon(8) le due opzioni si combinano proprio cosi': prima
-                // /dev/null, poi la redirezione al file. -t da' al processo un nome riconoscibile
-                // in ps, cosi' si trova senza cercare "java" fra tutti i java.
+                // -f sends the three descriptors to /dev/null, and on its own throws away
+                // EVERYTHING the panel writes: it happened on 2026-08-31, panel started again
+                // and silent, with no way of knowing what it was doing. -o brings stdout and
+                // stderr back into a file, and for daemon(8) the two options combine exactly
+                // like this: first /dev/null, then the redirection to the file. -t gives the
+                // process a recognizable name in ps, so it is found without looking for
+                // "java" among all the javas.
                 .put("log", PANEL_LOG)
                 .put("line", "/usr/sbin/daemon -f -o " + PANEL_LOG + " -t " + RC_NAME + ""
                         + " -- /bin/sh -c \"cd '" + dir + "' && exec " + command + "\"")
@@ -6439,13 +6474,13 @@ public final class UpdateManager {
     }
 
     /**
-     * La porta su cui il pannello sta ascoltando ADESSO, chiesta al sistema operativo.
+     * The port the panel is listening on NOW, asked of the operating system.
      *
-     * Si potrebbe leggerla dalla configurazione, ma la configurazione dice cosa era stato
-     * chiesto, non cosa sta succedendo. Qui serve sapere su cosa ribussare dopo il riavvio,
-     * quindi vale solo il fatto: quale porta ha aperto questo PID. Se non si riesce a
-     * stabilirlo si torna 0, e lo script salta la verifica invece di controllare la porta
-     * sbagliata e dichiarare un guasto che non c'e'.
+     * It could be read from the configuration, but the configuration says what had been
+     * requested, not what is happening. Here we need to know where to knock again after the
+     * restart, so only the fact counts: which port this PID has opened. If it cannot be
+     * established 0 is returned, and the script skips the check instead of checking the
+     * wrong port and declaring a fault that does not exist.
      */
     private static int listeningPort(long pid) {
         for (String line : sh("sockstat -46l 2>/dev/null").split("\n")) {
@@ -6462,34 +6497,34 @@ public final class UpdateManager {
         return 0;
     }
 
-    /** Il pacchetto che possiede la JVM su cui gira QUESTO processo. Non si deduce dal nome. */
+    /** The package that owns the JVM THIS process runs on. Not deduced from the name. */
     private static String jvmPackage() {
         String home = System.getProperty("java.home", "");
         if (home.isEmpty()) return "";
-        // "pkg which -q" risponde NOME-VERSIONE (openjdk25-25.0.2+10.f.1_2), non il nome.
-        // Con quello "pkg rquery" non trova niente, e una risposta vuota sembra "sei a posto".
-        // La normalizzazione la fa pkg stesso: e' l'unico che sa dove finisce il nome, visto
-        // che le versioni contengono + . _ e i nomi contengono cifre e trattini.
+        // "pkg which -q" answers NAME-VERSION (openjdk25-25.0.2+10.f.1_2), not the name.
+        // With that "pkg rquery" finds nothing, and an empty answer looks like "you are fine".
+        // The normalization is done by pkg itself: it is the only one that knows where the name
+        // ends, given that versions contain + . _ and names contain digits and hyphens.
         String nv = sh("pkg which -q " + home + "/bin/java 2>/dev/null").trim();
         if (!nv.matches("[A-Za-z0-9._+-]{1,80}")) return "";
-        // Non do per buona nemmeno la risposta di pkg: la accetto solo se il pacchetto
-        // con quel nome esiste davvero. E' cio' che distingue un nome da una stringa.
+        // I do not take even pkg's answer for granted: I accept it only if the package
+        // with that name really exists. That is what distinguishes a name from a string.
         String name = sh("pkg query %n " + nv + " 2>/dev/null").trim();
         if (name.matches("[A-Za-z0-9._+-]{1,64}") && ok("pkg info -e " + name, 15)) return name;
-        // Ripiego: taglio all'ultimo trattino seguito da una cifra, dove inizia la versione,
-        // e accetto il risultato solo se pkg conferma che quel pacchetto esiste davvero.
+        // Fallback: I cut at the last hyphen followed by a digit, where the version begins,
+        // and I accept the result only if pkg confirms that that package really exists.
         Matcher m = Pattern.compile("^(.+)-[0-9][^-]*$").matcher(nv);
         return m.find() && ok("pkg info -e " + m.group(1), 15) ? m.group(1) : "";
     }
 
     /**
-     * Controlli preliminari per l'aggiornamento della JVM. Tutti in sola lettura.
+     * Preliminary checks for the JVM update. All read-only.
      *
-     * Questo aggiornamento e' diverso da tutti gli altri per un motivo solo: il pannello CI GIRA
-     * SOPRA. Sostituire i file della JVM sotto un processo vivo rompe l'avvio dei sottoprocessi
-     * (jspawnhelper smette di combaciare con la JVM in memoria), quindi da quel momento ogni
-     * comando fallirebbe e ogni stato riportato dal pannello sarebbe falso. Per questo il lavoro
-     * lo fa uno script staccato: prima il pannello si ferma, poi si aggiorna, poi si riparte.
+     * This update is different from all the others for one reason only: the panel RUNS ON
+     * IT. Replacing the JVM files under a live process breaks the startup of subprocesses
+     * (jspawnhelper stops matching the JVM in memory), so from that moment every
+     * command would fail and every state reported by the panel would be false. That is why the
+     * job is done by a detached script: first the panel stops, then it is updated, then it restarts.
      */
     public static JSONObject javaPreflight() {
         JSONObject r = new JSONObject();
@@ -6544,8 +6579,8 @@ public final class UpdateManager {
                         I18n.tr("server.um.javaPreflight.9"));
             }
 
-            // Via di ritorno: un pacchetto ricostruito dai file INSTALLATI, non scaricato dal
-            // repository. Se il repository non ha piu' la versione vecchia, e' l'unico modo.
+            // Way back: a package rebuilt from the INSTALLED files, not downloaded from the
+            // repository. If the repository no longer has the old version, it is the only way.
             long free = number(sh("df -k /var/db | tail -1 | awk '{print $4}'", 30)) / 1024;
             long large = number(sh("pkg query %sb " + pkg + " 2>/dev/null", 30)) / 1024 / 1024;
             r.put("spaceMb", free).put("jdkMb", large);
@@ -6561,10 +6596,10 @@ public final class UpdateManager {
             addCheck(checks, "down", I18n.tr("server.um.x.downtime"), "wait",
                     I18n.tr("server.um.javaPreflight.13"));
 
-            // Il piano ESATTO, come per Roundcube, Python e MySQL: che cosa farebbe pkg aggiornando la JVM, calcolato
-            // su una copia del suo database con le stesse protezioni tolte. Prima la pagina diceva solo
-            // «25.0.4 -> 25.0.5», e pkg aggiornava anche quattro librerie di X11 senza che nessuno
-            // l'avesse letto (reperto 195). Il lavoro parte solo con l'impronta di questo piano.
+            // The EXACT plan, as for Roundcube, Python and MySQL: what pkg would do upgrading the JVM,
+            // computed on a copy of its database with the same locks removed. Before, the page said only
+            // "25.0.4 -> 25.0.5", and pkg also upgraded four X11 libraries without anyone having
+            // read it (finding 195). The job starts only with the signature of this plan.
             if (!vRepo.isEmpty()) {
                 JSONObject plan = javaPlan(pkg);
                 if (addPlanChecks(checks, plan, java.util.List.of(pkg), java.util.List.of(pkg), lock)) lock = true;
@@ -6581,15 +6616,15 @@ public final class UpdateManager {
     }
 
     /**
-     * Prepara lo script, lo verifica e lo lancia staccato. Poi il pannello muore: da quel
-     * momento in poi l'unico testimone e' il file di log, che si rilegge alla riaccensione.
+     * Prepares the script, checks it and launches it detached. Then the panel dies: from that
+     * moment on the only witness is the log file, which is read again when the panel starts again.
      */
     public static JSONObject startJavaUpdate(String approvedSignature) {
         if (!validSignature(approvedSignature))
             return new JSONObject().put("success", false).put("error", I18n.tr("server.um.plan.signatureMissing"));
-        // Il turno vale per la preparazione e il lancio. Poi lo script lavora fuori dal pannello:
-        // da li' in avanti lo copre l'elenco su disco, che ferma ogni altro lavoro sui pacchetti
-        // finche' il pannello riacceso non lo chiude.
+        // The turn covers the preparation and the launch. Then the script works outside the panel:
+        // from there on it is covered by the on-disk list, which stops any other package job
+        // until the restarted panel closes it.
         String id = "jdk-" + System.nanoTime();
         String refusal = PackageQueue.take(id, I18n.tr("server.um.startJavaUpdate.1"));
         if (refusal != null) return new JSONObject().put("success", false).put("error", refusal);
@@ -6597,22 +6632,23 @@ public final class UpdateManager {
         finally { PackageQueue.release(id); }
     }
 
-    /** Il piano esatto per aggiornare la JVM: lo stesso calcolo di Roundcube e del guidato. */
+    /** The exact plan to upgrade the JVM: the same computation as for Roundcube and the guided update. */
     private static JSONObject javaPlan(String pkg) {
         return judged(PackagePlan.planFor(java.util.List.of(pkg), lockedNames(),
                 UpdateManager::reasonNotToUnlock, UpdateManager::installedFamilyTwin));
     }
 
     /**
-     * Quello che lo script deve sapere, deciso dal pannello prima di spegnersi.
+     * What the script must know, decided by the panel before shutting down.
      *
-     * @param unlock       le protezioni che il piano toglie (la JVM e le dipendenze protette): tolte prima di scaricare,
-     *                     rimesse dopo, e scritte nell'elenco su disco che il pannello riacceso rilegge
-     * @param service      vero se il pannello l'ha acceso il servizio: allora si riaccende col servizio
-     * @param port         la porta su cui il pannello risponde adesso (della parte web, se separato); 0 se non si sa
-     * @param listenerUser l'utente che deve tenere quella porta dopo il riavvio (daemoxcp_mail se separato), o vuoto
-     * @param webSupervisorPidFile il pidfile del supervisore della parte web, o vuoto se il pannello non e' separato
-     * @param panelLog     il registro del pannello (PANEL_LOG; un altro solo nelle prove)
+     * @param unlock       the locks the plan removes (the JVM and the locked dependencies): removed before
+     *                     downloading, put back after, and written into the on-disk list that the restarted
+     *                     panel reads again
+     * @param service      true if the panel was started by the service: then it is started again with the service
+     * @param port         the port the panel answers on now (of the web part, if separated); 0 if unknown
+     * @param listenerUser the user that must hold that port after the restart (daemoxcp_mail if separated), or empty
+     * @param webSupervisorPidFile the pidfile of the web part's supervisor, or empty if the panel is not separated
+     * @param panelLog     the panel log (PANEL_LOG; another one only in the tests)
      */
     record JavaScriptPlan(String pkg, String home, String backupDir, String log, long pid, java.util.List<String> unlock,
                           String startLine, String dir, boolean service, int port, String listenerUser,
@@ -6625,20 +6661,20 @@ public final class UpdateManager {
                 return new JSONObject().put("success", false)
                         .put("error", pf.optBoolean("already", false)
                                 ? I18n.tr("server.um.x.alreadyLatest") : I18n.tr("server.um.startJavaUpdateNow.1"));
-            // Il piano ricalcolato adesso e' quello letto nella pagina? Altrimenti non si parte.
+            // Is the plan recomputed now the one read on the page? Otherwise we do not start.
             if (!planAccepted(approvedSignature, pf.optString("signature", ""), pf.optJSONObject("plan")))
                 return new JSONObject().put("success", false).put("error", I18n.tr("server.um.plan.changedSinceRead"));
             String pkg = pf.getString("pkg");
             if (!isValidName(pkg)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
-            // Le protezioni da togliere sono esattamente quelle del piano (la JVM, se protetta, e le dipendenze
-            // protette): rimesse alla fine, ne' una in piu' ne' una in meno.
+            // The locks to remove are exactly those of the plan (the JVM, if locked, and the locked
+            // dependencies): put back at the end, not one more nor one fewer.
             java.util.List<String> unlock = new ArrayList<>();
             for (String n : jsonArrayToList(pf.optJSONArray("unlock") == null ? new JSONArray() : pf.getJSONArray("unlock"))) {
                 if (!isValidName(n)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
                 if (!unlock.contains(n)) unlock.add(n);
             }
             JSONObject st = pf.getJSONObject("restart");
-            // In UTC, come ogni data che si scrive (anche il nome della cartella e del resoconto).
+            // In UTC, like every date that is written (the name of the folder and of the report too).
             String ts = sh("date -u '+%Y%m%d-%H%M%S'", 15);
             if (!ts.matches("[0-9]{8}-[0-9]{6}"))
                 return new JSONObject().put("success", false).put("error", I18n.tr("server.um.repairNginxPathInfo.10"));
@@ -6648,10 +6684,10 @@ public final class UpdateManager {
                 return new JSONObject().put("success", false).put("error", I18n.tr("server.um.startJavaUpdateNow.2", java.util.Map.of("backup", String.valueOf(bk))));
 
             long pid = ProcessHandle.current().pid();
-            // Separato, la porta la tiene la parte web (utente daemoxcp_mail), non questo processo: chiesta a lui, la
-            // porta era 0 e lo script saltava la verifica, dichiarando riuscito un pannello mai controllato
-            // (reperto 195). E dopo il riavvio la deve tenere ancora daemoxcp_mail: se la tenesse root, la separazione
-            // non sarebbe tornata.
+            // When separated, the port is held by the web part (user daemoxcp_mail), not by this process: asked
+            // of this one, the port was 0 and the script skipped the check, declaring successful a panel that was
+            // never checked (finding 195). And after the restart daemoxcp_mail must still hold it: if root held
+            // it, the separation would not have come back.
             int port = listeningPort(pid);
             String listenerUser = "", webSupervisor = "";
             if (PanelSeparation.active()) {
@@ -6667,16 +6703,16 @@ public final class UpdateManager {
             Files.writeString(Paths.get(path), script);
             ok("chmod 700 " + path, 15);
 
-            // Uno script che non si legge non si esegue: meglio scoprirlo adesso che a pannello spento.
+            // A script that cannot be parsed is not run: better to find out now than with the panel off.
             String syntaxCheck = sh("sh -n " + path + " 2>&1", 30);
             if (!syntaxCheck.trim().isEmpty())
                 return new JSONObject().put("success", false)
                         .put("error", I18n.tr("server.um.startJavaUpdateNow.4", java.util.Map.of("trim", String.valueOf(syntaxCheck.trim()))));
 
-            // Il pannello segna i pacchetti sbloccati: se lo script morisse a meta', al prossimo
-            // avvio restoreLocksAfterCrash() li riprotegge da solo. Se l'elenco non si scrive,
-            // lo script non parte. Finche' l'elenco c'e', nessun altro lavoro sui pacchetti parte:
-            // lo script lavora fuori dal pannello, e il turno del pannello non lo vede.
+            // The panel marks the unlocked packages: if the script died halfway, at the next
+            // startup restoreLocksAfterCrash() locks them again by itself. If the list cannot be
+            // written, the script does not start. As long as the list is there, no other package job
+            // starts: the script works outside the panel, and the panel's turn does not see it.
             String stateError = PackageQueue.writeStateForRestart(unlock);
             if (stateError != null)
                 return new JSONObject().put("success", false)
@@ -6694,9 +6730,9 @@ public final class UpdateManager {
     }
 
     /**
-     * L'aggiornamento della Java in corso adesso, o null: l'elenco dei pacchetti sbloccati scritto per lo script (che
-     * aspetta il riavvio del pannello), e il registro dello script senza la sua fine, toccato da meno di 30 minuti. Un
-     * registro piu' vecchio senza fine e' uno script morto: allora vale l'avviso dell'elenco di sempre.
+     * The Java update in progress now, or null: the list of unlocked packages written for the script (which
+     * waits for the panel restart), and the script's log without its end, touched less than 30 minutes ago. An
+     * older log without an end is a dead script: then the usual warning about the list applies.
      */
     static JSONObject javaUpdateInProgress() {
         if (!PackageQueue.statePresent() || !PackageQueue.jobRecord().optBoolean("expectsRestart")) return null;
@@ -6710,20 +6746,20 @@ public final class UpdateManager {
         }
     }
 
-    /** L'ultimo resoconto lasciato dallo script, da rileggere quando il pannello e' tornato su. */
+    /** The last report left by the script, to be read again once the panel is back up. */
     public static JSONObject javaUpdateStatus() {
         try {
             String last = sh("ls -1t " + JDK_DIR + "/*.log 2>/dev/null | head -1").trim();
             if (last.isEmpty())
                 return new JSONObject().put("success", true).put("present", false);
             String text = sh("cat " + last + " 2>/dev/null", 30);
-            // Il registro di uno script scritto prima del 29/10/2026 ha i marcatori di prima:
-            // si portano ai nomi di adesso (file di dati), poi si guarda solo quelli.
+            // The log of a script written before 2026-10-29 has the old markers: they
+            // are brought to the current names (data file), then only those are looked at.
             for (String[] m : LegacyNames.pairs("javaScriptOutcomes")) text = text.replace(m[0], m[1]);
             boolean finished = text.contains("=== OUTCOME:");
             boolean succeeded = text.contains("=== OUTCOME: SUCCEEDED");
-            // I marcatori restano fissi nel file (si rileggono qui sopra); a chi legge si mostrano
-            // nella sua lingua
+            // The markers stay fixed in the file (they are read again above); to the reader they are
+            // shown in their language
             String shown = text.replace("=== OUTCOME: SUCCEEDED", "=== " + I18n.tr("server.um.jvs.outcomeOk"))
                     .replace("=== OUTCOME: CANCELLED", "=== " + I18n.tr("server.um.jvs.outcomeCancelled"))
                     .replace("=== OUTCOME: TO CHECK", "=== " + I18n.tr("server.um.jvs.outcomeCheck"));
@@ -6736,16 +6772,17 @@ public final class UpdateManager {
     }
 
     /**
-     * Lo script staccato che aggiorna la JVM. In ordine: la via di ritorno, lo scaricamento col pannello ancora
-     * acceso, lo stop (parte root e parte web), l'aggiornamento dai pacchetti gia' scaricati, la prova di java, le
-     * protezioni rimesse e la riaccensione, poi la verifica che il pannello risponda davvero.
+     * The detached script that updates the JVM. In order: the way back, the download with the panel still
+     * running, the stop (root part and web part), the update from the packages already downloaded, the java
+     * test, the locks put back and the restart, then the check that the panel really answers.
      *
-     * Le righe che stampa sono nella lingua di chi ha avviato l'aggiornamento; le righe "=== OUTCOME: ... ==="
-     * restano fisse, perche' javaUpdateStatus le rilegge. Un segnaposto {MAIUSCOLO} nei testi e' una variabile
-     * di questo script (echo): JavaUpdateScriptTest controlla che ognuna sia assegnata qui.
+     * The lines it prints are in the language of whoever started the update; the "=== OUTCOME: ... ===" lines
+     * stay fixed, because javaUpdateStatus reads them again. An {UPPERCASE} placeholder in the texts is a
+     * variable of this script (echo): JavaUpdateScriptTest checks that each one is assigned here.
      */
     static String javaUpdateScript(JavaScriptPlan p) {
-        // Il titolo del supervisore della web, e quelli di prima: la web l'ha accesa la versione che sta girando.
+        // The title of the web supervisor, and the previous ones: the web part was started by the version that is
+        // running.
         String title = "(" + String.join("|", PanelSeparation.titles()) + ")";
         StringBuilder s = new StringBuilder();
         java.util.function.Consumer<String> line = l -> s.append(l).append('\n');
@@ -6893,8 +6930,8 @@ public final class UpdateManager {
     }
 
     /**
-     * Una riga "echo" per uno script: il testo fra apici singoli, quindi la shell non espande
-     * niente di cio' che c'e' dentro; i segnaposto {MAIUSCOLO} diventano variabili della shell.
+     * An "echo" line for a script: the text in single quotes, so the shell expands
+     * nothing inside it; the {UPPERCASE} placeholders become shell variables.
      */
     private static String echo(String text) {
         StringBuilder sb = new StringBuilder("echo ");
@@ -6911,20 +6948,20 @@ public final class UpdateManager {
         return "'" + s.replace("'", "'\\''") + "'";
     }
 
-    // ===================== passaggio py311 -> py312 =====================
+    // ===================== switch py311 -> py312 =====================
 
     /**
-     * Legge l'elenco di cio' che "pkg autoremove" toglierebbe.
+     * Reads the list of what "pkg autoremove" would remove.
      *
-     * Il punto non e' contare: e' poter dire NO. autoremove ragiona su tutto il sistema, non
-     * solo su Python, e una volta lanciato non chiede altro. Quindi o l'elenco si legge per
-     * intero e si riconosce ogni nome, oppure la pulizia si salta. "leggibile" e' falso anche
-     * quando i nomi letti sono meno di quelli che pkg dichiara: vorrebbe dire che qualcosa
-     * sfugge alla lettura, ed e' proprio la riga sfuggita quella che farebbe danno.
+     * The point is not counting: it is being able to say NO. autoremove reasons about the whole
+     * system, not only about Python, and once launched it asks nothing more. So either the list
+     * is read in full and every name is recognized, or the cleanup is skipped. "readable" is
+     * false also when the names read are fewer than those pkg declares: it would mean that
+     * something escapes the reading, and it is exactly the line that escaped that would do damage.
      */
     static JSONObject analyzeAutoremove(String out, String expectedPrefix) {
-        // Il prefisso arriva come "py311-": se ne ricava la versione per riconoscere anche
-        // l'interprete "python311", che della famiglia fa parte quanto gli altri.
+        // The prefix arrives as "py311-": the version is derived from it to also recognize
+        // the interpreter "python311", which is as much part of the family as the others.
         final String verPy = expectedPrefix != null && expectedPrefix.startsWith("py")
                 ? expectedPrefix.replaceAll("[^0-9]", "") : "";
         JSONObject r = new JSONObject();
@@ -6960,10 +6997,10 @@ public final class UpdateManager {
     }
 
 
-    /** Versione predefinita di Python secondo bsd.default-versions.mk, senza il punto: "312". */
+    /** Default Python version according to bsd.default-versions.mk, without the dot: "312". */
     private static String pyDefault() {
-        // Una sola fonte: la stessa tabella che alimenta la scheda "Coerenza predefiniti".
-        // Se domani il predefinito dei port passa a 3.13, questa procedura lo segue da sola.
+        // A single source: the same table that feeds the "Defaults consistency" tab.
+        // If tomorrow the ports default moves to 3.13, this procedure follows it by itself.
         for (String[] line : DEFAULTS) {
             if ("Python".equals(line[0])) return line[1].replace(".", "");
         }
@@ -6971,18 +7008,18 @@ public final class UpdateManager {
     }
 
     /**
-     * Un pacchetto appartiene alla vecchia famiglia Python?
+     * Does a package belong to the old Python family?
      *
-     * Non basta il prefisso "py311-": l'interprete si chiama "python311", senza trattino, e
-     * cercando solo il prefisso il pannello lo ha dichiarato "estraneo a Python" — una frase
-     * assurda letta da chiunque, e sintomo di una classificazione sbagliata. La famiglia sono
-     * entrambi.
+     * The "py311-" prefix is not enough: the interpreter is called "python311", without a hyphen,
+     * and looking only for the prefix the panel declared it "unrelated to Python" -- an absurd
+     * sentence for anyone reading it, and the symptom of a wrong classification. The family is
+     * both.
      */
     static boolean pythonFamily(String name, String version) {
         return name != null && (name.startsWith("py" + version + "-") || name.equals("python" + version));
     }
 
-    /** I py3XX-* installati su richiesta (non tirati dentro come dipendenza). Sono quelli da spostare. */
+    /** The py3XX-* installed on request (not pulled in as a dependency). They are the ones to move. */
     private static java.util.List<String> pythonToMove(String old) {
         java.util.List<String> l = new ArrayList<>();
         for (String r : sh("pkg query '%n %a' 2>/dev/null").split("\n")) {
@@ -6995,15 +7032,15 @@ public final class UpdateManager {
     }
 
     /**
-     * Controlli preliminari, tutti in sola lettura.
+     * Preliminary checks, all read-only.
      *
-     * py311 e py312 non sono due versioni dello stesso pacchetto: sono pacchetti DIVERSI, quindi
-     * "pkg upgrade" non li tocchera' mai e resterebbero su un Python che prima o poi esce dal
-     * supporto. Il passaggio si fa a mano, e ha due punti dove si rompe qualcosa:
-     *  - i comandi in /usr/local/bin (certbot, fail2ban-server) appartengono a UNO dei due, quindi
-     *    collidono: vanno visti PRIMA, con una simulazione;
-     *  - "pkg autoremove" alla fine puo' portarsi via piu' del previsto, perche' ragiona su tutto
-     *    il sistema e non solo su Python. Qui si guarda l'elenco prima di eseguirlo.
+     * py311 and py312 are not two versions of the same package: they are DIFFERENT packages, so
+     * "pkg upgrade" will never touch them and they would stay on a Python that sooner or later
+     * goes out of support. The move is done by hand, and has two points where something breaks:
+     *  - the commands in /usr/local/bin (certbot, fail2ban-server) belong to ONE of the two, so
+     *    they collide: they must be seen BEFORE, with a simulation;
+     *  - "pkg autoremove" at the end can take away more than expected, because it reasons about
+     *    the whole system and not only about Python. Here the list is looked at before running it.
      */
     public static JSONObject pythonPreflight() {
         JSONObject r = new JSONObject();
@@ -7042,7 +7079,7 @@ public final class UpdateManager {
             }
             r.put("leaf", new JSONArray(leaf));
 
-            // Esiste il corrispondente py312 per ognuno? Senza, il passaggio lascerebbe un buco.
+            // Is there a matching py312 for each one? Without it, the move would leave a hole.
             java.util.List<String> newOnes = new ArrayList<>(), missing = new ArrayList<>();
             for (String v : leaf) {
                 String n = "py" + fresh + "-" + v.substring(("py" + old + "-").length());
@@ -7060,12 +7097,12 @@ public final class UpdateManager {
                         I18n.tr("server.um.x.pyAllCounterparts", java.util.Map.of("list", String.valueOf(String.join(", ", newOnes)))));
             }
 
-            // Chi dipende dai pacchetti che sto per togliere? Se qualcuno dipende, toglierli
-            // porterebbe via anche lui: e' esattamente il caso da non scoprire a cose fatte.
-            // Attenzione all'ovvio che non e' ovvio: py311-certbot-nginx DIPENDE da py311-certbot,
-            // e si spostano insieme. Un dipendente che fa parte della stessa famiglia py<vecchio>
-            // non e' un problema, perche' sparisce e rinasce anche lui. Il problema e' solo un
-            // dipendente ESTERNO, che resterebbe senza cio' da cui dipende.
+            // Who depends on the packages I am about to remove? If someone depends on them, removing
+            // them would take it away too: that is exactly the case not to discover after the fact.
+            // Beware of the obvious that is not obvious: py311-certbot-nginx DEPENDS on py311-certbot,
+            // and they move together. A dependent that belongs to the same py<old> family is not a
+            // problem, because it too disappears and is reborn. The problem is only an EXTERNAL
+            // dependent, which would be left without what it depends on.
             java.util.List<String> withDependents = new ArrayList<>();
             for (String v : leaf) {
                 if (!isValidName(v)) continue;
@@ -7086,7 +7123,7 @@ public final class UpdateManager {
                         I18n.tr("server.um.pythonPreflight.8"));
             }
 
-            // Simulazione vera: e' l'unico modo di sapere quali file collidono.
+            // A real simulation: it is the only way to know which files collide.
             if (!newOnes.isEmpty()) {
                 String sim = sh("pkg install -n " + String.join(" ", newOnes) + " 2>&1", 300);
                 boolean conflicts = sim.toLowerCase().contains("conflicts with");
@@ -7102,7 +7139,7 @@ public final class UpdateManager {
                 }
             }
 
-            // Servizi coinvolti: quelli vanno fermati e riavviati, e verificati dopo.
+            // Services involved: those must be stopped and restarted, and checked afterwards.
             java.util.List<String> touchedServices = new ArrayList<>();
             for (String v : leaf) {
                 String base = v.substring(("py" + old + "-").length());
@@ -7114,7 +7151,7 @@ public final class UpdateManager {
                     ? I18n.tr("server.um.pythonPreflight.11")
                     : I18n.tr("server.um.x.svcStopStart", java.util.Map.of("list", String.valueOf(String.join(", ", touchedServices)))));
 
-            // Cosa toglierebbe autoremove. Se tocca roba che non e' py<vecchio>, non lo si esegue.
+            // What autoremove would remove. If it touches stuff that is not py<old>, it is not run.
             JSONObject an = analyzeAutoremove(sh("pkg autoremove -n 2>&1", 180), "py" + vec + "-");
             java.util.List<String> foreign = jsonArrayToList(an.optJSONArray("foreign"));
             r.put("autoremoveForeign", new JSONArray(foreign));
@@ -7132,17 +7169,17 @@ public final class UpdateManager {
             addCheck(checks, "backup", I18n.tr("server.um.pythonPreflight.13"), "ok",
                     I18n.tr("server.um.pythonPreflight.14"));
 
-            // Il piano ESATTO del passaggio, come nell'aggiornamento guidato: su una copia del
-            // database di pkg si dimentica cio' che pkg delete togliera' (i pacchetti e chi dipende
-            // da loro) e si chiede a pkg che cosa installerebbe. Lo si firma e lo si approva.
+            // The EXACT plan of the move, as in the guided update: on a copy of the pkg
+            // database, what pkg delete will remove (the packages and whoever depends on
+            // them) is forgotten and pkg is asked what it would install. It is signed and approved.
             if (!lock && !newOnes.isEmpty()) {
                 java.util.List<String> removed = reverseClosure(leaf);
                 JSONObject plan = pythonPlan(removed, newOnes);
                 java.util.List<String> family = new ArrayList<>(removed);
                 family.addAll(newOnes);
-                // Un corrispondente gia' installato (py312-packaging, dipendenza di un altro) non
-                // cambia nel piano, ed e' giusto: il lavoro deve solo togliere il vecchio. Il
-                // controllo «non cambierebbe» vale per quelli che il lavoro installa davvero.
+                // A counterpart already installed (py312-packaging, a dependency of another one)
+                // does not change in the plan, and that is right: the job only has to remove the
+                // old one. The "would not change" check applies to the ones the job really installs.
                 java.util.List<String> toInstall = new ArrayList<>();
                 for (String n : newOnes) if (!ok("pkg info -e " + n, 15)) toInstall.add(n);
                 if (addPlanChecks(checks, plan, toInstall, family, lock)) lock = true;
@@ -7159,50 +7196,50 @@ public final class UpdateManager {
     }
 
     /**
-     * I resti della vecchia famiglia Python, rimossi uno per uno invece che con autoremove.
+     * The leftovers of the old Python family, removed one by one instead of with autoremove.
      *
-     * autoremove ragiona su tutto il sistema: qui vorrebbe portare via anche capstone, che con
-     * Python non c'entra, e per questo viene giustamente saltato. Ma cosi' l'interprete vecchio
-     * resta installato con le sue vulnerabilita'. La via d'uscita non e' eseguire autoremove
-     * chiudendo un occhio: e' togliere SOLO i pacchetti della famiglia, uno alla volta, ognuno
-     * dopo aver verificato che nessuno lo richieda piu'. Cosi' l'elenco di cio' che sparisce e'
-     * scritto per intero prima di cominciare, e non contiene sorprese.
+     * autoremove reasons about the whole system: here it would also take away capstone, which has
+     * nothing to do with Python, and for this reason it is rightly skipped. But that way the old
+     * interpreter stays installed with its vulnerabilities. The way out is not to run autoremove
+     * turning a blind eye: it is to remove ONLY the packages of the family, one at a time, each
+     * after checking that nobody requires it any more. That way the list of what disappears is
+     * written in full before starting, and contains no surprises.
      *
-     * A passaggi ripetuti perche' le dipendenze si liberano a catena: finche' py311-pyinotify
-     * c'e', python311 ha un dipendente e non e' togliibile; tolto quello, lo diventa.
+     * In repeated passes because dependencies free up in a chain: as long as py311-pyinotify
+     * is there, python311 has a dependent and cannot be removed; once that is removed, it can be.
      */
     /**
-     * Chi fa riferimento al vecchio interprete, fra le cose che RESTERANNO.
+     * Who refers to the old interpreter, among the things that WILL REMAIN.
      *
-     * pkg conosce le dipendenze fra pacchetti, non un file scritto a mano con
-     * "#!/usr/local/bin/python3.11" in cima. Quella e' l'unica cosa che la rimozione potrebbe
-     * rompere senza che nessun controllo automatico se ne accorga, ed e' il motivo per cui
-     * questo controllo esiste.
+     * pkg knows the dependencies between packages, not a file written by hand with
+     * "#!/usr/local/bin/python3.11" at the top. That is the only thing the removal could
+     * break without any automatic check noticing, and it is the reason why
+     * this check exists.
      *
-     * La domanda giusta non e' "qualcuno nomina python3.11?" — lo fanno i py311 stessi, che
-     * stanno per sparire — ma "qualcosa che sopravvivera' lo nomina?". Per ogni file trovato si
-     * chiede a pkg di chi e': se appartiene alla famiglia che si sta togliendo, sparisce con
-     * lei e non e' un problema; se appartiene a un ALTRO pacchetto, o a nessuno perche' l'ha
-     * scritto una persona, allora e' esattamente il caso da segnalare.
+     * The right question is not "does anyone name python3.11?" -- the py311 themselves do, and
+     * they are about to disappear -- but "does something that will survive name it?". For each
+     * file found pkg is asked whose it is: if it belongs to the family being removed, it
+     * disappears with it and is not a problem; if it belongs to ANOTHER package, or to none
+     * because a person wrote it, then it is exactly the case to report.
      */
     static JSONObject interpreterReferences(String old) {
         JSONObject r = new JSONObject();
         JSONArray issues = new JSONArray(), harmless = new JSONArray(), quotes = new JSONArray();
-        // 311 -> 3\.11 : il punto va protetto, altrimenti nel regex combacia con qualunque
-        // carattere e "python3x11" verrebbe contato come riferimento.
+        // 311 -> 3\.11 : the dot must be escaped, otherwise in the regex it matches any
+        // character and "python3x11" would be counted as a reference.
         String escapedOld = old.length() == 3
                 ? old.charAt(0) + "\\." + old.substring(1) : old;
 
-        // Cerco chi ESEGUE l'interprete, non chi lo nomina. La differenza non e' teorica: la
-        // prima versione di questo controllo trovava /home/panel/admin/updates.html, cioe' la
-        // pagina del pannello — e la riga che la faceva scattare era l'avvertenza che ho scritto
-        // io, che contiene "#!/usr/local/bin/python3.11" come esempio. Un testo che parla
-        // dell'interprete non lo esegue.
+        // I look for whoever EXECUTES the interpreter, not whoever names it. The difference is not
+        // theoretical: the first version of this check found /home/panel/admin/updates.html, that
+        // is the panel page -- and the line that triggered it was the warning I wrote myself,
+        // which contains "#!/usr/local/bin/python3.11" as an example. A text that talks about
+        // the interpreter does not execute it.
         //
-        // Le tre forme che eseguono davvero:
-        //   - la riga #! in cima a uno script
-        //   - il percorso pieno del binario, che e' come lo invocano cron e gli script rc
-        //   - "env python3.11", l'altra forma comune di shebang
+        // The three forms that really execute it:
+        //   - the #! line at the top of a script
+        //   - the full path of the binary, which is how cron and the rc scripts invoke it
+        //   - "env python3.11", the other common form of shebang
         String[] modes = {
             "^#!.*python" + escapedOld,
             "/usr/local/bin/python" + escapedOld,
@@ -7213,8 +7250,8 @@ public final class UpdateManager {
 
         String where = "/etc /usr/local/etc /usr/local/bin /usr/local/sbin /usr/local/libexec "
                 + "/usr/local/www /root /var/cron /var/spool/cron /home";
-        // Fuori: i file dei pacchetti Python (spariscono con loro) e le pagine che il pannello
-        // genera da se'. Quelle non sono script di nessuno: le scrivo io a ogni avvio.
+        // Left out: the files of the Python packages (they disappear with them) and the pages the panel
+        // generates by itself. Those are nobody's scripts: I write them at every startup.
         String mineOutside = "";
         try {
             String jar = jarPath();
@@ -7237,19 +7274,19 @@ public final class UpdateManager {
             String name = prop.isEmpty() ? "" : sh("pkg query %n " + prop + " 2>/dev/null", 20).trim();
             boolean ofFamily = !name.isEmpty() && pythonFamily(name, old);
 
-            // Un file che NOMINA il percorso dell'interprete non lo esegue per forza: un testo
-            // che lo cita combacia come uno script che lo lancia, e grep non sa distinguerli.
-            // La differenza la fanno due fatti verificabili: il file e' eseguibile, oppure sta
-            // dove il sistema va a prendere cose da eseguire (cron, rc.d). Tutto il resto e'
-            // molto probabilmente prosa, e non deve sbarrare una rimozione legittima — ma
-            // finisce comunque in un elenco a parte, perche' "probabile" non e' "certo".
+            // A file that NAMES the path of the interpreter does not necessarily execute it: a text
+            // that quotes it matches just like a script that launches it, and grep cannot tell them
+            // apart. The difference is made by two verifiable facts: the file is executable, or it
+            // is where the system goes to fetch things to execute (cron, rc.d). Everything else is
+            // very probably prose, and must not block a legitimate removal -- but it still ends
+            // up in a separate list, because "probable" is not "certain".
             boolean runnable = ok("test -x " + file, 10);
             boolean executionPlace = file.startsWith("/var/cron/") || file.startsWith("/var/spool/cron/")
                     || file.startsWith("/usr/local/etc/rc.d/") || file.startsWith("/etc/rc.d/")
                     || file.startsWith("/etc/periodic/") || file.startsWith("/usr/local/etc/periodic/")
                     || file.equals("/etc/crontab") || file.startsWith("/etc/rc.conf");
-            // La riga che ha fatto scattare il controllo: senza, chi legge non puo' giudicare
-            // se sia un'esecuzione vera o una citazione.
+            // The line that triggered the check: without it, the reader cannot judge
+            // whether it is a real execution or a quotation.
             String line = sh("grep -m1 -hIE " + e.toString().trim().replace("-e ", "-e ")
                     + " " + file + " 2>/dev/null | head -c 160", 20).trim();
             JSONObject v = new JSONObject().put("file", file).put("line", line)
@@ -7264,7 +7301,7 @@ public final class UpdateManager {
                 .put("quotes", quotes).put("command", cmd);
     }
 
-    /** I resti del vecchio Python; con esegui, li toglie, sul turno dei lavori sui pacchetti. */
+    /** The leftovers of the old Python; with execute, it removes them, in the package turn. */
     public static JSONObject pythonLeftovers(boolean run) {
         if (!run) return pythonLeftoversNow(false);
         String id = "restipy-" + System.nanoTime();
@@ -7304,7 +7341,7 @@ public final class UpdateManager {
                     String t = d.trim();
                     if (!t.isEmpty()) who.add(t);
                 }
-                // Un dipendente che e' anch'esso della famiglia sparira' prima: non trattiene.
+                // A dependent that also belongs to the family will disappear first: it does not hold back.
                 java.util.List<String> external = new ArrayList<>();
                 for (String c : who) if (!family.contains(c)) external.add(c);
                 boolean free = external.isEmpty();
@@ -7315,7 +7352,7 @@ public final class UpdateManager {
             r.put("detail", detail).put("removable", new JSONArray(removable))
              .put("heldBack", new JSONArray(heldBack));
 
-            // Chi nomina il vecchio interprete fra cio' che resta: pkg non lo sa, va cercato.
+            // Who names the old interpreter among what remains: pkg does not know, it must be searched for.
             JSONObject ref = interpreterReferences(old.iterator().next());
             r.put("references", ref);
             if (!run || removable.isEmpty()) return r.put("success", true).put("executed", false);
@@ -7323,8 +7360,8 @@ public final class UpdateManager {
                 return r.put("success", false).put("executed", false)
                         .put("error", I18n.tr("server.um.x.pyRefsLeft", java.util.Map.of("n", String.valueOf(ref.getJSONArray("issues").length()))));
 
-            // Passaggi ripetuti: a ogni giro si tolgono quelli che in QUEL momento non hanno
-            // piu' nessuno che li richieda.
+            // Repeated passes: at each round the ones removed are those that at THAT moment no
+            // longer have anyone requiring them.
             JSONArray removed = new JSONArray(), failed = new JSONArray();
             java.util.List<String> remaining = new ArrayList<>(family);
             for (int round = 0; round < 6 && !remaining.isEmpty(); round++) {
@@ -7332,15 +7369,15 @@ public final class UpdateManager {
                 for (String n : new ArrayList<>(remaining)) {
                     if (!isValidName(n) || !ok("pkg info -e " + n, 15)) { remaining.remove(n); continue; }
                     String dependents = sh("pkg query %rn " + n + " 2>/dev/null").trim();
-                    if (!dependents.isEmpty()) continue;                      // ancora richiesto: al prossimo giro
+                    if (!dependents.isEmpty()) continue;                      // still required: on the next round
                     boolean wasLocked = locked(sh("pkg lock -l 2>/dev/null"), n);
                     if (wasLocked) ok("pkg unlock -y " + n, 30);
                     if (ok("pkg delete -y " + n, 300)) { removed.put(n); something = true; }
                     else {
                         failed.put(n);
-                        // Se la rimozione non riesce, il pacchetto resta: e allora deve restare
-                        // com'era, protetto. Sbloccarlo e lasciarlo cosi' sarebbe peggio che non
-                        // averci provato, perche' il prossimo aggiornamento potrebbe toccarlo.
+                        // If the removal does not succeed, the package stays: and then it must stay
+                        // as it was, locked. Unlocking it and leaving it like that would be worse
+                        // than not having tried, because the next update could touch it.
                         if (wasLocked) ok("pkg lock -y " + n, 30);
                     }
                     remaining.remove(n);
@@ -7349,7 +7386,7 @@ public final class UpdateManager {
             }
             r.put("executed", true).put("removed", removed).put("failed", failed)
              .put("remain", new JSONArray(remaining));
-            // Verifica: quanti pacchetti della vecchia famiglia sono ancora installati.
+            // Check: how many packages of the old family are still installed.
             long still = 0;
             for (String v : old)
                 still += sh("pkg query %n 2>/dev/null").lines().filter(x -> pythonFamily(x, v)).count();
@@ -7361,9 +7398,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Che cosa toglie davvero {@code pkg delete -y nomi} senza -f: quei pacchetti e, a catena,
-     * chi dipende da loro. Letto con pkg query, che non guarda le protezioni: pkg delete -n su un
-     * pacchetto protetto si rifiuta, e qui sono protetti tutti.
+     * What {@code pkg delete -y nomi} without -f really removes: those packages and, in a chain,
+     * whoever depends on them. Read with pkg query, which does not look at locks: pkg delete -n on a
+     * locked package refuses, and here they are all locked.
      */
     static java.util.List<String> reverseClosure(java.util.List<String> names) {
         java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
@@ -7379,14 +7416,14 @@ public final class UpdateManager {
         return new ArrayList<>(out);
     }
 
-    /** Il piano esatto del passaggio di Python: togliere 'removed', poi installare 'newOnes'. */
+    /** The exact plan of the Python move: remove 'removed', then install 'newOnes'. */
     private static JSONObject pythonPlan(java.util.List<String> removed, java.util.List<String> newOnes) {
         return judged(PackagePlan.planRemoveThenInstall(removed, newOnes, lockedNames(), UpdateManager::reasonNotToUnlock));
     }
 
     /**
-     * @param approvedSignature l'impronta del piano che chi preme ha letto: il lavoro ricalcola il
-     *                          piano e parte solo se e' lo stesso (vedi startGuidedUpdate)
+     * @param approvedSignature the signature of the plan that whoever presses has read: the job recomputes the
+     *                          plan and starts only if it is the same (see startGuidedUpdate)
      */
     public static JSONObject startPythonTransition(String approvedSignature) {
         if (!validSignature(approvedSignature))
@@ -7401,7 +7438,7 @@ public final class UpdateManager {
         job.status = "running";
         final int TOT = 7;
         boolean installedNew = false;
-        // L'elenco scritto su disco da questa esecuzione: vuoto finche' non e' scritto.
+        // The list written to disk by this run: empty until it is written.
         java.util.List<String> listOnDisk = new ArrayList<>();
         Map<String, Boolean> servicesBefore = servicesState();
         InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
@@ -7432,8 +7469,8 @@ public final class UpdateManager {
             java.util.List<String> services = jsonArrayToList(pf.optJSONArray("services"));
             job.write("  py" + old + " -> py" + fresh);
             job.write("  " + String.join(", ", leaf));
-            // Si esegue il piano che e' stato letto, o niente: prima delle copie e prima di fermare
-            // qualunque servizio.
+            // The plan that was read is carried out, or nothing is: before the copies and before
+            // stopping any service.
             JSONObject plan = pf.optJSONObject("plan");
             String mismatch = approvedPlanMismatch(job, plan, pf.optString("signature", null), approvedSignature);
             if (mismatch != null) {
@@ -7441,8 +7478,8 @@ public final class UpdateManager {
                 job.errorMessage = mismatch;
                 return;
             }
-            // Si scaricano i pacchetti che il piano installa e lo si ricalcola: finche' non sono
-            // nella cache pkg non vede i conflitti sui file (vedi fetchAndRecheck).
+            // The packages the plan installs are downloaded and the plan is computed again: until they
+            // are in the cache pkg does not see the file conflicts (see fetchAndRecheck).
             java.util.List<String> downloads = planDownloads(plan);
             if (!downloads.isEmpty()) {
                 Recheck grown = fetchAndRecheck(job, "pkg fetch -y -U " + String.join(" ", downloads) + " 2>&1", plan,
@@ -7450,8 +7487,8 @@ public final class UpdateManager {
                 if (grown.stop() != null) throw org.daemoxcp.mail.util.ShownException.translated(grown.stop());
                 plan = grown.plan();
             }
-            // L'inventario, la configurazione e gli indirizzi in ascolto adesso, prima di fermare i
-            // servizi: e' cio' che l'amministratore ha lasciato, e cio' con cui si confronta alla fine.
+            // The inventory, the configuration and the addresses listening now, before stopping the
+            // services: it is what the administrator left, and what the end is compared against.
             PlanWatch watch = PlanWatch.take(sideEffects);
 
             job.advance(2, TOT);
@@ -7486,28 +7523,29 @@ public final class UpdateManager {
             job.advance(4, TOT);
             job.write("");
             job.write("[4/" + TOT + "] " + I18n.tr("server.um.x.pySwap", java.util.Map.of("old", String.valueOf(old), "newer", String.valueOf(fresh))));
-            // L'elenco su disco PRIMA di sbloccare: le protezioni che il piano toglie (i vecchi, che
-            // vanno riprotetti se restano, e le dipendenze) e i nuovi, che alla fine vanno protetti.
-            // Se il pannello muore in mezzo, l'avvio protegge quelli che trova installati. Se
-            // l'elenco non si scrive, non si tocca niente.
+            // The on-disk list BEFORE unlocking: the locks the plan removes (the old ones, which
+            // must be locked again if they remain, and the dependencies) and the new ones, which
+            // must be locked at the end. If the panel dies in the middle, the startup locks those
+            // it finds installed. If the list cannot be written, nothing is touched.
             listOnDisk.addAll(unlockForPlan(job, plan, newOnes));
-            // L'ordine conta: prima togliere, poi installare. Cosi' nessun file va forzato,
-            // ed e' esattamente l'errore che ha rotto il client MySQL.
+            // The order matters: first remove, then install. That way no file has to be forced,
+            // which is exactly the error that broke the MySQL client.
             StringBuilder catDel = new StringBuilder();
             int cd = runLogged(job, "pkg delete -y " + String.join(" ", leaf) + " 2>&1", 900, catDel);
             StringBuilder catIns = new StringBuilder();
             int ci = -1;
             if (cd == 0) {
-                // -U: lo stesso catalogo su cui e' stato calcolato il piano.
+                // -U: the same catalog the plan was computed on.
                 ci = runLogged(job, "pkg install -y -U " + String.join(" ", newOnes) + " 2>&1", 1800, catIns);
-                // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso e si e' fermato li'.
+                // 4 = EX_NEEDRESTART: pkg upgraded itself and stopped there.
                 if (ci == 4) {
                     job.write(I18n.tr("server.um.runGuidedUpdate.10"));
                     ci = runLogged(job, "pkg install -y -U " + String.join(" ", newOnes) + " 2>&1", 1800, catIns);
                 }
             }
-            // Il confronto col piano prima di decidere se fermarsi: un pkg uscito male e' proprio il
-            // caso in cui la macchina puo' essere rimasta a meta'. I servizi ripartono piu' sotto.
+            // The comparison with the plan before deciding whether to stop: a pkg that ended badly is
+            // exactly the case in which the machine may have been left halfway. The services restart
+            // further down.
             outcome = checkPlanOutcome(job, watch, plan, "Python transition", !services.isEmpty());
             if (cd != 0) throw new IllegalStateException("pkg delete exited with code " + cd);
             if (ci != 0) {
@@ -7537,9 +7575,9 @@ public final class UpdateManager {
             } else if (an.optInt("howMany", 0) == 0) {
                 job.write(I18n.tr("server.um.runPythonTransition.12"));
             } else {
-                // Anche l'autoremove ha il suo piano esatto: l'elenco appena letto, tutto della
-                // vecchia famiglia. Si esegue e si confronta l'inventario con quell'elenco: un
-                // pacchetto tolto in piu' e' una divergenza come nel piano firmato.
+                // The autoremove has its exact plan too: the list just read, all of it from
+                // the old family. It is run and the inventory is compared with that list: one
+                // extra package removed is a divergence, as in the signed plan.
                 JSONObject autoremovePlan = PackagePlan.readPlan(ar);
                 if (!autoremovePlan.optBoolean("measured")) {
                     job.write(I18n.tr("server.um.runPythonTransition.9"));
@@ -7574,11 +7612,11 @@ public final class UpdateManager {
             job.advance(7, TOT);
             job.write("");
             job.write(I18n.tr("server.um.runPythonTransition.15", java.util.Map.of("total", String.valueOf(TOT))));
-            // Che il pacchetto sia installato non dice che il comando parta: e' la lezione
-            // del client MySQL, dove tutto risultava a posto e postmap non trovava la libreria.
-            // Non indovino il nome del comando dal nome del pacchetto: per py311-fail2ban
-            // sbaglierei (i comandi sono fail2ban-server e fail2ban-client, non "fail2ban").
-            // Chiedo a pkg quali file eseguibili ha installato davvero.
+            // That the package is installed does not say that the command starts: it is the lesson
+            // of the MySQL client, where everything looked fine and postmap did not find the library.
+            // I do not guess the name of the command from the name of the package: for py311-fail2ban
+            // I would get it wrong (the commands are fail2ban-server and fail2ban-client, not
+            // "fail2ban"). I ask pkg which executable files it really installed.
             boolean commandsOk = true;
             for (String n : newOnes) {
                 if (!isValidName(n)) continue;
@@ -7586,7 +7624,7 @@ public final class UpdateManager {
                 for (String f : sh("pkg query %Fp " + n + " 2>/dev/null").split("\n")) {
                     String t = f.trim();
                     if (!t.startsWith("/usr/local/bin/") && !t.startsWith("/usr/local/sbin/")) continue;
-                    if (t.contains("test")) continue;   // niente suite di test lanciate per sbaglio
+                    if (t.contains("test")) continue;   // no test suites launched by mistake
                     if (!ok("test -x " + t, 10)) continue;
                     if (++tested > 4) break;
                     String o = sh(t + " --version 2>&1", 120);
@@ -7625,14 +7663,14 @@ public final class UpdateManager {
         } catch (Exception e) {
             job.status = "error";
             job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
-            // Il confronto col piano e gli script che hanno scritto si dicono anche qui: pkg fermo a
-            // meta' e' proprio il caso in cui contano.
+            // The comparison with the plan and the scripts that wrote are stated here too: pkg stopped
+            // halfway is exactly the case in which they matter.
             for (String p : sideEffects.problems()) job.errorMessage += " " + p;
             if (outcome != null && !outcome.outsidePlan().isEmpty()) job.errorMessage += " " + divergenceMessage(outcome.outsidePlan());
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
-            // Si protegge ogni pacchetto dell'elenco che e' installato adesso: i nuovi arrivati e,
-            // se il passaggio si e' fermato prima di toglierli, i vecchi.
+            // Every package on the list that is installed now gets locked: the newcomers and,
+            // if the move stopped before removing them, the old ones.
             if (!listOnDisk.isEmpty()) {
                 java.util.List<String> failed = relockListed(job, listOnDisk);
                 if (!failed.isEmpty() && "completed".equals(job.status)) {
@@ -7650,7 +7688,7 @@ public final class UpdateManager {
         }
     }
 
-    /** Due elenchi di divergenze in uno. */
+    /** Two lists of divergences in one. */
     private static JSONArray merge(JSONArray a, JSONArray b) {
         JSONArray out = new JSONArray();
         for (int i = 0; a != null && i < a.length(); i++) out.put(a.get(i));
@@ -7658,9 +7696,9 @@ public final class UpdateManager {
         return out;
     }
 
-    // ===================== piano di manutenzione guidato =====================
+    // ===================== guided maintenance plan =====================
 
-    /** Le opzioni di grep per la firma di dovecot.conf, di adesso e di prima: " -e 'firma' ...". */
+    /** The grep options for the dovecot.conf signature, the current one and the previous ones: " -e 'signature' ...". */
     static String dovecotSignatureOptions() {
         StringBuilder b = new StringBuilder();
         for (String f : PanelMarker.forms("dovecotSignature", org.daemoxcp.mail.scripts.DovecotConfig.SIGNATURE))
@@ -7669,29 +7707,29 @@ public final class UpdateManager {
     }
 
     /**
-     * Il piano: cosa va fatto su QUESTA macchina, in quale ordine, e a che punto sei.
+     * The plan: what must be done on THIS machine, in which order, and where you are.
      *
-     * Lo stato di ogni passo non e' memorizzato da nessuna parte: viene RICAVATO ogni volta
-     * dallo stato reale del sistema. Un flag salvato su disco potrebbe dire "fatto" per un
-     * passo che qualcuno ha disfatto, o restare indietro dopo un ripristino; un controllo
-     * ricavato dai fatti non puo' mentire. Costa qualche secondo in piu' e vale la pena.
+     * The state of each step is not stored anywhere: it is DERIVED every time
+     * from the real state of the system. A flag saved on disk could say "done" for a
+     * step that someone has undone, or lag behind after a restore; a check
+     * derived from the facts cannot lie. It costs a few more seconds and it is worth it.
      */
     public static JSONObject maintenancePlan() {
         ok("pkg update -q", 120);
         JSONArray steps = new JSONArray();
 
-        // Dati raccolti UNA volta sola: pkg audit e la simulazione sono lente, e ripeterle
-        // per ogni passo trasformerebbe il piano in un'attesa di minuti.
+        // Data collected only ONCE: pkg audit and the simulation are slow, and repeating them
+        // for every step would turn the plan into a wait of minutes.
         String audit = sh("pkg audit -F 2>&1", 180);
         String dry = sh("pkg upgrade -n 2>&1", 180);
         String lock = sh("pkg lock -l 2>/dev/null");
         JSONObject state = packagesStatus();
         JSONArray packages = state.getJSONArray("packages");
 
-        // Chi ha gia' una procedura dedicata (fasi F, G, H) non deve comparire ANCHE come passo
-        // pacchetto: sarebbe la stessa operazione scritta due volte con parole diverse, e chi
-        // legge non puo' sapere se sono una o due. Si decidono qui, una volta, e valgono per
-        // entrambi gli elenchi piu' sotto e per le fasi.
+        // What already has a dedicated procedure (phases F, G, H) must not appear ALSO as a package
+        // step: it would be the same operation written twice with different words, and the reader
+        // cannot know whether they are one or two. They are decided here, once, and apply to
+        // both lists further down and to the phases.
         final String rcPkg = sh("pkg query %n 2>/dev/null | grep -E '^roundcube' | head -1", 20).trim();
         final String jvmPkg = jvmPackage();
         final String pyNew = pyDefault();
@@ -7700,7 +7738,7 @@ public final class UpdateManager {
                 || (!jvmPkg.isEmpty() && jvmPkg.equals(n))
                 || (n.matches("^py3[0-9]{2}-.*") && !n.startsWith("py" + pyNew + "-"));
 
-        // --- Passo 1: tutto lo stack protetto ---
+        // --- Step 1: the whole locked stack ---
         int installed = state.getInt("installedCount"), protectedNames = state.getInt("lockedCount");
         boolean allLocked = installed > 0 && protectedNames == installed;
         steps.put(repeatable(step("phase-protection", "phase", I18n.tr("server.um.x.stepProtect"),
@@ -7710,7 +7748,7 @@ public final class UpdateManager {
                 allLocked ? null : new JSONObject().put("type", "packages_lock_all")),
                 new JSONObject().put("type", "packages_lock_all")));
 
-        // --- Passo 2: aggiornare cio' che non e' protetto ---
+        // --- Step 2: upgrade what is not locked ---
         Matcher mUp = Pattern.compile("Number of packages to be upgraded:\\s*([0-9]+)").matcher(dry);
         int toUpdate = mUp.find() ? Integer.parseInt(mUp.group(1)) : 0;
         Matcher mIn = Pattern.compile("Number of packages to be installed:\\s*([0-9]+)").matcher(dry);
@@ -7723,18 +7761,18 @@ public final class UpdateManager {
                 I18n.tr("server.um.maintenancePlan.6"),
                 updatedContext ? null : new JSONObject().put("type", "updates_apply")));
 
-        // --- Passi 3..N: un passo per ogni pacchetto protetto vulnerabile con correzione ---
-        // L'ordine e' per numero di CVE chiuse: prima cio' che porta piu' beneficio.
+        // --- Steps 3..N: one step for each locked vulnerable package with a fix ---
+        // The order is by number of CVEs closed: first what brings the most benefit.
         java.util.List<JSONObject> vulnerable = new ArrayList<>();
         Matcher mv = Pattern.compile("(?m)^(\\S+?)-[0-9][^\\s]* is vulnerable:").matcher(audit);
         java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
         while (mv.find()) seen.add(mv.group(1));
         for (String name : seen) {
-            if (roleOf(name) == null) continue;              // non e' dello stack di posta
-            if (covered.test(name)) continue;                 // ha gia' la sua fase dedicata
+            if (roleOf(name) == null) continue;              // not part of the mail stack
+            if (covered.test(name)) continue;                 // already has its dedicated phase
             String cur = sh("pkg query %v " + name + " 2>/dev/null", 20);
             String av  = sh("pkg rquery -U %v " + name + " 2>/dev/null", 20);
-            if (cur.isEmpty() || av.isEmpty() || av.equals(cur)) continue;   // nessuna correzione disponibile
+            if (cur.isEmpty() || av.isEmpty() || av.equals(cur)) continue;   // no fix available
             boolean major = significantJump(name, cur, av);
             JSONObject warning = warningFor(name, major);
             int nCve = vulnerabilityDetail(audit, name).getJSONArray("cve").length();
@@ -7744,9 +7782,9 @@ public final class UpdateManager {
             vulnerable.add(o);
         }
         vulnerable.sort((x, y) -> Integer.compare(y.getInt("cve"), x.getInt("cve")));
-        // Un solo passo per famiglia: proporre "aggiorna mysql80-server" e poi "aggiorna
-        // mysql80-client" significherebbe proporre due volte la stessa operazione, e la prima
-        // non riuscirebbe nemmeno perche' l'altra meta' resta protetta.
+        // A single step per family: proposing "upgrade mysql80-server" and then "upgrade
+        // mysql80-client" would mean proposing the same operation twice, and the first
+        // would not even succeed because the other half stays locked.
         java.util.LinkedHashSet<String> seenFamilies = new java.util.LinkedHashSet<>();
         java.util.List<JSONObject> unique = new ArrayList<>();
         for (JSONObject v : vulnerable) {
@@ -7771,10 +7809,10 @@ public final class UpdateManager {
                     wait ? null : new JSONObject().put("type", "package_update").put("package", name)));
         }
 
-        // --- Migrazione MySQL, se serve: sta QUI perche' e' un prerequisito di alcuni passi
-        //     successivi (Postfix pretende la libreria della 8.4) e perche' viene dopo gli
-        //     aggiornamenti di sicurezza indipendenti, che sono piu' urgenti e meno invasivi.
-        //     Un piano che dice "prima fai X" senza contenere X non guida: manda a cercare.
+        // --- MySQL migration, if needed: it is HERE because it is a prerequisite of some
+        //     later steps (Postfix requires the 8.4 library) and because it comes after the
+        //     independent security updates, which are more urgent and less invasive.
+        //     A plan that says "first do X" without containing X does not guide: it sends you searching.
         String srvMysql = sh("pkg query %n 2>/dev/null | grep -E '^mysql[0-9]+-server$' | head -1", 20);
         if (!srvMysql.isEmpty()) {
             boolean already84 = srvMysql.startsWith("mysql84");
@@ -7790,26 +7828,26 @@ public final class UpdateManager {
             }
         }
 
-        // --- Passi per i pacchetti protetti che hanno un aggiornamento ma nessuna CVE ---
-        // Non sono urgenti, ma "aggiornare tutto l'aggiornabile" e' una richiesta legittima e
-        // il piano deve poterla rappresentare, altrimenti resterebbero invisibili per sempre.
+        // --- Steps for the locked packages that have an update but no CVE ---
+        // They are not urgent, but "update everything that can be updated" is a legitimate request
+        // and the plan must be able to represent it, otherwise they would stay invisible forever.
         for (int i = 0; i < packages.length(); i++) {
             JSONObject p = packages.getJSONObject(i);
             String name = p.getString("name");
-            if (seen.contains(name)) continue;               // gia' coperto come vulnerabile
-            if (covered.test(name)) continue;                 // ha gia' la sua fase dedicata
+            if (seen.contains(name)) continue;               // already covered as vulnerable
+            if (covered.test(name)) continue;                 // already has its dedicated phase
             String fam = familyOf(name);
             String key = fam == null ? name : fam;
-            if (!seenFamilies.add(key)) continue;         // gia' coperto dalla sua famiglia
+            if (!seenFamilies.add(key)) continue;         // already covered by its family
             String cur = p.optString("version", "");
             String av = sh("pkg rquery -U %v " + name + " 2>/dev/null", 20);
             if (cur.isEmpty() || av.isEmpty() || av.equals(cur)) continue;
             boolean major = significantJump(name, cur, av);
             JSONObject warning = warningFor(name, major);
             boolean wait = warning != null && "wait".equals(warning.getString("level"));
-            // Se il pacchetto nuovo pretende un'altra famiglia MySQL, il passo non e' "da fare":
-            // e' bloccato finche' MySQL non e' stato migrato. Offrirlo sarebbe proporre
-            // un'operazione che il preflight rifiuta un secondo dopo.
+            // If the new package requires another MySQL family, the step is not "to do":
+            // it is blocked until MySQL has been migrated. Offering it would mean proposing
+            // an operation that the preflight refuses a second later.
             String conflict = mysqlFamilyConflict(name);
             if (conflict != null) {
                 java.util.List<String> memC = familyMembers(name);
@@ -7836,12 +7874,12 @@ public final class UpdateManager {
                     wait ? null : new JSONObject().put("type", "package_update").put("package", name)));
         }
 
-        // --- Cache di rspamd rimaste da un aggiornamento precedente ---
-        // Esiste come passo solo finche' quei file ci sono: e' lo stesso principio dello
-        // stato ricavato, e sparisce da solo quando non serve piu'.
-        // Un "zero file trovati" puo' significare due cose opposte: che sono gia' stati
-        // eliminati, oppure che ho guardato nel posto sbagliato. Si distingue guardando se la
-        // cartella esiste e contiene qualcosa: un'assenza si dimostra, non si presume.
+        // --- rspamd caches left over from a previous update ---
+        // It exists as a step only as long as those files are there: it is the same principle as
+        // the derived state, and it disappears by itself when it is no longer needed.
+        // A "zero files found" can mean two opposite things: that they have already been
+        // deleted, or that I looked in the wrong place. They are told apart by looking at whether
+        // the folder exists and contains something: an absence is proven, not presumed.
         boolean rspamdPresent = ok("pkg info -e rspamd", 20);
         boolean rspamdFolder = ok("test -d /var/db/rspamd", 15);
         long fileRspamd = rspamdFolder
@@ -7863,9 +7901,9 @@ public final class UpdateManager {
                     I18n.tr("server.um.maintenancePlan.28"), null));
         }
 
-        // --- Passo finale: configurazione Dovecot dalla sorgente unica ---
-        // Lo stato si ricava dal file vivo: l'intestazione la scrive solo il generatore nuovo.
-        // Anche quella di prima: un server che non ha ancora cambiato firma e' gia' rigenerato.
+        // --- Final step: Dovecot configuration from the single source ---
+        // The state is derived from the live file: the header is written only by the new generator.
+        // The previous one too: a server that has not yet changed signature is already regenerated.
         boolean regenerated = ok("grep -qF" + dovecotSignatureOptions() + " "
                 + DOVECOT_DIR + "/dovecot.conf 2>/dev/null", 15);
         boolean sieveActive = ok("grep -qE '^protocols.*sieve' " + DOVECOT_DIR + "/dovecot.conf 2>/dev/null", 15);
@@ -7879,20 +7917,20 @@ public final class UpdateManager {
                 regenerated ? null : new JSONObject().put("type", "dovecot_config_regen")),
                 new JSONObject().put("type", "dovecot_config_regen")));
 
-        // --- Le tre operazioni che un semplice "pkg upgrade" non sa fare ---
-        // Stanno nel piano anche se l'azione vive in una scheda dedicata: un piano che tace su
-        // cio' che resta da fare dice implicitamente "sei a posto", e non e' vero. Lo stato e'
-        // ricavato con interrogazioni leggere — niente simulazioni, che qui costerebbero minuti.
+        // --- The three operations that a simple "pkg upgrade" cannot do ---
+        // They are in the plan even if the action lives in a dedicated tab: a plan that is silent
+        // about what is left to do implicitly says "you are fine", and that is not true. The state
+        // is derived with light queries -- no simulations, which here would cost minutes.
 
-        // Roundcube: il pacchetto si aggiornerebbe da solo, ma il salto di versione maggiore
-        // cambia lo SCHEMA del database, e senza bin/updatedb.sh la webmail non funziona.
+        // Roundcube: the package would upgrade by itself, but the major version jump
+        // changes the database SCHEMA, and without bin/updatedb.sh the webmail does not work.
         if (!rcPkg.isEmpty() && isValidName(rcPkg)) {
             String cur = sh("pkg query %v " + rcPkg + " 2>/dev/null", 20);
             String av  = sh("pkg rquery -U %v " + rcPkg + " 2>/dev/null", 20);
             boolean rcUnknown = cur.isEmpty() || av.isEmpty();
             boolean toDoRc = !rcUnknown && !av.equals(cur);
-            // Una webmail gia' sulla 1.7 con la radice vecchia e' guasta ADESSO: se il piano
-            // guardasse solo la versione direbbe "fatto" mentre la webmail non risponde.
+            // A webmail already on 1.7 with the old root is broken NOW: if the plan
+            // looked only at the version it would say "done" while the webmail does not answer.
             String crookedRoot = null;
             if (wantsPublicHtml(cur) || wantsPublicHtml(av)) {
                 JSONArray rd = nginxRoundcubeRoots();
@@ -7916,7 +7954,7 @@ public final class UpdateManager {
                     : I18n.tr("server.um.maintenancePlan.36"), null));
         }
 
-        // Python: py311 e py312 sono pacchetti diversi, non due versioni dello stesso.
+        // Python: py311 and py312 are different packages, not two versions of the same one.
         java.util.LinkedHashSet<String> pyOld = new java.util.LinkedHashSet<>();
         for (String n : sh("pkg query %n 2>/dev/null").split("\n")) {
             Matcher m = Pattern.compile("^py(3[0-9]{2})-").matcher(n.trim());
@@ -7935,12 +7973,12 @@ public final class UpdateManager {
                     I18n.tr("server.um.runPythonTransition.2"), null));
         }
 
-        // JVM: il pannello ci gira sopra, quindi non puo' aggiornarla restando acceso.
+        // JVM: the panel runs on it, so it cannot update it while staying up.
         if (!jvmPkg.isEmpty()) {
             String cur = sh("pkg query %v " + jvmPkg + " 2>/dev/null", 20);
             String av  = sh("pkg rquery -U %v " + jvmPkg + " 2>/dev/null", 20);
-            // Tre stati, non due. Il repository che non risponde NON vuol dire "sei a posto":
-            // vuol dire che non lo so, e dirlo e' l'unica risposta onesta.
+            // Three states, not two. The repository not answering does NOT mean "you are fine":
+            // it means I do not know, and saying so is the only honest answer.
             boolean unknownJv = cur.isEmpty() || av.isEmpty();
             boolean toDoJv = !unknownJv && !av.equals(cur);
             int cveJv = vulnerabilityDetail(audit, jvmPkg).getJSONArray("cve").length();
@@ -7957,7 +7995,7 @@ public final class UpdateManager {
                     : I18n.tr("server.um.maintenancePlan.42"), null));
         }
 
-        // Vulnerabilita' senza correzione disponibile: non sono un passo, ma vanno sapute.
+        // Vulnerabilities without an available fix: they are not a step, but they must be known.
         JSONArray withoutRemedy = new JSONArray();
         for (String name : seen) {
             String cur = sh("pkg query %v " + name + " 2>/dev/null", 20);
@@ -7973,21 +8011,21 @@ public final class UpdateManager {
     }
 
     /**
-     * Un passo del piano, identificato da una CHIAVE stabile e non da un numero.
+     * A step of the plan, identified by a stable KEY and not by a number.
      *
-     * I numeri scorrevano: i passi sui singoli pacchetti spariscono quando il pacchetto non ha
-     * piu' niente da fare — e' la conseguenza dello stato ricavato invece che memorizzato — e
-     * quello che era "il 3" diventava un altro. Chi segue una guida deve poter dire "ho fatto
-     * openssl", non "ho fatto il tre" e scoprire che il tre adesso e' nginx.
+     * The numbers shifted: the steps on single packages disappear when the package has nothing
+     * left to do -- it is the consequence of the state being derived instead of stored -- and
+     * what was "number 3" became another one. Whoever follows a guide must be able to say "I
+     * did openssl", not "I did number three" and then discover that three is now nginx.
      */
     /**
-     * La lettera di ogni fase, legata alla sua CHIAVE e non all'ordine di apparizione.
+     * The letter of each phase, tied to its KEY and not to the order of appearance.
      *
-     * Assegnarle scorrendo l'elenco sembrava stabile finche' le fasi erano sempre le stesse
-     * quattro. Ma una fase che compare solo quando serve — come la pulizia delle cache di
-     * rspamd — farebbe scorrere tutte quelle dopo, e "Fase C" tornerebbe a significare cose
-     * diverse in momenti diversi: esattamente il difetto dei numeri, solo piu' lento a farsi
-     * vedere.
+     * Assigning them while going through the list looked stable as long as the phases were
+     * always the same four. But a phase that appears only when needed -- like the cleanup of
+     * the rspamd caches -- would shift all the ones after it, and "Phase C" would again mean
+     * different things at different moments: exactly the defect of the numbers, only slower to
+     * show.
      */
     private static final java.util.Map<String, String> PHASE_LETTER = java.util.Map.of(
         "phase-protection",   "A",
@@ -8001,15 +8039,16 @@ public final class UpdateManager {
     );
 
     /**
-     * Segna un passo come RIFACIBILE: gia' fatto, ma ripetibile senza danno.
+     * Marks a step as REDOABLE: already done, but repeatable without harm.
      *
-     * Vale solo per i passi che riscrivono qualcosa in modo idempotente — la configurazione
-     * Dovecot, la protezione dei pacchetti — e serve perche' lo stato ricavato, da solo,
-     * rende impossibile ripetere cio' che risulta gia' fatto. Dopo un miglioramento del
-     * generatore si vuole rigenerare, e non poterlo fare e' una limitazione, non una tutela.
+     * It applies only to the steps that rewrite something idempotently -- the Dovecot
+     * configuration, the locking of packages -- and it is needed because the derived state, on
+     * its own, makes it impossible to repeat what appears already done. After an improvement of
+     * the generator one wants to regenerate, and not being able to is a limitation, not a
+     * safeguard.
      *
-     * NON si applica agli aggiornamenti di pacchetto (rifarli non significa niente) ne' alla
-     * migrazione MySQL, che riscrive il data dictionary e non e' ripetibile per definizione.
+     * It does NOT apply to package updates (redoing them means nothing) nor to the MySQL
+     * migration, which rewrites the data dictionary and is not repeatable by definition.
      */
     private static JSONObject repeatable(JSONObject step, JSONObject action) {
         if ("done".equals(step.optString("state")) && action != null) step.put("redoAction", action);
@@ -8026,16 +8065,16 @@ public final class UpdateManager {
         return o;
     }
 
-    // ===================== aggiornamento guidato di un singolo pacchetto =====================
+    // ===================== guided update of a single package =====================
 
     /**
-     * Pacchetti che devono muoversi INSIEME.
+     * Packages that must move TOGETHER.
      *
-     * Non e' una preferenza estetica: mysql80-server dipende da mysql80-client, e se il
-     * client resta protetto un "pkg upgrade mysql80-server" trova una dipendenza bloccata e
-     * non conclude. Lo stesso vale per php84 con le sue ventotto estensioni, che portano il
-     * numero di versione nel nome. Trattarli come passi separati significa proporre
-     * un'operazione che non puo' riuscire.
+     * It is not an aesthetic preference: mysql80-server depends on mysql80-client, and if the
+     * client stays locked a "pkg upgrade mysql80-server" finds a locked dependency and does
+     * not complete. The same goes for php84 with its twenty-eight extensions, which carry the
+     * version number in their name. Treating them as separate steps means proposing
+     * an operation that cannot succeed.
      */
     private static final String[][] FAMILIES = {
         {"^mysql[0-9]+-(server|client)$",  "server.um.step.1"},
@@ -8043,7 +8082,7 @@ public final class UpdateManager {
         {"^dovecot[0-9]*(-.+)?$",          "server.um.family.dovecot"},
     };
 
-    /** L'espressione della famiglia a cui appartiene il pacchetto, o null se sta da solo. */
+    /** The expression of the family the package belongs to, or null if it stands alone. */
     static String familyOf(String name) {
         for (String[] f : FAMILIES) if (name.matches(f[0])) return f[0];
         return null;
@@ -8055,18 +8094,18 @@ public final class UpdateManager {
     }
 
     /**
-     * Un pacchetto GIA' installato che e' "la stessa cosa a un'altra versione" di 'nome', o
-     * null. Serve a PackagePlan per riconoscere quando pkg gira attorno a un blocco
-     * installando un altro membro della famiglia: il perche' sta su PackagePlan.familyAddition.
+     * An ALREADY installed package that is "the same thing at another version" as 'nome', or
+     * null. PackagePlan needs it to recognize when pkg works around a lock by installing
+     * another member of the family: the reason is on PackagePlan.familyAddition.
      *
-     * Due condizioni, entrambe necessarie, perche' una sola sbaglia:
+     * Two conditions, both necessary, because either one alone gets it wrong:
      *
-     *  - **la stessa famiglia dichiarata** (FAMIGLIE). Senza questa, python311 e python312
-     *    sembrerebbero gemelli, e invece convivono benissimo.
-     *  - **lo stesso scheletro**, cioe' lo stesso nome a cifre sostituite: mysql97-client e
-     *    mysql84-client diventano entrambi "mysql#-client", mentre mysql84-server diventa
-     *    "mysql#-server". Senza questa, il gemello di mysql97-client potrebbe risultare
-     *    mysql84-server, che e' della stessa famiglia ma non occupa lo stesso posto.
+     *  - **the same declared family** (FAMIGLIE). Without this, python311 and python312
+     *    would look like twins, and instead they coexist perfectly well.
+     *  - **the same skeleton**, that is the same name with the digits replaced: mysql97-client
+     *    and mysql84-client both become "mysql#-client", while mysql84-server becomes
+     *    "mysql#-server". Without this, the twin of mysql97-client could turn out to be
+     *    mysql84-server, which is of the same family but does not occupy the same place.
      */
     static String installedFamilyTwin(String name) {
         if (!isValidName(name)) return null;
@@ -8081,12 +8120,12 @@ public final class UpdateManager {
         return null;
     }
 
-    /** Il nome con le cifre sostituite: "mysql84-client" -> "mysql#-client". */
+    /** The name with the digits replaced: "mysql84-client" -> "mysql#-client". */
     static String nameSkeleton(String name) {
         return name == null ? "" : name.replaceAll("[0-9]+", "#");
     }
 
-    /** Tutti i pacchetti INSTALLATI che appartengono alla stessa famiglia. Almeno il pacchetto stesso. */
+    /** All the INSTALLED packages that belong to the same family. At least the package itself. */
     static java.util.List<String> familyMembers(String name) {
         java.util.List<String> members = new ArrayList<>();
         String fam = familyOf(name);
@@ -8100,10 +8139,10 @@ public final class UpdateManager {
     }
 
     /**
-     * Quale servizio dipende da quale pacchetto. Serve per la parte che ieri e' costata cara:
-     * aggiornare un pacchetto NON aggiorna il processo in esecuzione, che continua a usare i
-     * file gia' caricati in memoria. Senza riavviare, la vulnerabilita' resta aperta pur
-     * risultando corretta.
+     * Which service depends on which package. It is needed for the part that cost dearly yesterday:
+     * updating a package does NOT update the running process, which keeps using the
+     * files already loaded in memory. Without a restart, the vulnerability stays open while
+     * appearing fixed.
      */
     private static final String[][] SERVICE_OF = {
         {"^postfix.*",                        "postfix"},
@@ -8111,10 +8150,10 @@ public final class UpdateManager {
         {"^dovecot[0-9]*-pigeonhole.*",       "dovecot"},
         {"^rspamd$",                          "rspamd"},
         {"^redis.*",                          "redis"},
-        // Lo stesso pacchetto fa girare due demoni, e tutti e due caricano libclamav. Con la
-        // sola riga di clamd, misurato su latest il 24/10/2026: clamav 1.5.4_1,1 -> 1.5.4_2,1,
-        // clamd riavviato, e freshclam ancora col programma di prima (procstat non trovava piu'
-        // il suo eseguibile) sotto un «clamav in servizio».
+        // The same package runs two daemons, and both load libclamav. With only the clamd
+        // line, measured on latest on 2026-10-24: clamav 1.5.4_1,1 -> 1.5.4_2,1, clamd
+        // restarted, and freshclam still with the previous program (procstat no longer found
+        // its executable) under a "clamav in service".
         {"^clamav.*",                         "clamav_clamd"},
         {"^clamav.*",                         "clamav_freshclam"},
         {"^nginx.*",                          "nginx"},
@@ -8124,11 +8163,11 @@ public final class UpdateManager {
         {"^unbound$",                         "unbound"},
     };
 
-    /** Pacchetti che sono librerie condivise: qui un "nessun dipendente" va preso con cautela. */
+    /** Packages that are shared libraries: here a "no dependents" must be taken with caution. */
     private static final String SHARED_LIBRARIES =
             "^(openssl[0-9]*|expat|libxml2|zlib|libiconv|pcre2?|curl|libssh2|nghttp2|icu|libsodium)$";
 
-    /** Tutti i servizi di un pacchetto: un pacchetto puo' farne girare piu' d'uno (clamav). */
+    /** All the services of a package: a package can run more than one (clamav). */
     private static java.util.List<String> directServices(String pkgName) {
         java.util.List<String> r = new ArrayList<>();
         for (String[] row : SERVICE_OF) if (pkgName.matches(row[0])) r.add(row[1]);
@@ -8136,10 +8175,10 @@ public final class UpdateManager {
     }
 
     /**
-     * I servizi da riavviare dopo aver aggiornato un pacchetto. Per una libreria condivisa
-     * come openssl non basta guardare il pacchetto stesso: si chiede a pkg CHI dipende da lui
-     * e si traducono quei pacchetti in servizi. Un elenco scritto a mano invecchierebbe in
-     * silenzio, e un servizio dimenticato significa una vulnerabilita' che resta aperta.
+     * The services to restart after updating a package. For a shared library like openssl
+     * it is not enough to look at the package itself: pkg is asked WHO depends on it and
+     * those packages are translated into services. A hand-written list would age in
+     * silence, and a forgotten service means a vulnerability that stays open.
      */
     static java.util.List<String> servicesToRestart(String pkgName) {
         java.util.LinkedHashSet<String> services = new java.util.LinkedHashSet<>();
@@ -8153,7 +8192,7 @@ public final class UpdateManager {
         return new ArrayList<>(services);
     }
 
-    /** Nome effettivo dello script rc.d fra i candidati, o null se il servizio non c'e'. */
+    /** Actual name of the rc.d script among the candidates, or null if the service is not there. */
     static String realServiceName(String logical) {
         for (String[] candidates : SERVICES) {
             boolean belongs = false;
@@ -8168,41 +8207,41 @@ public final class UpdateManager {
     }
 
     /**
-     * Ripesca dai messaggi post-installazione quelli che CHIEDONO un'azione.
+     * Fishes out of the post-install messages the ones that ASK for an action.
      *
-     * pkg li stampa in mezzo a centinaia di righe e poi si prosegue: un "e' consigliato
-     * rimuovere i file di cache" scorre via e nessuno lo fa. Rspamd 4.1 ne aveva uno che
-     * riguardava la classificazione dello spam, ed e' passato inosservato proprio cosi'.
-     * Qui si riconoscono le formule imperative e il messaggio si ristampa ALLA FINE, dove
-     * si guarda davvero.
+     * pkg prints them in the middle of hundreds of lines and then moves on: an "it is recommended
+     * to remove the cache files" scrolls past and nobody does it. Rspamd 4.1 had one that
+     * concerned spam classification, and it went unnoticed exactly that way.
+     * Here the imperative phrasings are recognized and the message is printed again AT THE END,
+     * where people really look.
      */
     static java.util.List<String> messagesAskingForAction(String outputPkg) {
         java.util.List<String> outside = new ArrayList<>();
-        // Il rientro comune si toglie, non solo quello della prima riga: uno script che
-        // scrive tutto rientrato di quattro spazi, ristampato con trim(), avrebbe la prima
-        // riga a sinistra e le altre spostate.
+        // The common indentation is removed, not only that of the first line: a script that
+        // writes everything indented by four spaces, printed again with trim(), would have the
+        // first line on the left and the others shifted.
         for (String block : outputBlocks(outputPkg))
             if (asksForAction(block)) outside.add(block.stripTrailing().stripIndent().strip());
         return outside;
     }
 
-    /** "[4/4] Installing postfix-mysql-3.11.7_3,1...": pkg che dice a che punto e'. */
+    /** "[4/4] Installing postfix-mysql-3.11.7_3,1...": pkg saying where it is. */
     private static final Pattern PKG_PROGRESS = Pattern.compile("^\\[\\d+/\\d+\\] .*");
 
-    /** Le righe con cui pkg ricomincia a parlare, per esempio quando un aggiornamento si rilancia. */
+    /** The lines with which pkg starts talking again, for example when an update relaunches itself. */
     private static final Pattern PKG_RESTARTS = Pattern.compile(
             "^(Checking integrity|Checking for upgrades|Updating .* repository catalogue).*");
 
-    /** Il bordo di un riquadro: «=====...» da solo sulla riga. */
+    /** The edge of a box: "=====..." alone on the line. */
     private static final Pattern BOX_EDGE = Pattern.compile("^={10,}\\s*$");
 
     /**
-     * Due frasi che pkg e i port stampano a OGNI aggiornamento e che durante un aggiornamento
-     * non chiedono niente. La prima e' di pkg per ogni file di configurazione diverso dal suo
-     * esempio; la seconda dei port per ogni utente o gruppo del pacchetto che si disinstalla,
-     * e qui il pacchetto si reinstalla subito dopo. Misurate nell'uscita vera
-     * dell'aggiornamento di postfix-mysql del 24/10/2026: tenerle vorrebbe dire ristampare
-     * come «da fare» due cose sbagliate da fare.
+     * Two sentences that pkg and the ports print at EVERY update and that during an update
+     * ask for nothing. The first is pkg's, for every configuration file that differs from its
+     * sample; the second is the ports', for every user or group of the package being
+     * uninstalled, and here the package is reinstalled right after. Measured in the real
+     * output of the postfix-mysql update of 2026-10-24: keeping them would mean printing
+     * again as "to do" two things that are wrong to do.
      */
     private static final Pattern[] NOTICES_NOT_ACTIONS = {
         Pattern.compile("^You may need to manually remove \\S+ if it is no longer needed\\.?\\s*$"),
@@ -8210,22 +8249,22 @@ public final class UpdateManager {
     };
 
     /**
-     * L'uscita di pkg divisa nei pezzi che chi la legge prenderebbe per un messaggio.
+     * The pkg output split into the pieces that a reader would take for a message.
      *
-     * Prima si leggevano solo i blocchi «Message from». Ma uno script di installazione scrive
-     * mentre gira, e pkg stampa quelle righe dove capitano, FUORI da ogni blocco. Misurato
-     * sull'aggiornamento di postfix-mysql del 24/10/2026 (reperto 42): 61 righe, e le due cose
-     * che contavano erano entrambe fuori — «COMPATIBILITY: editing main.cf, setting
-     * inet_protocols=ipv4», cioe' IPv6 tolto al prossimo riavvio, e il riquadro «Postfix was
-     * *not* activated in mailer.conf». L'unico blocco «Message from» era quello della versione
-     * VECCHIA, che si stava disinstallando. Risultato: zero messaggi.
+     * Before, only the "Message from" blocks were read. But an installation script writes
+     * while it runs, and pkg prints those lines wherever they fall, OUTSIDE any block. Measured
+     * on the postfix-mysql update of 2026-10-24 (finding 42): 61 lines, and the two things
+     * that mattered were both outside -- "COMPATIBILITY: editing main.cf, setting
+     * inet_protocols=ipv4", that is IPv6 removed at the next restart, and the "Postfix was
+     * *not* activated in mailer.conf" box. The only "Message from" block was the one of the
+     * OLD version, which was being uninstalled. Result: zero messages.
      *
-     * I pezzi:
-     *  - un blocco «Message from», fino al successivo o a quando pkg ricomincia a parlare;
-     *  - un riquadro fra due righe di «=====», con le sue righe vuote dentro;
-     *  - fuori da questi, un paragrafo: righe consecutive fra due righe vuote o due righe di
-     *    avanzamento di pkg. Le righe di uno script stanno fra l'avanzamento del suo
-     *    pacchetto e quello del successivo.
+     * The pieces:
+     *  - a "Message from" block, up to the next one or until pkg starts talking again;
+     *  - a box between two lines of "=====", with its empty lines inside;
+     *  - outside these, a paragraph: consecutive lines between two empty lines or two pkg
+     *    progress lines. The lines of a script are between the progress line of its
+     *    package and that of the next one.
      */
     static java.util.List<String> outputBlocks(String outputPkg) {
         java.util.List<String> blocks = new ArrayList<>();
@@ -8277,20 +8316,20 @@ public final class UpdateManager {
         return t.contains("it is recommended") || t.contains("you should") || t.contains("you may need")
             || t.contains("you need to") || t.contains("remember to")
             || t.contains("following command") || t.contains("action is needed")
-            // Uno script che dice di aver modificato un file, o di aver cambiato un valore
-            // predefinito per compatibilita', non chiede niente a parole: ha gia' fatto. E'
-            // la prima cosa da leggere, perche' quello che ha fatto entra in vigore al
-            // riavvio (reperto 42: «Specify inet_protocols explicitly if you want to enable
-            // IPv6»).
+            // A script that says it modified a file, or changed a default value for
+            // compatibility, does not ask for anything in words: it has already done it.
+            // It is the first thing to read, because what it did takes effect at the
+            // restart (finding 42: "Specify inet_protocols explicitly if you want to
+            // enable IPv6").
             || t.contains("compatibility:") || t.contains("explicitly")
             || SCRIPT_EDITS_A_FILE.matcher(t).matches();
     }
 
     /**
-     * Ristampa alla fine del log i messaggi che chiedono un'azione o dicono di aver cambiato
-     * qualcosa. La chiedono i tre lavori che aggiornano pacchetti: prima lo faceva solo
-     * l'aggiornamento guidato, e la manutenzione completa — quella che aggiorna tutto —
-     * lasciava scorrere i messaggi di tutti i pacchetti in mezzo all'uscita di pkg.
+     * Prints again at the end of the log the messages that ask for an action or say they changed
+     * something. The three jobs that update packages ask for it: before, only the guided update
+     * did it, and the full maintenance -- the one that updates everything -- let the messages
+     * of all the packages scroll by in the middle of the pkg output.
      */
     private static void writeActionMessages(Job job, String pkgOutput) {
         java.util.List<String> messages = messagesAskingForAction(pkgOutput);
@@ -8305,12 +8344,12 @@ public final class UpdateManager {
     }
 
     /**
-     * Comando che chiede a un servizio se la sua configurazione e' valida, PRIMA di riavviarlo.
+     * Command that asks a service whether its configuration is valid, BEFORE restarting it.
      *
-     * Riavviare alla cieca dopo un aggiornamento e' il modo di scoprire un errore di sintassi
-     * a servizio gia' fermo. Su Dovecot questo controllo esisteva gia'; non c'era per gli altri,
-     * ed e' una disparita' senza motivo: nginx fra la 1.28 e la 1.30 puo' cambiare direttive,
-     * e Postfix cambia i predefiniti fra versioni.
+     * Restarting blindly after an update is the way to discover a syntax error with the
+     * service already stopped. On Dovecot this check already existed; it was not there for the
+     * others, and it is a disparity without reason: nginx between 1.28 and 1.30 can change
+     * directives, and Postfix changes its defaults between versions.
      */
     private static final String[][] CONFIG_TEST = {
         {"nginx",        "nginx -t"},
@@ -8326,17 +8365,17 @@ public final class UpdateManager {
     }
 
     /**
-     * Prove da fare DOPO il riavvio, per vedere se il servizio ha ritrovato i propri dati.
+     * Tests to run AFTER the restart, to see whether the service has found its data again.
      *
-     * "Il processo e' ripartito" non dice se ha ripreso a fare il suo mestiere. Redis riavviato
-     * con il dump non riletto riparte vuoto: rspamd continua a funzionare, ma senza
-     * addestramento bayesiano, senza greylisting e senza limiti — e non se ne accorge nessuno
-     * finche' lo spam non ricomincia a passare. Era scritto nella mia avvertenza e non lo
-     * controllava niente: un'avvertenza che non verifica e' solo una frase.
+     * "The process has restarted" does not say whether it has gone back to doing its job. Redis
+     * restarted with the dump not read back starts empty: rspamd keeps working, but without
+     * Bayesian training, without greylisting and without limits -- and nobody notices until
+     * spam starts getting through again. It was written in my warning and nothing checked
+     * it: a warning that does not verify is just a sentence.
      */
     private static final String[][] TEST_AFTER = {
-        // Dal socket, dove c'e' (RedisSocket, reperto 235): con la porta chiusa «redis-cli DBSIZE» non stampa niente, e
-        // ogni aggiornamento di redis direbbe che e' ripartito vuoto.
+        // From the socket, where there is one (RedisSocket, finding 235): with the port closed
+        // "redis-cli DBSIZE" prints nothing, and every redis update would say it restarted empty.
         {"redis", "if [ -S " + RedisSocket.SOCKET + " ]; then redis-cli -s " + RedisSocket.SOCKET + " DBSIZE; else redis-cli DBSIZE;"
                 + " fi 2>/dev/null", "server.um.testConfigOf.1"},
     };
@@ -8347,16 +8386,19 @@ public final class UpdateManager {
     }
 
     /**
-     * Il servizio e' ripartito? Si chiede piu' volte, non una: MySQL 8.4 aggiorna i suoi dati all'avvio, e passando da
-     * 8.4.11 a 8.4.13 sulla VM «service mysql-server status» diceva che non girava subito dopo il riavvio, e girava pochi
-     * secondi dopo. Un solo sguardo lo dava per caduto, e «Aggiorna tutto» si fermava col servizio che stava partendo
-     * (reperto 207). Fino a cinque minuti per MySQL, trenta secondi per gli altri.
+     * Has the service restarted? It is asked several times, not once: MySQL 8.4 upgrades its data at startup, and
+     * going from 8.4.11 to 8.4.13 on the VM "service mysql-server status" said it was not running right after the
+     * restart, and it was running a few seconds later. A single look took it for down, and "Update all" stopped
+     * with the service still starting (finding 207). Up to five minutes for MySQL, thirty seconds for the others.
      */
     static boolean cameUp(String service) {
         return waitUntil("mysql-server".equals(service) ? 300 : 30, 2000, () -> ok("service " + service + " status", 20));
     }
 
-    /** Vero appena check risponde si', falso se non lo fa entro seconds secondi; fra un tentativo e l'altro pauseMs. */
+    /**
+     * True as soon as check answers yes, false if it does not within seconds seconds; pauseMs between one attempt
+     * and the next.
+     */
     static boolean waitUntil(int seconds, long pauseMs, java.util.function.BooleanSupplier check) {
         long until = System.currentTimeMillis() + seconds * 1000L;
         while (true) {
@@ -8371,7 +8413,7 @@ public final class UpdateManager {
         }
     }
 
-    /** Il pid di un servizio, o stringa vuota. Confrontarlo prima e dopo prova che e' ripartito davvero. */
+    /** The pid of a service, or an empty string. Comparing it before and after proves that it really restarted. */
     static String servicePid(String service) {
         if (!isValidName(service)) return "";
         String o = sh("service " + service + " status 2>/dev/null", 15);
@@ -8380,9 +8422,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Controlli preliminari per l'aggiornamento di UN pacchetto protetto. Tutto in sola
-     * lettura: dice cosa succederebbe, quali vulnerabilita' si chiuderebbero e quali servizi
-     * andranno riavviati, prima che qualcuno prema qualcosa.
+     * Preliminary checks for the update of ONE locked package. All read-only: it says
+     * what would happen, which vulnerabilities would be closed and which services will
+     * have to be restarted, before anyone presses anything.
      */
     public static JSONObject packagePreflight(String name) {
         JSONObject r = new JSONObject();
@@ -8390,9 +8432,9 @@ public final class UpdateManager {
         JSONArray checks = new JSONArray();
         boolean block = false;
 
-        // I pacchetti che devono muoversi insieme si sbloccano e si aggiornano insieme:
-        // altrimenti una dipendenza rimasta protetta blocca tutta l'operazione. Serve saperlo
-        // subito, perche' da questo dipendono anche i servizi da riavviare.
+        // The packages that must move together are unlocked and updated together:
+        // otherwise a dependency left locked blocks the whole operation. It must be known
+        // right away, because the services to restart also depend on this.
         java.util.List<String> family = familyMembers(name);
 
         String version = sh("pkg query %v " + name + " 2>/dev/null", 20);
@@ -8430,11 +8472,11 @@ public final class UpdateManager {
             }
         }
 
-        // Il pacchetto nuovo pretende una famiglia MySQL diversa da quella installata?
-        // E' il caso di postfix-mysql 3.11, che nel repository dipende da mysql84-client: sul
-        // sistema c'e' ancora mysql80-client, e i due sono in conflitto. Aggiornarlo prima di
-        // aver migrato MySQL significa o un fallimento o una sostituzione di libreria non
-        // voluta, con mysql80-server che ci dipende ancora.
+        // Does the new package require a MySQL family different from the installed one?
+        // It is the case of postfix-mysql 3.11, which in the repository depends on mysql84-client:
+        // on the system there is still mysql80-client, and the two conflict. Updating it before
+        // having migrated MySQL means either a failure or an unwanted library replacement,
+        // with mysql80-server still depending on it.
         String mysqlInstalled = sh("pkg query %n 2>/dev/null | grep -E '^mysql[0-9]+-client$' | head -1", 20);
         if (!available.isEmpty()) {
             String required = mysqlFamilyConflict(name);
@@ -8454,9 +8496,9 @@ public final class UpdateManager {
             }
         }
 
-        // Vulnerabilita' che questo aggiornamento chiuderebbe: e' il motivo per farlo. Si
-        // chiede per la versione INSTALLATA, e si pretende un referto: il perche' delle due
-        // cose sta su auditReport.
+        // Vulnerabilities that this update would close: it is the reason to do it. It is
+        // asked for the INSTALLED version, and a report is required: the reason for both
+        // things is on auditReport.
         JSONObject report = auditReport(name, version);
         r.put("cve", report.getJSONArray("cve")).put("vulnDescription", report.getString("description"))
          .put("references", report.getJSONArray("references")).put("vulnChecked", report.optBoolean("done"));
@@ -8469,12 +8511,12 @@ public final class UpdateManager {
                     problems > 0 ? I18n.tr("server.um.x.openCves", java.util.Map.of("n", String.valueOf(problems), "d", String.valueOf(report.getString("description"))))
                                  : I18n.tr("server.um.packagePreflight.9"));
 
-        // Servizi da riavviare. Il punto dolente: senza riavvio la correzione non entra in
-        // servizio. E vanno calcolati su TUTTA la famiglia, non sul solo pacchetto nominato:
-        // aggiornando mysql80-server insieme a mysql80-client, sono i programmi collegati al
-        // CLIENT (Postfix, Dovecot, php-fpm) a tenersi in memoria la libreria vecchia. Guardare
-        // il solo nome scritto nel passo li lascerebbe fuori, ed e' esattamente il caso in cui
-        // la correzione risulta installata senza essere in servizio.
+        // Services to restart. The sore point: without a restart the fix does not go into
+        // service. And they must be computed on the WHOLE family, not on the named package alone:
+        // updating mysql80-server together with mysql80-client, it is the programs linked to the
+        // CLIENT (Postfix, Dovecot, php-fpm) that keep the old library in memory. Looking only at
+        // the name written in the step would leave them out, and it is exactly the case in which
+        // the fix appears installed without being in service.
         java.util.LinkedHashSet<String> logicalNames = new java.util.LinkedHashSet<>();
         for (String member : family) logicalNames.addAll(servicesToRestart(member));
         JSONArray services = new JSONArray();
@@ -8486,8 +8528,8 @@ public final class UpdateManager {
                     .put("pid", servicePid(real)));
         }
         r.put("services", services);
-        // Cosa ha risposto pkg, per esteso: un "nessuno" senza le prove non e' un'informazione,
-        // e su una libreria condivisa e' l'errore che vanifica l'aggiornamento.
+        // What pkg answered, in full: a "none" without the evidence is not information,
+        // and on a shared library it is the error that defeats the update.
         JSONArray foundDeps = new JSONArray();
         for (String member : family) {
             for (String line : sh("pkg query %rn " + member + " 2>/dev/null", 30).split("\n")) {
@@ -8521,17 +8563,17 @@ public final class UpdateManager {
         r.put("wasLocked", !lockedNow.isEmpty());
         r.put("lockedMembers", new JSONArray(lockedNow));
 
-        // Il piano ESATTO. Fin qui c'era soltanto "nome versione -> versione del catalogo", ma
-        // pkg per aggiornare puo' cambiare anche dipendenze, installarne di nuove, rimuoverne:
-        // si chiede a pkg, su una copia del suo database in cui si tolgono le stesse protezioni
-        // che togliera' l'aggiornamento vero. Il database vero non viene toccato.
+        // The EXACT plan. Up to here there was only "name version -> catalog version", but
+        // to update, pkg can also change dependencies, install new ones, remove some: pkg
+        // is asked, on a copy of its database in which the same locks are removed that the
+        // real update will remove. The real database is not touched.
         JSONObject plan = judged(PackagePlan.planFor(family, lockedNames(lockList),
                 UpdateManager::reasonNotToUnlock, UpdateManager::installedFamilyTwin));
         if (addPlanChecks(checks, plan, java.util.List.of(name), family, block)) block = true;
         if (plan.optBoolean("success") && plan.optBoolean("measured")) {
             JSONArray changes = plan.getJSONArray("changes");
-            // I servizi da riavviare si calcolano su tutto cio' che il piano cambia, non solo
-            // sulla famiglia: una dipendenza come openssl tiene in memoria i suoi utenti.
+            // The services to restart are computed on everything the plan changes, not only
+            // on the family: a dependency like openssl stays in the memory of its users.
             java.util.LinkedHashSet<String> serviceNames = new java.util.LinkedHashSet<>();
             for (int i = 0; i < services.length(); i++) serviceNames.add(services.getJSONObject(i).getString("name"));
             java.util.List<String> forDependencies = new ArrayList<>();
@@ -8561,9 +8603,9 @@ public final class UpdateManager {
                     ? I18n.tr("server.um.packagePreflight.26")
                     : I18n.tr("server.um.x.willUnlock", java.util.Map.of("list", String.valueOf(String.join(", ", toUnlock)))));
 
-        // Se fra quelli da sbloccare c'e' un pacchetto che nessuno ha chiesto, il perche' va
-        // detto: sta li' perche' altrimenti pkg installerebbe un altro membro della sua
-        // famiglia al suo posto (PackagePlan.familyAddition).
+        // If among those to unlock there is a package nobody asked for, the reason must be
+        // said: it is there because otherwise pkg would install another member of its
+        // family in its place (PackagePlan.familyAddition).
         JSONArray family2 = plan.optJSONArray("familyUnlocked");
         for (int i = 0; family2 != null && i < family2.length(); i++) {
             JSONObject f = family2.getJSONObject(i);
@@ -8578,7 +8620,7 @@ public final class UpdateManager {
         return r;
     }
 
-    /** I pacchetti protetti adesso, per nome, da un'uscita di "pkg lock -l". */
+    /** The packages locked now, by name, from an output of "pkg lock -l". */
     static Set<String> lockedNames(String lockOutput) {
         Set<String> r = new java.util.TreeSet<>();
         for (String line : lockOutput.split("\n")) {
@@ -8592,14 +8634,14 @@ public final class UpdateManager {
     }
 
     /**
-     * Si puo' togliere la protezione a un pacchetto che pkg deve cambiare per far posto a quello
-     * scelto? No se la sua avvertenza dice di aspettare: e' la regola che lo tiene fuori dalla
-     * manutenzione completa, e deve valere anche quando entra dalla porta di servizio, come
-     * dipendenza di un altro.
+     * Can the lock be removed from a package that pkg must change to make room for the chosen
+     * one? Not if its warning says to wait: it is the rule that keeps it out of the full
+     * maintenance, and it must apply also when it comes in through the back door, as a
+     * dependency of another one.
      */
     static String reasonNotToUnlock(JSONObject isProtected) {
         String n = isProtected.optString("name"), from = isProtected.optString("version"), to = isProtected.optString("destination");
-        // Se pkg non dice a che versione andrebbe, si suppone il caso peggiore.
+        // If pkg does not say which version it would go to, the worst case is assumed.
         boolean major = to.isEmpty() || significantJump(n, from, to);
         JSONObject av = warningFor(n, major);
         if (av != null && "wait".equals(av.optString("level")))
@@ -8607,7 +8649,7 @@ public final class UpdateManager {
         return null;
     }
 
-    /** Il piano come lo mostra la scheda: l'uscita di pkg si accorcia, il resto resta com'e'. */
+    /** The plan as the tab shows it: the pkg output is shortened, the rest stays as it is. */
     private static JSONObject planForCard(JSONObject plan) {
         JSONObject p = new JSONObject(plan.toString());
         String u = p.optString("output", "");
@@ -8616,10 +8658,10 @@ public final class UpdateManager {
     }
 
     /**
-     * @param approvedSignature l'impronta del piano che chi preme ha letto nella scheda. Il job
-     *                          ricalcola il piano e parte solo se e' lo stesso: fra la lettura e il
-     *                          click il catalogo puo' essere cambiato, e allora si eseguirebbe un
-     *                          piano che nessuno ha visto.
+     * @param approvedSignature the signature of the plan that whoever presses has read in the tab. The job
+     *                          recomputes the plan and starts only if it is the same: between the reading
+     *                          and the click the catalog may have changed, and then a plan that nobody
+     *                          has seen would be executed.
      */
     public static JSONObject startGuidedUpdate(String name, String approvedSignature) {
         if (!isValidName(name)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
@@ -8628,28 +8670,29 @@ public final class UpdateManager {
                     .put("error", I18n.tr("server.um.startGuidedUpdate.1"));
         String id = "guid-" + System.currentTimeMillis();
         Job j = new Job(id, "guided_update");
-        // Il turno si prende qui, prima dei controlli e di ogni sblocco: due aggiornamenti
-        // approvati da due schede non possono partire insieme.
+        // The turn is taken here, before the checks and any unlocking: two updates
+        // approved from two tabs cannot start together.
         final String pkgName2 = name;
         return startOnTurn(id, j, I18n.tr("server.um.startGuidedUpdate.2", java.util.Map.of("name", String.valueOf(name))), "guided-update",
                 () -> runGuidedUpdate(j, pkgName2, approvedSignature));
     }
 
     /**
-     * «Aggiorna tutto» (reperto 207): tutto quello che c'e' da aggiornare, in un lavoro solo, in quest'ordine: le patch di
-     * FreeBSD, gli altri pacchetti (un piano), i passi del server di posta (un pacchetto, o una famiglia col suo
-     * principale), Roundcube con la sua procedura (copia del database, schema), e per ultima la Java del pannello, che
-     * lo ferma e lo riaccende col suo script. Il committente, 09/11/2026: «c'è ancora disorganizzazione [...] devi
-     * sensibilmente rivedere tutto in maniera logica e semplice, perché ho Webmail (Roundcube) separato con un suo
-     * aggiornamento separato?».
+     * "Update all" (finding 207): everything there is to update, in a single job, in this order: the FreeBSD
+     * patches, the other packages (one plan), the mail server steps (one package, or a family with its main
+     * one), Roundcube with its procedure (database copy, schema), and last the panel's Java, which stops the
+     * panel and starts it again with its script. The owner, 2026-11-09: "there is still disorganization [...]
+     * you must substantially rethink everything in a logical and simple way, why do I have Webmail (Roundcube)
+     * separate, with a separate update of its own?".
      *
-     * Ogni passo e' il lavoro di sempre (gli stessi controlli, la stessa riprotezione, gli stessi riavvii), e si esegue
-     * se il suo piano e' quello letto (l'impronta) o, se nel frattempo e' cambiato perche' un passo prima ha gia'
-     * aggiornato qualcosa, se ogni suo cambiamento e' fra quelli mostrati nella conferma (APPROVED_CHANGES). Un turno e
-     * una via di ritorno per tutti; al primo passo che non va il lavoro si ferma, dice quale e quali non sono partiti.
+     * Each step is the usual job (the same checks, the same re-locking, the same restarts), and it runs if its
+     * plan is the one that was read (the signature) or, if it has changed in the meantime because an earlier
+     * step has already updated something, if each of its changes is among those shown in the confirmation
+     * (APPROVED_CHANGES). One turn and one way back for all; at the first step that fails the job stops, and
+     * says which one and which ones did not start.
      *
-     * @param steps    i passi, nell'ordine; kind: os, plain, package (col nome del principale), roundcube, java
-     * @param approved i cambiamenti mostrati nella conferma: nome -> versione di arrivo
+     * @param steps    the steps, in order; kind: os, plain, package (with the name of the main one), roundcube, java
+     * @param approved the changes shown in the confirmation: name -> target version
      */
     public static JSONObject startEverything(java.util.List<EverythingStep> steps, Map<String, String> approved) {
         String bad = everythingProblem(steps, approved);
@@ -8662,16 +8705,16 @@ public final class UpdateManager {
                 "update-everything", () -> runEverything(j, list, ok));
     }
 
-    /** Un passo di «Aggiorna tutto»: che cosa (kind), il pacchetto principale per i passi di un pacchetto, l'impronta. */
+    /** One step of "Update all": what it is (kind), the main package for the steps of a package, the fingerprint. */
     public record EverythingStep(String kind, String name, String signature) { }
 
     private static final java.util.List<String> EVERYTHING_ORDER = java.util.List.of("os", "plain", "package", "roundcube", "java");
     private static final java.util.regex.Pattern VERSION = java.util.regex.Pattern.compile("[A-Za-z0-9._,+-]{1,64}");
 
     /**
-     * Null se i passi si possono eseguire; altrimenti il perche'. Da 1 a 30 passi, nell'ordine fisso (patch, altri
-     * pacchetti, passi del server di posta, Roundcube, Java), ognuno al piu' una volta tranne i pacchetti, una famiglia
-     * una volta sola, nomi e impronte validi; i cambiamenti approvati con nomi e versioni validi, al piu' 2000.
+     * Null if the steps can be run; otherwise the reason. From 1 to 30 steps, in the fixed order (patches, other
+     * packages, mail server steps, Roundcube, Java), each at most once except packages, a family only once, valid
+     * names and fingerprints; the approved changes with valid names and versions, at most 2000.
      */
     static String everythingProblem(java.util.List<EverythingStep> steps, Map<String, String> approved) {
         String bad = I18n.tr("server.um.everything.bad");
@@ -8686,9 +8729,9 @@ public final class UpdateManager {
             switch (st.kind()) {
                 case "os" -> { if (!st.name().isEmpty() || !st.signature().isEmpty()) return bad; }
                 case "package" -> {
-                    // L'impronta vuota: un passo che i controlli fermavano solo per un pacchetto che un passo prima
-                    // aggiorna (postfix-mysql dopo mysql84-client). Si controlla quando tocca a lui, e parte solo se il
-                    // suo piano resta fra i cambiamenti mostrati (APPROVED_CHANGES).
+                    // The empty fingerprint: a step that the checks stopped only because of a package that an
+                    // earlier step updates (postfix-mysql after mysql84-client). It is checked when its turn comes,
+                    // and it runs only if its plan stays among the changes shown (APPROVED_CHANGES).
                     if (!isValidName(st.name()) || !(st.signature().isEmpty() || validSignature(st.signature()))) return bad;
                     String family = familyOf(st.name());
                     if (!families.add(family == null ? st.name() : family)) return bad;
@@ -8704,8 +8747,9 @@ public final class UpdateManager {
     private static void runEverything(Job job, java.util.List<EverythingStep> steps, Map<String, String> approved) {
         int total = steps.size();
         APPROVED_CHANGES.set(approved);
-        // L'esito delle patch di FreeBSD («Installato: ... serve un riavvio»): l'esito della catena lo sostituirebbe, e il
-        // riavvio che manca non si leggerebbe piu' sotto la riga. Va in coda all'esito, riuscito o fermato.
+        // The outcome of the FreeBSD patches ("Installed: ... a restart is needed"): the outcome of the chain
+        // would replace it, and the missing restart could no longer be read under the line. It is appended to
+        // the outcome, whether successful or stopped.
         String osNote = "";
         try {
             for (int i = 0; i < total; i++) {
@@ -8725,7 +8769,7 @@ public final class UpdateManager {
                     case "package" -> guidedUpdateSteps(job, st.name(), st.signature());
                     case "roundcube" -> roundcubeSteps(job, st.signature());
                     case "java" -> {
-                        // L'ultimo: lo script della Java ferma il pannello e lo riaccende, fuori da questo lavoro.
+                        // Last: the script for Java stops the panel and starts it again, outside this job.
                         JSONObject r = startJavaUpdateNow(st.signature());
                         if (r.optBoolean("success")) {
                             job.status = "completed";
@@ -8766,7 +8810,7 @@ public final class UpdateManager {
         }
     }
 
-    /** Il nome di un passo, per il registro e per i messaggi. */
+    /** The name of a step, for the log and for the messages. */
     private static String everythingLabel(EverythingStep st) {
         return switch (st.kind()) {
             case "os" -> I18n.tr("server.um.everything.patches");
@@ -8778,13 +8822,13 @@ public final class UpdateManager {
     }
 
     /**
-     * Aggiorna UN pacchetto protetto e rimette in servizio cio' che ne dipende.
+     * Updates ONE locked package and puts back into service what depends on it.
      *
-     * L'ordine e' quello che ieri, sull'altro server, abbiamo imparato a nostre spese:
-     * sbloccare, aggiornare, RIPROTEGGERE SEMPRE (anche in caso di errore), poi riavviare i
-     * servizi e verificare che siano ripartiti DAVVERO confrontando il pid. Un pacchetto
-     * aggiornato con il processo ancora sui file vecchi e' una vulnerabilita' aperta che
-     * risulta chiusa: il modo peggiore di stare fermi.
+     * The order is the one we learned the hard way yesterday, on the other server:
+     * unlock, update, ALWAYS RE-LOCK (even on error), then restart the
+     * services and verify that they REALLY came back by comparing the pid. A package
+     * updated with the process still on the old files is an open vulnerability that
+     * shows as closed: the worst way of standing still.
      */
     private static void runGuidedUpdate(Job job, String name, String approvedSignature) {
         try {
@@ -8795,9 +8839,10 @@ public final class UpdateManager {
     }
 
     /**
-     * I passi dell'aggiornamento guidato di UN pacchetto (con la sua famiglia), senza chiudere il lavoro: li usa il
-     * lavoro di un pacchetto e quello di «Aggiorna tutti», che ne fa piu' d'uno uno dopo l'altro nello stesso registro
-     * (reperto 205). Alla fine job.status dice com'e' andata: "completed" o "error" col motivo in errorMessage.
+     * The steps of the guided update of ONE package (with its family), without closing the job: they are used by
+     * the job for one package and by the "Update all" job, which runs more than one, one after the other, in the
+     * same log (finding 205). At the end job.status says how it went: "completed", or "error" with the reason in
+     * errorMessage.
      */
     private static void guidedUpdateSteps(Job job, String name, String approvedSignature) {
         job.status = "running";
@@ -8811,14 +8856,14 @@ public final class UpdateManager {
         java.util.List<String> services = new ArrayList<>();
         Map<String, String> pidBefore = new LinkedHashMap<>();
         Map<String, Boolean> activeBefore = new LinkedHashMap<>();
-        // activeBefore riguarda i soli servizi che si riavvieranno; per il quadro finale
-        // serve lo stato di TUTTI, preso prima di toccare qualunque cosa.
+        // activeBefore covers only the services that will be restarted; the final picture
+        // needs the state of ALL of them, taken before touching anything.
         Map<String, Boolean> servicesBefore = servicesState();
-        // Cio' che il piano non puo' dire: che cosa fanno gli script di installazione alla
-        // configurazione viva e agli indirizzi in ascolto (vedi InstallSideEffects).
+        // What the plan cannot tell: what the install scripts do to the live
+        // configuration and to the listening addresses (see InstallSideEffects).
         InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
-        // I servizi che questo lavoro NON ha riavviato perche' uno script ha cambiato la
-        // configurazione: vanno nell'esito, con il comando per riavviarli dopo averla guardata.
+        // The services that this job did NOT restart because a script changed the
+        // configuration: they go into the outcome, with the command to restart them after looking at it.
         java.util.List<String> heldRestarts = new ArrayList<>();
         try {
             job.advance(1, TOT);
@@ -8845,9 +8890,9 @@ public final class UpdateManager {
             pkgFamily = jsonArrayToList(pf.optJSONArray("family") == null
                     ? new JSONArray().put(name) : pf.getJSONArray("family"));
 
-            // Si esegue il piano che e' stato letto, o niente. Il preflight qui sopra l'ha appena
-            // ricalcolato: se l'impronta non e' quella approvata, qualcosa e' cambiato nel
-            // frattempo (di solito il catalogo) e il piano che partirebbe non l'ha visto nessuno.
+            // The plan that was read is run, or nothing. The preflight above has just
+            // recalculated it: if the fingerprint is not the approved one, something has changed in
+            // the meantime (usually the catalog) and nobody has seen the plan that would run.
             plan = pf.getJSONObject("plan");
             String currentSignature = pf.optString("signature", "");
             if (!planAccepted(approvedSignature, currentSignature, plan)) {
@@ -8863,8 +8908,8 @@ public final class UpdateManager {
                         + (c.getString("from").isEmpty() ? "" : c.getString("from"))
                         + (c.getString("to").isEmpty() || c.getString("to").equals(c.getString("from")) ? "" : " -> " + c.getString("to")));
             }
-            // Si sblocca esattamente cio' che il piano ha sbloccato nella copia: ne' uno in meno
-            // (pkg si fermerebbe), ne' uno in piu' (resterebbe scoperto senza motivo).
+            // Exactly what the plan unlocked in the copy is unlocked: not one less
+            // (pkg would stop), not one more (it would stay unprotected for no reason).
             java.util.List<String> protectedNames = jsonArrayToList(plan.getJSONArray("unlockedPackages"));
             JSONArray sv = pf.optJSONArray("services");
             for (int i = 0; sv != null && i < sv.length(); i++) {
@@ -8886,18 +8931,18 @@ public final class UpdateManager {
             if (protectedNames.isEmpty()) {
                 job.write(I18n.tr("server.um.runGuidedUpdate.6"));
             } else {
-                // L'elenco si salva PRIMA di sbloccare: se il pannello muore adesso, il
-                // ripristino all'avvio sa cosa riproteggere. Se non si scrive, non si sblocca
-                // niente: un'interruzione li lascerebbe sbloccati senza traccia.
+                // The list is saved BEFORE unlocking: if the panel dies now, the
+                // restore at startup knows what to re-lock. If it cannot be written, nothing
+                // is unlocked: an interruption would leave them unlocked without a trace.
                 for (String m : protectedNames)
                     if (!isValidName(m)) throw new IllegalStateException("invalid package name in the plan: " + m);
                 String stateError = PackageQueue.writeState(protectedNames);
                 if (stateError != null)
                     throw new IllegalStateException("I could not save the list for the restore, so I did not unlock anything: " + stateError);
                 job.write(I18n.tr("server.um.runGuidedUpdate.7", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE))));
-                // Da riproteggere tutti, anche uno sblocco fallito o scaduto a meta': pkg lock su un
-                // pacchetto gia' protetto non cambia niente, e cosi' l'elenco su disco si chiude
-                // solo quando tutti risultano protetti.
+                // All of them must be re-locked, even an unlock that failed or timed out halfway: pkg lock on an
+                // already locked package changes nothing, and this way the list on disk is closed
+                // only when all of them show as locked.
                 toRelock2.addAll(protectedNames);
                 for (String m : protectedNames) {
                     boolean u = ok("pkg unlock -y " + m, 30);
@@ -8912,51 +8957,51 @@ public final class UpdateManager {
             StringBuilder list = new StringBuilder();
             for (String m : pkgFamily) if (isValidName(m)) list.append(' ').append(m);
 
-            // Prima si scaricano i pacchetti e si ricalcola: finche' non sono scaricati, pkg
-            // non vede i conflitti sui file e il piano puo' crescere durante l'esecuzione.
-            // Il perche' per esteso, con la misura, sta su fetchAndRecheck.
+            // First the packages are downloaded and the plan is recalculated: until they are downloaded,
+            // pkg does not see the file conflicts and the plan can grow during the run.
+            // The full reason, with the measurement, is on fetchAndRecheck.
             final java.util.List<String> family = pkgFamily;
             Recheck grown = fetchAndRecheck(job, "pkg upgrade -F -y -U" + list + " 2>&1", plan,
                     () -> PackagePlan.planFor(family, lockedNames(), UpdateManager::reasonNotToUnlock,
                             UpdateManager::installedFamilyTwin));
             if (grown.stop() != null) throw org.daemoxcp.mail.util.ShownException.translated(grown.stop());
             plan = grown.plan();
-            // L'output serve due volte: mostrato mentre scorre, e riletto alla fine per
-            // ripescare i messaggi che chiedono un'azione.
+            // The output is needed twice: shown as it scrolls by, and read again at the end to
+            // fish out the messages that ask for an action.
             StringBuilder captured = new StringBuilder();
-            // L'inventario PRIMA: e' l'unico modo di accorgersi di un pacchetto che cambia
-            // senza essere nel piano. Il confronto riga per riga del piano non puo' vederlo.
+            // The inventory BEFORE: it is the only way to notice a package that changes
+            // without being in the plan. The line-by-line comparison of the plan cannot see it.
             Map<String, String> inventoryBefore = PackagePlan.versionsOnly(PackagePlan.installed());
-            // E la configurazione con gli indirizzi in ascolto, nello stesso istante: il piano
-            // dice quali pacchetti cambiano, non che cosa i loro script riscrivono.
+            // And the configuration with the listening addresses, at the same moment: the plan
+            // says which packages change, not what their scripts rewrite.
             sideEffects.takeBefore();
-            // Chi legge ogni tipo di mappa di Postfix, e il contenuto delle mappe che non si rigenerano
-            // dal testo, prima: se dopo la libreria e' cambiata, le mappe si rigenerano uguali a prima.
+            // Who reads each type of Postfix map, and the content of the maps that are not regenerated
+            // from text, beforehand: if the library has changed afterwards, the maps are regenerated as before.
             PostfixMaps.Before mapsBefore = PostfixMaps.before();
-            // -U: stesso catalogo su cui e' stato calcolato il piano. Riscaricarlo adesso potrebbe
-            // portare versioni diverse da quelle approvate.
+            // -U: the same catalog the plan was calculated on. Downloading it again now could
+            // bring versions different from the approved ones.
             int code = runLogged(job, "pkg upgrade -y -U" + list + " 2>&1", 1800, captured);
-            // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
-            // da sole e fanno il resto; se questa si e' fermata li', la si rilancia una volta, uguale.
+            // 4 = EX_NEEDRESTART: pkg has updated itself. Recent versions relaunch themselves
+            // and do the rest; if this one stopped there, it is relaunched once, unchanged.
             if (code == 4) {
                 job.write(I18n.tr("server.um.runGuidedUpdate.10"));
                 code = runLogged(job, "pkg upgrade -y -U" + list + " 2>&1", 1800, captured);
             }
 
-            // Il confronto con l'inventario si fa SUBITO, prima di decidere se fermarsi: un
-            // pkg che esce diverso da zero e' proprio il caso in cui la macchina puo' essere
-            // rimasta a meta', e allora sapere che cosa e' cambiato conta di piu', non di
-            // meno. Misurato sulla VM il 23/10/2026: un aggiornamento guidato di
-            // postfix-mysql si e' fermato a meta' con uscita 3 (mysql97-client in conflitto
-            // con mysql84-client sugli stessi file) dopo che il solver aveva aggiunto al
-            // piano una rimozione che il piano firmato non aveva.
+            // The comparison with the inventory is done RIGHT AWAY, before deciding whether to stop: a
+            // pkg that exits non-zero is exactly the case in which the machine may have been
+            // left halfway, and then knowing what changed matters more, not
+            // less. Measured on the VM on 2026-10-23: a guided update of
+            // postfix-mysql stopped halfway with exit 3 (mysql97-client in conflict
+            // with mysql84-client over the same files) after the solver had added to the
+            // plan a removal that the signed plan did not have.
             outsidePlan = compareWithInventory(job, inventoryBefore, plan,
                     "Guided update of " + name);
-            // Anche questo prima di decidere se fermarsi, per la stessa ragione. Il riavvio dei
-            // servizi qui sotto mette in vigore quello che uno script ha scritto.
+            // This too before deciding whether to stop, for the same reason. The restart of the
+            // services below puts into effect what a script has written.
             sideEffects.checkConfig(job, plan, outsidePlan, !services.isEmpty());
-            // Le mappe prima del riavvio dei servizi, e anche se pkg e' uscito con un errore: e'
-            // proprio quando la macchina puo' essere rimasta a meta'.
+            // The maps before the services are restarted, and even if pkg exited with an error: that is
+            // exactly when the machine may have been left halfway.
             String mapsProblem = PostfixMaps.afterUpgrade(mapsBefore, l -> job.write("  " + l)).problem();
 
             if (code != 0) throw new IllegalStateException("pkg upgrade exited with code " + code);
@@ -8967,8 +9012,8 @@ public final class UpdateManager {
             if (versionAfter.equals(versionBefore)) {
                 throw new IllegalStateException("the version did not change: the update had no effect");
             }
-            // Ogni riga del piano, controllata: non "pkg e' uscito con 0", ma "ogni pacchetto e'
-            // alla versione che il piano diceva".
+            // Every line of the plan, checked: not "pkg exited with 0", but "every package is
+            // at the version the plan said".
             job.write(I18n.tr("server.um.runGuidedUpdate.12"));
             JSONArray verification = PackagePlan.verifyOutcome(plan);
             for (int i = 0; i < verification.length(); i++) {
@@ -8998,14 +9043,14 @@ public final class UpdateManager {
                     manualRecheck = true;
                 }
             }
-            // Uno script ha cambiato la configurazione e il piano non lo diceva: riavviare
-            // metterebbe in vigore una modifica che nessuno ha letto. E' il reperto 42 —
-            // inet_protocols = ipv4 scritto in main.cf, e il riavvio che toglie IPv6 a un server
-            // di posta che risultava «in servizio». Allora non si riavvia: i servizi restano con
-            // la configurazione di prima, ancora in memoria, e chi legge decide. Il costo e'
-            // scritto qui sotto, ed e' lo stesso stato in cui la manutenzione completa lascia
-            // sempre la macchina: aggiornata, con i processi vecchi finche' qualcuno non li
-            // riavvia.
+            // A script changed the configuration and the plan did not say so: restarting
+            // would put into effect a change that nobody has read. It is finding 42 -
+            // inet_protocols = ipv4 written into main.cf, and the restart that takes IPv6 away from a
+            // mail server that showed as "in service". So there is no restart: the services keep
+            // the previous configuration, still in memory, and whoever reads decides. The cost is
+            // written below, and it is the same state in which the full maintenance always leaves
+            // the machine: updated, with the old processes until someone restarts
+            // them.
             boolean holdRestarts = sideEffects.configChangedByScript() && !services.isEmpty();
             if (holdRestarts) {
                 job.write(I18n.tr("server.drift.restartHeld", java.util.Map.of("list", String.join(", ", services))));
@@ -9021,9 +9066,9 @@ public final class UpdateManager {
                     job.write(I18n.tr("server.um.runGuidedUpdate.21", java.util.Map.of("s", String.valueOf(s))));
                     continue;
                 }
-                // Si chiede al servizio se accetta la propria configurazione PRIMA di
-                // riavviarlo: se non la accetta, riavviarlo lo spegnerebbe e basta. Meglio
-                // lasciarlo in piedi con quella vecchia e dirlo.
+                // The service is asked whether it accepts its own configuration BEFORE
+                // restarting it: if it does not, restarting it would just shut it down. Better
+                // to leave it up with the old one and say so.
                 String test = testConfigOf(s);
                 if (test != null) {
                     Shell.Result pr = Shell.runShell(Duration.ofSeconds(60), test + " 2>&1");
@@ -9051,7 +9096,7 @@ public final class UpdateManager {
                         + ", " + (active ? I18n.tr("server.um.x.nowRunning") : I18n.tr("server.um.x.nowNotRunning")) + note);
                 if (!active) servicesProblem = true;
 
-                // Ha ritrovato i suoi dati, o e' ripartito vuoto?
+                // Did it find its data again, or did it start back up empty?
                 String[] after = testAfterOf(s);
                 if (after != null && active) {
                     String out = sh(after[1], 30).trim();
@@ -9069,11 +9114,11 @@ public final class UpdateManager {
             job.advance(5, TOT);
             job.write("");
             job.write(I18n.tr("server.um.runGuidedUpdate.30", java.util.Map.of("total", String.valueOf(TOT))));
-            // Sulla versione NUOVA, quella appena installata: chiedere col solo nome
-            // risponderebbe a un'altra domanda (vedi auditReport).
+            // On the NEW version, the one just installed: asking with the name alone
+            // would answer a different question (see auditReport).
             JSONObject reportAfter = auditReport(name, versionAfter);
             if (!reportAfter.optBoolean("done")) {
-                // "Non ho potuto controllare" non e' "non ci sono vulnerabilita'".
+                // "I could not check" is not "there are no vulnerabilities".
                 job.write("  " + reportAfter.optString("error"));
                 job.write("  " + I18n.tr("server.um.x.auditUncertain"));
             } else if (reportAfter.optInt("problems") == 0) {
@@ -9095,10 +9140,10 @@ public final class UpdateManager {
                 effects.add(I18n.tr("server.drift.restartHeldProblem", java.util.Map.of("list", String.join(", ", heldRestarts))));
 
             if (planNotFollowed || !outsidePlan.isEmpty()) {
-                // Due guasti diversi, e il messaggio li distingue: "piano non rispettato" e'
-                // un pacchetto del piano che non e' arrivato dove doveva, la divergenza e'
-                // qualcosa che e' cambiato senza essere nel piano. Possono presentarsi
-                // insieme, quindi si dicono entrambi.
+                // Two different failures, and the message tells them apart: "plan not followed" is
+                // a package of the plan that did not get where it should have, the divergence is
+                // something that changed without being in the plan. They can show up
+                // together, so both are reported.
                 job.status = "error";
                 java.util.List<String> problems = new ArrayList<>();
                 if (planNotFollowed) problems.add(I18n.tr("server.um.runGuidedUpdate.36"));
@@ -9112,14 +9157,14 @@ public final class UpdateManager {
                 problems.addAll(effects);
                 job.errorMessage = String.join(" ", problems);
             } else if (!effects.isEmpty()) {
-                // Ogni passo e' riuscito — piano, riavvio, pid, servizi — ed e' proprio il caso
-                // del reperto 42: il pacchetto e' in servizio, ma con una configurazione che
-                // nessuno ha approvato, o senza un indirizzo che prima rispondeva.
+                // Every step succeeded - plan, restart, pid, services - and it is exactly the case
+                // of finding 42: the package is in service, but with a configuration that
+                // nobody approved, or without an address that answered before.
                 job.status = "error";
                 job.errorMessage = String.join(" ", effects);
             } else if (manualRecheck) {
-                // Non e' un errore, ma nemmeno un "fatto e verificato": dirlo completato
-                // sarebbe affermare una cosa che il pannello non ha potuto controllare.
+                // It is not an error, but not a "done and verified" either: calling it completed
+                // would be asserting something that the panel could not check.
                 job.status = "completed";
                 job.write("");
                 job.write(I18n.tr("server.um.runGuidedUpdate.38", java.util.Map.of("name", String.valueOf(name), "versionAfter", String.valueOf(versionAfter))));
@@ -9133,11 +9178,11 @@ public final class UpdateManager {
         } catch (Exception e) {
             job.status = "error";
             job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
-            // pkg fermo a meta' dopo che uno script ha gia' scritto: si dicono tutte e due.
+            // pkg stopped halfway after a script has already written: both are reported.
             for (String p : sideEffects.problems()) job.errorMessage += " " + p;
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
-            // La riprotezione avviene SEMPRE, qualunque cosa sia andata storta sopra.
+            // The re-lock ALWAYS happens, whatever went wrong above.
             if (!toRelock2.isEmpty()) {
                 job.write("");
                 job.write(I18n.tr("server.um.x.reprotecting", java.util.Map.of("n", String.valueOf(toRelock2.size()))));
@@ -9161,12 +9206,12 @@ public final class UpdateManager {
     }
 
     /**
-     * Elimina SOLO le cache Hyperscan di rspamd e riavvia il servizio.
+     * Deletes ONLY the rspamd Hyperscan caches and restarts the service.
      *
-     * E' una cancellazione, cioe' la categoria di operazione che puo' far sparire qualcosa:
-     * il percorso e il criterio sono scritti qui e non arrivano dalla richiesta, e alla fine
-     * il pannello DIMOSTRA di non aver toccato altro contando i file rimanenti prima e dopo.
-     * "Ho cancellato solo quelli" e' un'affermazione, e le affermazioni si verificano.
+     * It is a deletion, that is the category of operation that can make something disappear:
+     * the path and the criterion are written here and do not come from the request, and at the
+     * end the panel PROVES it touched nothing else by counting the remaining files before and after.
+     * "I deleted only those" is a claim, and claims get verified.
      */
     public static JSONObject startRspamdCacheCleanup() {
         String id = "rspamd-cache-" + System.currentTimeMillis();
@@ -9252,16 +9297,16 @@ public final class UpdateManager {
     }
 
     /**
-     * Pacchetti che pretendono una libreria condivisa che sul disco NON c'e' piu'.
+     * Packages that require a shared library that is NO longer on the disk.
      *
-     * E' il buco che ha fermato la posta: dopo aver sostituito mysql80-client con
-     * mysql84-client, postfix-mysql e dovecot-mysql restavano compilati contro
-     * libmysqlclient.so.21 e non caricavano piu'. Il preflight aveva verificato che il
-     * REPOSITORY li fornisse compatibili con la 8.4 — ed era vero — ma non che quelli
-     * INSTALLATI lo fossero. Sono due cose diverse e le avevo trattate come una sola.
+     * It is the hole that stopped the mail: after replacing mysql80-client with
+     * mysql84-client, postfix-mysql and dovecot-mysql stayed built against
+     * libmysqlclient.so.21 and no longer loaded. The preflight had verified that the
+     * REPOSITORY provided them compatible with 8.4 - and that was true - but not that the
+     * INSTALLED ones were. They are two different things and I had treated them as one.
      *
-     * Qui non si indovina: si chiede a pkg quali librerie ogni pacchetto richiede (%B) e si
-     * guarda se esistono davvero.
+     * Here there is no guessing: pkg is asked which libraries each package requires (%B) and
+     * we look at whether they really exist.
      */
     public static JSONObject packagesWithMissingLibraries() {
         JSONArray broken = new JSONArray();
@@ -9275,7 +9320,7 @@ public final class UpdateManager {
             if (!isValidName(name) || lib.isEmpty()) continue;
             if (!lib.matches("[A-Za-z0-9._+-]{1,128}")) continue;
             if (missingLibraries.contains(lib)) { broken.put(new JSONObject().put("name", name).put("lib", lib)); continue; }
-            // Una libreria c'e' se il linker riesce a trovarla fra quelle note al sistema.
+            // A library is there if the linker can find it among those known to the system.
             if (!ok("ldconfig -r 2>/dev/null | grep -q ' " + lib + "$' || " +
                     "find /lib /usr/lib /usr/local/lib -name '" + lib + "' -maxdepth 3 2>/dev/null | grep -q .", 30)) {
                 missingLibraries.add(lib);
@@ -9287,58 +9332,59 @@ public final class UpdateManager {
     }
 
     /**
-     * "openssl: nessun pacchetto lo richiede, si puo' togliere" era una conclusione troppo
-     * sicura per come veniva calcolata. `pkg query %rn` dice chi lo DICHIARA nel registro di
-     * pkg; non dice chi lo sta davvero aprendo.
+     * "openssl: no package requires it, it can be removed" was a conclusion too
+     * confident for the way it was calculated. `pkg query %rn` says who DECLARES it in the
+     * pkg registry; it does not say who is really opening it.
      *
-     * La differenza conta perche' sul disco ci sono DUE OpenSSL: quella del sistema base in
-     * /usr/lib, che non e' un pacchetto, non compare in pkg e non si tocca, e il port in
-     * /usr/local/lib. Se le due copie portano lo stesso soname, nessuna lettura del registro
-     * puo' dire quale delle due venga aperta, perche' i due nomi sono identici.
+     * The difference matters because there are TWO OpenSSLs on the disk: the base system one in
+     * /usr/lib, which is not a package, does not appear in pkg and is not touched, and the port in
+     * /usr/local/lib. If the two copies carry the same soname, no reading of the registry
+     * can tell which of the two gets opened, because the two names are identical.
      *
-     * Si misurano quindi tre cose distinte, e la terza e' l'unica che decide:
-     *   1. chi dichiara il pacchetto                       -> pkg query %rn
-     *   2. chi richiede i suoi soname                      -> pkg query %B  (ambiguo se i
-     *      soname del port e quelli del base coincidono)
-     *   3. quali processi VIVI hanno mappato una libreria in /usr/local/lib -> procstat -v
+     * So three distinct things are measured, and the third is the only one that decides:
+     *   1. who declares the package                        -> pkg query %rn
+     *   2. who requires its sonames                        -> pkg query %B  (ambiguous if the
+     *      sonames of the port and those of base coincide)
+     *   3. which LIVE processes have mapped a library in /usr/local/lib -> procstat -v
      *
-     * procstat(1) mostra "process virtual memory mappings, including [...] mapped object
-     * information": e' cio' che e' aperto adesso, non cio' che qualcuno ha dichiarato quando
-     * il pacchetto e' stato compilato. Richiede pero' di essere il proprietario del processo
-     * o root; se non lo si e', l'elenco torna vuoto e sembrerebbe "non lo usa nessuno".
-     * Per questo si conta anche quanti processi mappano una qualsiasi libssl/libcrypto: se
-     * quel totale e' zero su un server di posta con TLS attivo, la misura non ha funzionato
-     * e va detto, invece di spacciare il silenzio per una risposta.
+     * procstat(1) shows "process virtual memory mappings, including [...] mapped object
+     * information": it is what is open now, not what someone declared when
+     * the package was built. However, it requires being the owner of the process
+     * or root; if one is not, the list comes back empty and would look like "nobody uses it".
+     * That is why the number of processes mapping any libssl/libcrypto is also counted: if
+     * that total is zero on a mail server with TLS enabled, the measurement did not work
+     * and that must be said, instead of passing silence off as an answer.
      */
     /**
-     * Il caso openssl e' venuto fuori per intuizione di Pietro, non perche' il pannello
-     * sapesse cercarlo: il port non lo dichiarava nessuno, ma lo installa uno script del
-     * pannello e il pannello ne esegue il comando. Chiedere all'intuizione di ripetersi a
-     * ogni rimozione e' esattamente il modo di sbagliare la volta che non ci si pensa.
+     * The openssl case came up thanks to the owner's intuition, not because the panel
+     * knew how to look for it: nobody declared the port, but a panel script installs it
+     * and the panel runs its command. Asking intuition to repeat itself at
+     * every removal is exactly the way to get it wrong the time nobody thinks of it.
      *
-     * Qui la domanda diventa una misura, e vale per QUALSIASI pacchetto: prima di toglierlo,
-     * il pannello lo usa nei propri script?
+     * Here the question becomes a measurement, and it holds for ANY package: before removing it,
+     * does the panel use it in its own scripts?
      *
-     * Non si consulta un elenco scritto a mano, che invecchierebbe alla prima modifica:
-     * si legge il jar CHE STA GIRANDO. I nomi dei comandi che il pannello invoca sono
-     * costanti di stringa dentro le sue classi, quindi si estraggono le classi del pannello
-     * dal jar e si cercano dentro i nomi degli eseguibili che il pacchetto installa.
+     * No hand-written list is consulted, which would go stale at the first change:
+     * the jar THAT IS RUNNING is read. The names of the commands the panel invokes are
+     * string constants inside its classes, so the panel's classes are extracted from
+     * the jar and searched for the names of the executables that the package installs.
      *
-     * Due cautele, perche' una ricerca puo' fallire in modi che sembrano una risposta:
-     *  - si contano i byte letti dal jar: se sono zero, la lettura non e' riuscita e va
-     *    detto, invece di concludere "non lo usa";
-     *  - i nomi cortissimi (tr, cut, ls) comparirebbero ovunque per caso, quindi sotto i
-     *    quattro caratteri non si decide e lo si dichiara.
+     * Two precautions, because a search can fail in ways that look like an answer:
+     *  - the bytes read from the jar are counted: if they are zero, the read did not
+     *    succeed and that must be said, instead of concluding "it does not use it";
+     *  - very short names (tr, cut, ls) would appear everywhere by chance, so below
+     *    four characters no decision is made and that is declared.
      */
     /**
-     * Quali pacchetti sono anche solo CANDIDATI a essere tolti: quelli installati
-     * esplicitamente (non tirati dentro come dipendenza) e che nessun altro pacchetto
-     * dichiara. Sono gli unici su cui abbia senso porsi la domanda, ed e' l'elenco su cui
-     * il controllo "il pannello lo usa?" va passato prima di rimuovere qualsiasi cosa.
+     * Which packages are even CANDIDATES for removal: those installed
+     * explicitly (not pulled in as a dependency) and that no other package
+     * declares. They are the only ones on which it makes sense to ask the question, and
+     * it is the list that the "does the panel use it?" check must go through before
+     * removing anything.
      *
-     * Si ricava con due letture invece che con una interrogazione per pacchetto:
-     * l'elenco degli espliciti, e l'insieme di tutti i nomi che compaiono come dipendenza
-     * di qualcuno. La differenza fra i due e' la risposta.
+     * It is obtained with two reads instead of one query per package:
+     * the list of the explicit ones, and the set of all the names that appear as a dependency
+     * of something. The difference between the two is the answer.
      */
     public static JSONObject removalCandidates() {
         java.util.LinkedHashSet<String> explicit = new java.util.LinkedHashSet<>();
@@ -9377,9 +9423,9 @@ public final class UpdateManager {
     }
 
     /**
-     * I luoghi in cui il pannello, i pacchetti e l'amministratore lasciano cose che vengono
-     * eseguite DOPO: script di rinnovo, cron, rc.d, periodic, configurazioni. Il jar non li
-     * contiene, quindi cercarli solo li' dentro non basta.
+     * The places where the panel, the packages and the administrator leave things that get
+     * run LATER: renewal scripts, cron, rc.d, periodic, configurations. The jar does not
+     * contain them, so searching only in there is not enough.
      */
     private static final String[][] PLACES = {
         {"/etc",                    "server.um.removalCandidates.5"},
@@ -9393,27 +9439,27 @@ public final class UpdateManager {
     };
 
     /**
-     * L'analisi approfondita prima di togliere un pacchetto. Nasce da una richiesta precisa:
-     * "non voglio che poi script o altro smettano di funzionare".
+     * The in-depth analysis before removing a package. It comes from a precise request:
+     * "I don't want scripts or anything else to stop working afterwards".
      *
-     * Il controllo sul jar rispondeva a una domanda sola — il pannello ne invoca i comandi? —
-     * e quella domanda e' la meno pericolosa, perche' un comando invocato col nome nudo
-     * ripiega da solo sull'altra copia nel PATH. Cio' che rompe davvero e' un riferimento che
-     * NON puo' ripiegare:
+     * The check on the jar answered only one question - does the panel invoke its commands? -
+     * and that question is the least dangerous, because a command invoked by its bare name
+     * falls back on its own to the other copy in the PATH. What really breaks is a reference
+     * that CANNOT fall back:
      *
-     *   - un percorso assoluto dentro il pacchetto (/usr/local/bin/openssl): sparisce il file,
-     *     e chi lo nomina fallisce;
-     *   - un soname fornito dal pacchetto (libssl.so.12): sparisce la libreria, e chi ci si
-     *     collega non parte piu'.
+     *   - an absolute path inside the package (/usr/local/bin/openssl): the file disappears,
+     *     and whoever names it fails;
+     *   - a soname provided by the package (libssl.so.12): the library disappears, and
+     *     whoever links to it no longer starts.
      *
-     * Quindi si separano nettamente due elenchi: i riferimenti che ROMPONO e quelli che
-     * REGGONO. E si cerca in tre posti diversi, perche' bastano due su tre per ingannarsi:
-     * dentro il jar, fra i pacchetti installati (chi dichiara quei soname), e sui file di
-     * testo del sistema, dove vivono gli script che girano piu' tardi.
+     * So two lists are kept strictly apart: the references that BREAK and those that
+     * HOLD. And the search covers three different places, because two out of three are enough
+     * to be misled: inside the jar, among the installed packages (who declares those sonames),
+     * and in the text files of the system, where the scripts that run later live.
      *
-     * Ogni ricerca dichiara quanti file di testo ha esaminato. Una ricerca che non trova
-     * nulla perche' non ha guardato da nessuna parte e' indistinguibile, nel risultato, da
-     * una che ha guardato e non ha trovato: il conteggio e' cio' che le distingue.
+     * Every search declares how many text files it examined. A search that finds
+     * nothing because it looked nowhere is indistinguishable, in the result, from
+     * one that looked and found nothing: the count is what tells them apart.
      */
     public static JSONObject deepAnalysis(String pkgName) {
         if (!isValidName(pkgName))
@@ -9423,7 +9469,7 @@ public final class UpdateManager {
 
         JSONObject r = new JSONObject().put("success", true).put("pkgName", pkgName);
 
-        // --- cosa il pacchetto mette sul disco: percorsi assoluti e soname ---
+        // --- what the package puts on the disk: absolute paths and sonames ---
         String list = sh("pkg query '%Fp' " + pkgName + " 2>/dev/null", 60);
         if (list.isBlank()) list = sh("pkg info -l " + pkgName + " 2>/dev/null", 60);
         java.util.LinkedHashSet<String> paths = new java.util.LinkedHashSet<>();
@@ -9440,13 +9486,13 @@ public final class UpdateManager {
         r.put("paths", new JSONArray(new ArrayList<>(paths)))
          .put("soname", new JSONArray(new ArrayList<>(soname)));
 
-        // I motivi per cui una rimozione rompe: percorso assoluto, o soname.
+        // The reasons why a removal breaks something: absolute path, or soname.
         java.util.LinkedHashSet<String> breakOnes = new java.util.LinkedHashSet<>(paths);
         breakOnes.addAll(soname);
         for (String sn : soname) { breakOnes.add("/usr/local/lib/" + sn); }
         r.put("searched", new JSONArray(new ArrayList<>(breakOnes)));
 
-        // --- 1. chi, fra i pacchetti installati, dichiara quei soname ---
+        // --- 1. which of the installed packages declare those sonames ---
         JSONArray declareSoname = new JSONArray();
         if (!soname.isEmpty()) {
             for (String line : sh("pkg query '%n %B' 2>/dev/null", 120).split("\n")) {
@@ -9460,7 +9506,7 @@ public final class UpdateManager {
         }
         r.put("declareSoname", declareSoname);
 
-        // --- 2. il jar in esecuzione: percorsi assoluti e soname, non solo i nomi nudi ---
+        // --- 2. the running jar: absolute paths and sonames, not just the bare names ---
         String jar = jarPath();
         JSONArray inJar = new JSONArray();
         long jarBytes = 0;
@@ -9473,7 +9519,7 @@ public final class UpdateManager {
             if (jarBytes > 0) {
                 StringBuilder pat = new StringBuilder();
                 for (String x : breakOnes) pat.append(" -e '").append(x).append("'");
-                // Estrazione in una cartella temporanea: solo cosi' grep puo' dire QUALE classe.
+                // Extraction into a temporary folder: only that way can grep tell WHICH class.
                 String output = sh("d=$(mktemp -d) && tar -xf " + jar + " -C \"$d\" 'org/daemoxcp/mail/*' "
                         + "2>/dev/null; grep -rlaF" + pat + " \"$d\" 2>/dev/null "
                         + "| sed \"s|^$d/||\"; rm -rf \"$d\"", 240);
@@ -9492,7 +9538,7 @@ public final class UpdateManager {
          .put("jarRead", jarBytes > 0).put("inJar", inJar).put("blockingJars", blockingJars)
          .put("checkClass", myFile);
 
-        // --- 3. i file di testo del sistema: dove vivono gli script che girano dopo ---
+        // --- 3. the text files of the system: where the scripts that run later live ---
         JSONArray places = new JSONArray();
         int totalBreak = 0, totalHold = 0;
         StringBuilder patternsBreak = new StringBuilder();
@@ -9503,7 +9549,7 @@ public final class UpdateManager {
         for (String[] L : PLACES) {
             if (!ok("test -d " + L[0], 15)) continue;
             JSONObject u = new JSONObject().put("where", L[0]).put("whatItContains", I18n.tr(L[1]));
-            // Quanti file di testo esistono qui: e' la prova che la ricerca ha guardato.
+            // How many text files exist here: it is the proof that the search looked.
             String cnt = sh("grep -rIl '' " + L[0] + " 2>/dev/null | wc -l", 180).trim().replaceAll("[^0-9]", "");
             int reviewed = cnt.isEmpty() ? 0 : Integer.parseInt(cnt);
             u.put("filesReviewed", reviewed);
@@ -9529,9 +9575,9 @@ public final class UpdateManager {
         }
         r.put("places", places).put("totalBreak", totalBreak).put("totalHold", totalHold);
 
-        // --- il giudizio ---
-        // Il riferimento che sta nella classe che ESEGUE questo controllo non blocca: e'
-        // l'analisi che nomina cio' che deve ispezionare, non un uso che si romperebbe.
+        // --- the verdict ---
+        // The reference in the class that RUNS this check does not block: it is
+        // the analysis naming what it must inspect, not a use that would break.
         boolean blocking = totalBreak > 0 || blockingJars > 0 || declareSoname.length() > 0;
         r.put("blocking", blocking);
         r.put("verdict", blocking ? "REFS_WOULD_BREAK" : "NO_REF_BREAKS");
@@ -9549,26 +9595,26 @@ public final class UpdateManager {
     }
 
     /**
-     * Il verdetto del jar lascia procedere la rimozione: il pannello non ne usa i comandi (anche
-     * se e' una libreria: chi la richiede lo dice pkg query %rn, controllato prima, e i file sul
-     * disco li guarda deepAnalysis, dopo), oppure li nomina ma non sono i suoi. Il 25/10/2026 i
-     * verdetti sono passati all'inglese, e qui era rimasto il prefisso italiano di quello delle
-     * librerie: la rimozione di una libreria non usata veniva rifiutata. Funzione pura.
+     * The jar's verdict lets the removal go ahead: the panel does not use its commands (even if it is a
+     * library: who requires it is told by pkg query %rn, checked before, and the files on the disk are looked
+     * at by deepAnalysis, after), or it names them but they are not this package's. On 2026-10-25 the verdicts
+     * switched to English, and the Italian prefix of the library verdict had stayed here: the removal of an
+     * unused library was refused. Pure function.
      */
     static boolean removableByJarVerdict(String v) {
         return "PANEL_DOES_NOT_USE".equals(v) || "NAMES_NOT_THEIRS".equals(v) || "LIBRARY_ONLY".equals(v);
     }
 
     /**
-     * La rimozione di un pacchetto, fatta dal pannello e non dettata come comando da SSH.
+     * The removal of a package, done by the panel and not dictated as a command to run over SSH.
      *
-     * Non e' un pulsante che esegue "pkg delete": e' il controllo che decide se eseguirlo.
-     * Rifiuta da solo nei casi in cui la rimozione farebbe danno, e in quelli in cui non ha
-     * potuto stabilire che non ne farebbe — che e' la stessa cosa. Poi verifica l'esito
-     * guardando il sistema, non il codice di uscita di pkg: il pacchetto e' sparito davvero,
-     * nessun altro pacchetto e' rimasto senza una libreria, i servizi sono ancora su.
+     * It is not a button that runs "pkg delete": it is the check that decides whether to run it.
+     * It refuses on its own in the cases where the removal would do damage, and in those where it
+     * could not establish that it would not - which is the same thing. Then it verifies the outcome
+     * by looking at the system, not at pkg's exit code: the package is really gone,
+     * no other package has been left without a library, the services are still up.
      *
-     * Aspetta il turno dei lavori sui pacchetti (vedi PackageQueue).
+     * It waits for the package turn (see PackageQueue).
      */
     public static JSONObject removePackage(String name) {
         String id = "remove-" + System.nanoTime();
@@ -9615,13 +9661,13 @@ public final class UpdateManager {
                             : I18n.tr("server.um.removePackageNow.4", java.util.Map.of("name", String.valueOf(name))));
         }
 
-        // --- chi lo dichiara: se qualcuno lo fa, non si tocca ---
+        // --- who declares it: if anyone does, it is not touched ---
         String declare = sh("pkg query %rn " + name + " 2>/dev/null", 30).trim();
         if (!declare.isEmpty())
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.um.x.rmDeclaredDep", java.util.Map.of("list", String.valueOf(declare.replace("\n", ", ")))));
 
-        // --- e il pannello? la stessa misura della scheda, rifatta adesso ---
+        // --- and the panel? the same measurement as the tab, redone now ---
         JSONObject use = panelUsage(name);
         r.put("use", use);
         String v = use.optString("verdict", "");
@@ -9630,14 +9676,14 @@ public final class UpdateManager {
                     .put("error", I18n.tr("server.um.x.rmJarSays", java.util.Map.of("v", String.valueOf(v))) + " "
                             + use.optString("explanation", ""));
 
-        // --- e i riferimenti sul disco? il jar e' solo uno dei tre posti ---
+        // --- and the references on the disk? the jar is only one of the three places ---
         JSONObject deepResult = deepAnalysis(name);
         r.put("deep", deepResult);
         if (deepResult.optBoolean("blocking"))
             return new JSONObject().put("success", false).put("deep", deepResult)
                     .put("error", I18n.tr("server.um.removePackageNow.5", java.util.Map.of("name", String.valueOf(name))));
 
-        // --- fotografia prima, per poter confrontare dopo ---
+        // --- snapshot before, to be able to compare after ---
         int before = countLines(sh("pkg query %n 2>/dev/null", 60));
         log.append(I18n.tr("server.um.x.pkgsBefore", java.util.Map.of("n", String.valueOf(before)))).append("\n");
 
@@ -9657,7 +9703,7 @@ public final class UpdateManager {
         String deleteOutput = sh("pkg delete -y " + name + " 2>&1", 180);
         log.append("--- ").append(I18n.tr("server.um.x.removalSection")).append(" ---\n").append(deleteOutput).append("\n");
 
-        // L'esito lo dice il sistema, non il codice di uscita.
+        // The outcome is told by the system, not by the exit code.
         boolean via = !ok("pkg info -e " + name, 20);
         int after = countLines(sh("pkg query %n 2>/dev/null", 60));
         log.append(I18n.tr("server.um.x.pkgsAfter", java.util.Map.of("n", String.valueOf(after)))).append("\n");
@@ -9665,8 +9711,8 @@ public final class UpdateManager {
 
         if (!via) {
             if (isProtected) log.append("--- riprotezione ---\n").append(sh("pkg lock -y " + name + " 2>&1", 60));
-            // Il motivo lo dice pkg nella sua uscita: riportarlo invece di lasciare
-            // l'utente a leggersi il log per capire perche'.
+            // pkg states the reason in its output: report it instead of leaving
+            // the user to read the log to understand why.
             String why = deleteOutput.contains("locked")
                     ? I18n.tr("server.um.removePackageNow.7")
                     : (deleteOutput.contains("vital") ? I18n.tr("server.um.x.markedVital") : "");
@@ -9675,7 +9721,7 @@ public final class UpdateManager {
                             + why + (isProtected ? ". " + I18n.tr("server.um.x.reprotectedAsBefore") : "."));
         }
 
-        // --- la verifica che conta: qualcuno e' rimasto senza una libreria? ---
+        // --- the check that matters: has anything been left without a library? ---
         JSONObject lib = packagesWithMissingLibraries();
         JSONArray broken = lib.optJSONArray("packages");
         r.put("missingLibraries", lib);
@@ -9692,9 +9738,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Strumenti esterni da cui il pannello dipende, con la cartella in cui il port li mette.
-     * Non e' un elenco decorativo: se uno di questi non si raggiunge, la funzione che lo usa
-     * fallisce lontano da qui e con un messaggio che parla d'altro.
+     * External tools the panel depends on, with the folder in which the port puts them.
+     * It is not a decorative list: if one of them cannot be reached, the function that uses it
+     * fails far from here and with a message that talks about something else.
      */
     private static final String[][] TOOLS = {
         {"mysqldump",       "/usr/local/bin",  "server.um.removePackageNow.10"},
@@ -9712,11 +9758,11 @@ public final class UpdateManager {
     };
 
     /**
-     * L'ambiente in cui il pannello esegue i comandi. Nasce da un guasto che ha impiegato
-     * mezz'ora a essere capito: il preflight di Roundcube diceva "mysqldump non e' installato
-     * o non e' nel PATH del pannello" mentre mysql84-client era regolarmente installato.
-     * Le due cose che quel messaggio metteva insieme sono diversissime, e distinguerle e'
-     * banale: si guarda se il file c'e' sul disco, e separatamente se il PATH lo raggiunge.
+     * The environment in which the panel runs commands. It comes from a failure that took
+     * half an hour to understand: the Roundcube preflight said "mysqldump is not installed
+     * or is not in the panel's PATH" while mysql84-client was properly installed.
+     * The two things that message lumped together are very different, and telling them apart
+     * is trivial: one looks at whether the file is on the disk, and separately whether the PATH reaches it.
      */
     public static JSONObject panelBootEnvironment() {
         JSONObject r = new JSONObject().put("success", true)
@@ -9744,20 +9790,20 @@ public final class UpdateManager {
     }
 
     /**
-     * L'anteprima della configurazione che il pannello scriverebbe su un Dovecot 2.4.
+     * The preview of the configuration that the panel would write on a Dovecot 2.4.
      *
-     * Serve a poterla leggere ORA, mentre il repository non ha ancora la 2.4 e non c'e'
-     * nessuna fretta. Un template che si vede per la prima volta il giorno in cui il
-     * pacchetto arriva e' un template che si legge di corsa.
+     * It is there so that it can be read NOW, while the repository does not have 2.4 yet and there
+     * is no hurry. A template seen for the first time on the day the
+     * package arrives is a template that gets read in a rush.
      *
-     * Non scrive niente: prende gli stessi file che scriverebbe lo script, sostituisce i
-     * valori veri del database e nasconde la password.
+     * It writes nothing: it takes the same files the script would write, fills in the
+     * real values from the database and hides the password.
      */
     public static JSONObject dovecot24Preview() {
         JSONObject r = new JSONObject().put("success", true);
         try {
             org.daemoxcp.mail.scripts.DovecotConfig c = org.daemoxcp.mail.scripts.DovecotConfig.fromPanelConfig();
-            // Ogni sapore, della 2.3 e della 2.4: come lo script (DovecotConfig).
+            // Every flavor, of 2.3 and of 2.4: like the script (DovecotConfig).
             boolean pigeonhole = !sh("pkg query -g %n 'dovecot-pigeonhole*' 'dovecot24-pigeonhole*' 2>/dev/null", 15).isBlank();
             JSONArray file = new JSONArray();
             for (var f : org.daemoxcp.mail.scripts.DovecotConfig.file24()) {
@@ -9784,38 +9830,38 @@ public final class UpdateManager {
     }
 
     /**
-     * Tutto cio' che un rapporto periodico deve poter dire, raccolto in una lettura sola.
+     * Everything a periodic report must be able to say, gathered in a single read.
      *
-     * Sta qui e non nella classe che manda l'email per un motivo preciso: qui vivono gli
-     * strumenti che interrogano il sistema, e duplicarli altrove significherebbe averne due
-     * versioni che col tempo divergono. La classe del rapporto compone il testo, questa
-     * raccoglie i fatti.
+     * It lives here and not in the class that sends the email for a precise reason: here live the
+     * tools that query the system, and duplicating them elsewhere would mean having two
+     * versions that drift apart over time. The report class composes the text, this one
+     * gathers the facts.
      *
-     * La chiave "toDo" e' la ragione d'essere del rapporto: un elenco di cose da fare,
-     * ordinate per urgenza, gia' scritte in italiano. Se e' vuoto, non c'e' niente da fare —
-     * e anche quello va detto, altrimenti un'email che arriva ogni settimana diventa rumore
-     * che si smette di leggere.
+     * The "toDo" key is the report's reason for being: a list of things to do,
+     * sorted by urgency, already written in Italian. If it is empty, there is nothing to do -
+     * and that must be said too, otherwise an email that arrives every week becomes noise
+     * that people stop reading.
      */
     /**
-     * Con updateDatabase = false non tocca la rete: e' la forma per l'anteprima.
+     * With updateDatabase = false it does not touch the network: it is the form for the preview.
      *
-     * "pkg audit -F" scarica il database delle vulnerabilita'. L'anteprima lo chiamava, quindi
-     * premere "guarda il rapporto" poteva restare appeso su una rete lenta mentre la scheda
-     * prometteva una lettura. Chi guarda vede il numero e, accanto, quanto e' vecchio il
-     * database: cosi' sa cosa sta guardando invece di crederlo aggiornato.
+     * "pkg audit -F" downloads the vulnerability database. The preview used to call it, so
+     * pressing "view the report" could hang on a slow network while the tab
+     * promised a read. Whoever looks sees the number and, next to it, how old the
+     * database is: that way they know what they are looking at instead of believing it up to date.
      */
     public static JSONObject reportData() { return reportData(true); }
 
     /**
-     * Quanti pacchetti dello stack hanno una versione piu' recente nel catalogo, quanti di
-     * quelli sono protetti — cioe' trattenuti dal blocco — e l'elenco da mostrare.
+     * How many stack packages have a newer version in the catalog, how many of
+     * those are locked - that is, held back by the lock - and the list to show.
      *
-     * Funzione pura: riceve le righe di {@link #packagesStatus()} e la mappa nome ->
-     * versione del catalogo, cosi' si prova senza pkg. Le chiavi che legge sono quelle che
-     * packagesStatus mette DAVVERO ("name", "version", "locked"), e la prova le verifica una
-     * per una contro una riga vera: era proprio una chiave sbagliata a rendere muto questo
-     * conto, e una chiave sbagliata non la vede ne' il compilatore ne' una prova scritta su
-     * righe inventate.
+     * Pure function: it receives the rows of {@link #packagesStatus()} and the map name ->
+     * catalog version, so it can be tested without pkg. The keys it reads are the ones that
+     * packagesStatus REALLY sets ("name", "version", "locked"), and the test checks them one
+     * by one against a real row: it was precisely a wrong key that made this
+     * count silent, and a wrong key is seen neither by the compiler nor by a test written on
+     * made-up rows.
      */
     static JSONObject countUpdates(JSONArray lines, Map<String, String> available) {
         int totals = 0, protectedNames = 0, withUpdate = 0, heldBack = 0;
@@ -9844,19 +9890,19 @@ public final class UpdateManager {
         JSONObject r = new JSONObject();
         JSONArray toDo = new JSONArray();
 
-        // L'invio automatico aggiorna il catalogo, l'anteprima no.
+        // The automatic send updates the catalog, the preview does not.
         //
-        // Tutte le interrogazioni al repository ora hanno "-U", cioe' NON scaricano il catalogo
-        // da sole: e' giusto, perche' una lettura non deve andare in rete a sorpresa. Ma senza
-        // qualcuno che lo aggiorni, la riga "N pacchetti hanno una versione piu' recente" viene
-        // calcolata su un catalogo fermo a chissa' quando, e un rapporto che dice "niente da
-        // aggiornare" perche' guarda dati vecchi e' peggio di un rapporto che non arriva.
+        // All the queries to the repository now have "-U", that is they do NOT download the catalog
+        // on their own: that is right, because a read must not go to the network by surprise. But
+        // without someone updating it, the line "N packages have a newer version" is
+        // calculated on a catalog stuck at who knows when, and a report that says "nothing to
+        // update" because it looks at old data is worse than a report that does not arrive.
         //
-        // Quindi l'aggiornamento del catalogo sta QUI, esplicito, e solo nell'invio vero — dove
-        // andare in rete e' previsto. L'anteprima resta una lettura, e la sua riga sull'eta' del
-        // catalogo dice a chi guarda quanto sono vecchi i dati che sta vedendo.
-        // L'esito si tiene: un "pkg update" fallito lascia il catalogo di prima, e il rapporto
-        // deve poterlo dire invece di presentare quel catalogo come appena rinfrescato.
+        // So the catalog update is HERE, explicit, and only in the real send - where
+        // going to the network is expected. The preview stays a read, and its line on the age of
+        // the catalog tells whoever looks how old the data they are seeing is.
+        // The outcome is kept: a failed "pkg update" leaves the previous catalog, and the report
+        // must be able to say so instead of presenting that catalog as just refreshed.
         boolean refreshedCatalog = updateDatabase && ok("pkg update -q", 120);
         r.put("refreshedCatalog", refreshedCatalog);
 
@@ -9878,14 +9924,14 @@ public final class UpdateManager {
                     .put("what", I18n.tr("server.um.reportData.3", java.util.Map.of("eolDays", String.valueOf(eolDays), "end", String.valueOf(end))))
                     .put("where", I18n.tr("server.um.reportData.4")));
 
-        // --- pacchetti ---
+        // --- packages ---
         //
-        // Le versioni del catalogo si chiedono a pkg: nelle righe di packagesStatus non ci
-        // sono, e la riga del rapporto le leggeva da due chiavi che quelle righe non hanno
-        // mai avuto ("current" e "available"), quindi era SEMPRE zero. Misurato sulla VM il
-        // 23/10/2026: "con aggiornamento: 0" mentre nello stesso istante packagesOverview,
-        // che le versioni le chiede, ne contava 2 dello stack e 5 in tutto. Una riga che non
-        // puo' dire nient'altro che zero e' peggio di una riga che manca: rassicura.
+        // The catalog versions are asked of pkg: they are not in the rows of packagesStatus,
+        // and the report line read them from two keys that those rows never
+        // had ("current" and "available"), so it was ALWAYS zero. Measured on the VM on
+        // 2026-10-23: "with update: 0" while at the same moment packagesOverview,
+        // which does ask for the versions, counted 2 in the stack and 5 in total. A line that
+        // cannot say anything but zero is worse than a missing line: it reassures.
         JSONObject pk = packagesStatus();
         r.put("packages", pk);
         JSONObject count = countUpdates(pk.optJSONArray("packages"),
@@ -9896,10 +9942,10 @@ public final class UpdateManager {
         r.put("totalPackages", count.getInt("totals")).put("lockedPackageCount", count.getInt("protectedNames"))
          .put("packagesWithUpdate", withUpdate).put("toUpdate", toUpdate)
          .put("heldBackPackages", heldBack);
-        // Quelli che il blocco trattiene hanno la loro voce qui sotto, con il posto giusto dove
-        // applicarli: contarli anche qui faceva dire due volte la stessa cosa ("aggiorna 1
-        // pacchetto" e "applica 1 aggiornamento trattenuto", per lo stesso openjdk25 sulla VM il
-        // 06/11/2026), con due indicazioni diverse su dove farlo.
+        // Those that the lock holds back have their own entry below, with the right place to
+        // apply them: counting them here too made it say the same thing twice ("update 1
+        // package" and "apply 1 held-back update", for the same openjdk25 on the VM on
+        // 2026-11-06), with two different indications of where to do it.
         int freeUpdates = withUpdate - heldBack;
         if (freeUpdates > 0)
             toDo.put(new JSONObject().put("urgency", 2)
@@ -9908,11 +9954,11 @@ public final class UpdateManager {
                             ? I18n.tr("server.um.x.newerInRepo.one")
                             : I18n.tr("server.um.x.newerInRepo.other", java.util.Map.of("n", String.valueOf(freeUpdates))))
                     .put("where", I18n.tr("server.um.reportData.5")));
-        // Un aggiornamento che esiste e che il blocco trattiene e' una notizia diversa da un
-        // aggiornamento disponibile: `pkg upgrade`, da qui o da SSH, lo salta ed esce 0.
-        // Misurato sulla VM il 23/10/2026: con nginx e postfix-mysql bloccati, `pkg upgrade -n`
-        // li nomina in una riga di passaggio, non li mette nel riepilogo e termina con uscita
-        // ZERO. Chi legge solo il codice di uscita conclude che non c'era niente da fare.
+        // An update that exists and that the lock holds back is different news from an
+        // available update: `pkg upgrade`, from here or from SSH, skips it and exits 0.
+        // Measured on the VM on 2026-10-23: with nginx and postfix-mysql locked, `pkg upgrade -n`
+        // names them in a passing line, does not put them in the summary and ends with exit
+        // ZERO. Whoever reads only the exit code concludes that there was nothing to do.
         if (heldBack > 0)
             toDo.put(new JSONObject().put("urgency", 2)
                     .put("title", I18n.trn("mail.report.title.held", heldBack, java.util.Map.of()))
@@ -9921,26 +9967,26 @@ public final class UpdateManager {
                             : I18n.tr("server.um.x.heldByLock.other", java.util.Map.of("n", String.valueOf(heldBack))))
                     .put("where", I18n.tr("server.um.reportData.8")));
 
-        // --- vulnerabilita', separando quelle a cui si puo' rimediare ---
+        // --- vulnerabilities, separating those that can be remedied ---
         //
-        // Niente "tail": c'era, ed era una perdita silenziosa. Ogni blocco di pkg audit occupa
-        // quattro o cinque righe, quindi oltre le ~8 vulnerabilita' le prime uscivano dalla
-        // finestra e sparivano da ENTRAMBE le liste — quella con rimedio e quella senza. Il
-        // rapporto risultava piu' tranquillo di com'era il server, e niente lo segnalava.
+        // No "tail": it was there, and it was a silent loss. Each pkg audit block takes
+        // four or five lines, so beyond ~8 vulnerabilities the first ones fell out of the
+        // window and disappeared from BOTH lists - the one with a fix and the one without. The
+        // report looked calmer than the server was, and nothing flagged it.
         //
-        // "-F" scarica il database delle vulnerabilita' dalla rete, quindi lo fa solo l'invio
-        // vero: l'anteprima promette una lettura e deve restare una lettura.
+        // "-F" downloads the vulnerability database from the network, so only the real send
+        // does it: the preview promises a read and must remain a read.
         String audit = sh("pkg audit" + (updateDatabase ? " -F" : "") + " 2>&1", 180);
         r.put("audit", audit);
         r.put("vulnDbDays", daysSince("/var/db/pkg/vuln.xml"));
         r.put("vulnDbUpdatedNow", updateDatabase);
-        // Con "-U" le interrogazioni al repository leggono il catalogo che c'e': la sua eta'
-        // fa parte del risultato, altrimenti "nel repository c'e' la versione X" suona come
-        // una verifica appena fatta sui server di pkg, che non e'.
+        // With "-U" the queries to the repository read the catalog that is there: its age
+        // is part of the result, otherwise "the repository has version X" sounds like
+        // a check just made on the pkg servers, which it is not.
         //
-        // La data la da' PkgCatalog, ed e' quella di pubblicazione sul server. Prima qui si
-        // guardava /var/db/pkg/repo-FreeBSD.sqlite, che su FreeBSD 15 non esiste: ogni
-        // rapporto diceva "eta' sconosciuta".
+        // The date comes from PkgCatalog, and it is the publication date on the server. Before, this
+        // looked at /var/db/pkg/repo-FreeBSD.sqlite, which does not exist on FreeBSD 15: every
+        // report said "age unknown".
         JSONObject cat = PkgCatalog.read();
         long catalogDays = cat.optLong("days", -1);
         r.put("catalog", cat).put("catalogDays", catalogDays).put("catalogDate", cat.optString("data"));
@@ -9957,8 +10003,8 @@ public final class UpdateManager {
                     .put("what", cat.optString("note") + " " + I18n.tr("server.um.x.noCatalogDate"))
                     .put("where", I18n.tr("server.um.x.updatesPage")));
         else if (catalogDays >= 7 && !refreshedCatalog)
-            // Dopo un "pkg update" riuscito, un catalogo vecchio e' l'ultimo che il server offre:
-            // non c'e' niente da fare. Senza (l'anteprima), puo' esserci un catalogo piu' nuovo.
+            // After a successful "pkg update", an old catalog is the latest the server offers:
+            // there is nothing to do. Without it (the preview), there may be a newer catalog.
             toDo.put(new JSONObject().put("urgency", catalogDays >= 28 ? 2 : 3)
                     .put("title", I18n.tr("mail.report.title.catalogOld"))
                     .put("what", I18n.tr("server.um.x.catalogOld", java.util.Map.of("howMuch", String.valueOf(PkgCatalog.howMuch(catalogDays)), "data", String.valueOf(cat.optString("data")))))
@@ -9967,11 +10013,11 @@ public final class UpdateManager {
         JSONArray withRemedy = new JSONArray(), withoutRemedy = new JSONArray();
         JSONArray notUnderstood = new JSONArray();
         int found = 0;
-        // "C'e' il rimedio" senza dire che il pacchetto e' protetto e' una falsa
-        // rassicurazione: il rimedio esiste nel catalogo e nessun `pkg upgrade` lo applichera'
-        // mai, perche' il blocco lo salta. Sulla VM, il 23/10/2026, era proprio il caso di
-        // nginx: catalogo 1.30.6,3, cioe' la versione da cui VuXML considera corretto il
-        // problema, e il pacchetto bloccato dal pannello.
+        // "There is a fix" without saying that the package is locked is false
+        // reassurance: the fix exists in the catalog and no `pkg upgrade` will ever apply it,
+        // because the lock skips it. On the VM, on 2026-10-23, that was exactly the case of
+        // nginx: catalog 1.30.6,3, that is the version from which VuXML considers the
+        // problem fixed, and the package locked by the panel.
         Set<String> lockedNow = lockedNames();
         for (String line : audit.split("\n")) {
             Matcher m = Pattern.compile("^([A-Za-z0-9._+-]+)-([0-9][^\\s]*) is vulnerable").matcher(line.trim());
@@ -9979,10 +10025,10 @@ public final class UpdateManager {
             found++;
             String name = m.group(1), installed = m.group(2);
             if (!isValidName(name)) {
-                // Un nome che il filtro non accetta non deve sparire: sparendo non finirebbe
-                // ne' fra quelli con rimedio ne' fra quelli senza, e il conto tornerebbe lo
-                // stesso. Oggi i nomi di pkg stanno tutti dentro il filtro e questo ramo non
-                // scatta mai — ma un elemento che il programma non capisce si conta e si dice.
+                // A name that the filter does not accept must not disappear: if it did, it would
+                // end up neither among those with a fix nor among those without, and the count
+                // would still add up. Today pkg's names all fit the filter and this branch never
+                // fires - but an element the program does not understand is counted and reported.
                 notUnderstood.put(line.trim());
                 continue;
             }
@@ -9994,10 +10040,10 @@ public final class UpdateManager {
                 withoutRemedy.put(name + " " + installed);
         }
 
-        // Il controllo incrociato che pkg audit regala: in fondo stampa "N problem(s) in M
-        // package(s) found.". Se cio' che abbiamo letto non combacia con quei totali, il
-        // risultato non si mostra come se fosse completo — si dice che non torna. Un elenco
-        // parziale spacciato per intero e' peggio di nessun elenco.
+        // The cross-check that pkg audit gives for free: at the end it prints "N problem(s) in M
+        // package(s) found.". If what we read does not match those totals, the
+        // result is not shown as if it were complete - it says that it does not add up. A partial
+        // list passed off as whole is worse than no list.
         Matcher tot = Pattern.compile("(\\d+)\\s+problem\\(s\\)\\s+in\\s+(\\d+)\\s+[^\\n]*package\\(s\\)\\s+found")
                 .matcher(audit);
         if (tot.find()) {
@@ -10019,7 +10065,7 @@ public final class UpdateManager {
                             : I18n.tr("server.um.x.vulnFix.other", java.util.Map.of("n", String.valueOf(withRemedy.length()), "list", String.valueOf(String.join(", ", jsonArrayToList(withRemedy))))))
                     .put("where", I18n.tr("server.um.reportData.8")));
 
-        // --- librerie mancanti ---
+        // --- missing libraries ---
         JSONArray broken = packagesWithMissingLibraries().optJSONArray("packages");
         r.put("missingLibraries", broken == null ? new JSONArray() : broken);
         if (broken != null && broken.length() > 0)
@@ -10028,7 +10074,7 @@ public final class UpdateManager {
                     .put("what", I18n.tr("server.um.reportData.9", java.util.Map.of("length", String.valueOf(broken.length()))))
                     .put("where", I18n.tr("server.um.reportData.10")));
 
-        // --- servizi ---
+        // --- services ---
         JSONArray services = servicesJson();
         r.put("services", services);
         JSONArray down = new JSONArray();
@@ -10041,11 +10087,11 @@ public final class UpdateManager {
                     .put("what", I18n.tr("server.um.x.svcDown", java.util.Map.of("list", String.valueOf(String.join(", ", jsonArrayToList(down))))))
                     .put("where", I18n.tr("server.um.reportData.11")));
 
-        // --- un lavoro sui pacchetti interrotto, e i pacchetti dello stack rimasti senza protezione ---
+        // --- an interrupted package job, and the stack packages left without a lock ---
         //
-        // Il rapporto e' l'unico canale che raggiunge chi non apre il pannello. Misurato sulla VM
-        // il 06/11/2026 (reperto 147): con un pacchetto dello stack sbloccato e l'elenco di un
-        // lavoro interrotto su disco, le cose da fare non ne parlavano.
+        // The report is the only channel that reaches whoever does not open the panel. Measured on the VM
+        // on 2026-11-06 (finding 147): with a stack package unlocked and the list of an
+        // interrupted job on disk, the things to do did not mention them.
         List<String> stillUnprotected = PackageRecovery.statePackages();
         if (PackageQueue.statePresent())
             toDo.put(new JSONObject().put("urgency", 0)
@@ -10054,7 +10100,7 @@ public final class UpdateManager {
                             "n", String.valueOf(stillUnprotected.size()),
                             "list", String.join(" ", stillUnprotected))))
                     .put("where", I18n.tr("server.um.x.updatesPage")));
-        // L'avviso di un lavoro interrotto; la reinstallazione con la sua urgenza e il suo titolo (reperto 172).
+        // The warning of an interrupted job; the reinstallation with its urgency and its title (finding 172).
         JSONObject interrupted = PackageRecovery.reportItem();
         if (interrupted != null) toDo.put(interrupted);
         Set<String> byHand = unlockedByHand();
@@ -10072,7 +10118,7 @@ public final class UpdateManager {
                             "n", String.valueOf(loose.size()), "list", String.join(" ", loose))))
                     .put("where", I18n.tr("server.um.x.updatesPage")));
 
-        // --- spazio ---
+        // --- space ---
         String df = sh("df -h / 2>/dev/null | tail -1", 30);
         r.put("space", df);
         Matcher mp = Pattern.compile("([0-9]+)%").matcher(df);
@@ -10086,7 +10132,7 @@ public final class UpdateManager {
                         .put("where", I18n.tr("server.um.reportData.13")));
         }
 
-        // --- ambienti di avvio ---
+        // --- boot environments ---
         JSONObject be = bootEnvironments();
         r.put("environments", be);
 
@@ -10095,7 +10141,7 @@ public final class UpdateManager {
         return r;
     }
 
-    /** Giorni da oggi a una data scritta come gg/mm/aaaa; -1 se non leggibile. */
+    /** Days from today to a date written as dd/mm/yyyy; -1 if not readable. */
     private static long daysToDate(String dd_mm_yyyy) {
         Matcher m = Pattern.compile("([0-9]{2})/([0-9]{2})/([0-9]{4})").matcher(dd_mm_yyyy == null ? "" : dd_mm_yyyy);
         if (!m.find()) return -1;
@@ -10106,7 +10152,7 @@ public final class UpdateManager {
         } catch (Exception e) { return -1; }
     }
 
-    /** Le cose da fare, dalla piu' urgente. 0 = un servizio e' giu', 3 = da pianificare. */
+    /** The things to do, most urgent first. 0 = a service is down, 3 = to be scheduled. */
     private static JSONArray sortByUrgency(JSONArray a) {
         java.util.List<JSONObject> l = new ArrayList<>();
         for (int i = 0; i < a.length(); i++) l.add(a.getJSONObject(i));
@@ -10116,7 +10162,7 @@ public final class UpdateManager {
         return out;
     }
 
-    /** servicesState() in forma di elenco JSON, per le schede che lo mostrano. */
+    /** servicesState() as a JSON list, for the tabs that show it. */
     private static JSONArray servicesJson() {
         JSONArray a = new JSONArray();
         for (var e : servicesState().entrySet())
@@ -10130,7 +10176,7 @@ public final class UpdateManager {
         return n;
     }
 
-    /** Legge l'uscita di "sort | uniq -c": conteggio, spazio, valore. */
+    /** Reads the output of "sort | uniq -c": count, space, value. */
     private static void countIn(String output, java.util.Map<String, Integer> where) {
         for (String line : output.split("\n")) {
             String t = line.trim();
@@ -10148,10 +10194,10 @@ public final class UpdateManager {
         if (!ok("pkg info -e " + pkgName, 20))
             return new JSONObject().put("success", false).put("error", I18n.tr("server.um.panelUsage.1", java.util.Map.of("pkg", String.valueOf(pkgName))));
 
-        // --- 1. quali eseguibili installa il pacchetto ---
+        // --- 1. which executables the package installs ---
         String list = sh("pkg query '%Fp' " + pkgName + " 2>/dev/null", 60);
         String asListed = "pkg query %Fp";
-        if (list.isBlank()) {   // formato non disponibile: si ripiega su pkg info -l
+        if (list.isBlank()) {   // format not available: fall back on pkg info -l
             list = sh("pkg info -l " + pkgName + " 2>/dev/null", 60);
             asListed = "pkg info -l";
         }
@@ -10165,13 +10211,13 @@ public final class UpdateManager {
         }
         r.put("asListed", asListed).put("runnablesFound", runnables.size());
 
-        // --- 2. le classi del pannello, dal jar in esecuzione ---
+        // --- 2. the panel's classes, from the running jar ---
         String jar = jarPath();
         r.put("jar", jar == null ? "" : jar);
         long bytesRead = 0;
         String extract = null;
         if (jar != null && !jar.isBlank() && ok("test -r " + jar, 15)) {
-            // bsdtar (libarchive) e' nel sistema base e legge gli archivi zip, quindi anche i jar.
+            // bsdtar (libarchive) is in the base system and reads zip archives, so jars too.
             extract = "tar -xOf " + jar + " 'org/daemoxcp/mail/*' 2>/dev/null";
             String n = sh(extract + " | wc -c", 120).trim().replaceAll("[^0-9]", "");
             if (!n.isEmpty()) bytesRead = Long.parseLong(n);
@@ -10184,14 +10230,14 @@ public final class UpdateManager {
         boolean readSucceeded = bytesRead > 0;
         r.put("bytesRead", bytesRead).put("readSucceeded", readSucceeded);
 
-        // --- 3. una sola passata: quali di quei nomi compaiono nelle classi ---
-        // Due conteggi, non uno. La ricerca per SOTTOSTRINGA e' inservibile: "gif" compare 127
-        // volte nelle classi del pannello, ma dentro JSON.stringify e writeNewsyslogIfMissing,
-        // mai come comando. Con la ricerca per PAROLA INTERA scende a zero, che e' la verita'.
-        // Il secondo conteggio e' piu' stretto ancora: il nome seguito da uno spazio, cioe' un
-        // comando con argomenti. Serve a distinguere "openssl x509 -in ..." dal nome che compare
-        // per caso. Il giudizio si basa sulla parola intera; l'altro numero e' li' per farsi
-        // un'idea, perche' un nome come "test" resta ambiguo per natura.
+        // --- 3. a single pass: which of those names appear in the classes ---
+        // Two counts, not one. Searching by SUBSTRING is useless: "gif" appears 127
+        // times in the panel's classes, but inside JSON.stringify and writeNewsyslogIfMissing,
+        // never as a command. Searching by WHOLE WORD brings it down to zero, which is the truth.
+        // The second count is stricter still: the name followed by a space, that is a
+        // command with arguments. It serves to tell "openssl x509 -in ..." from the name appearing
+        // by chance. The verdict is based on the whole word; the other number is there to get
+        // an idea, because a name like "test" stays ambiguous by nature.
         java.util.Map<String, Integer> counts = new java.util.HashMap<>();
         java.util.Map<String, Integer> withArguments = new java.util.HashMap<>();
         java.util.List<String> tooShort = new ArrayList<>();
@@ -10208,7 +10254,7 @@ public final class UpdateManager {
             }
         }
 
-        // --- 4. per ogni comando usato: esiste un'altra copia che resterebbe? ---
+        // --- 4. for each command used: is there another copy that would remain? ---
         JSONArray used = new JSONArray();
         for (var e : runnables.entrySet()) {
             Integer c = counts.get(e.getKey());
@@ -10219,10 +10265,10 @@ public final class UpdateManager {
                 if (cand.equals(e.getValue())) continue;
                 if (ok("test -x " + cand, 15)) { elsewhere = cand; break; }
             }
-            // Non basta sapere che una seconda copia esiste: bisogna sapere QUALE delle due
-            // gira adesso. Se il PATH gia' sceglie l'altra, togliere il pacchetto non cambia
-            // nulla — dire "diventerebbe un altro binario" sarebbe falso, e contraddirebbe il
-            // riquadro qui sopra che ha appena misurato chi vince nel PATH.
+            // Knowing that a second copy exists is not enough: one must know WHICH of the two
+            // runs now. If the PATH already picks the other one, removing the package changes
+            // nothing - saying "it would become another binary" would be false, and would contradict
+            // the box above that has just measured who wins in the PATH.
             String inUseNow = sh("command -v " + e.getKey() + " 2>/dev/null", 15).trim();
             boolean isItsOwn = inUseNow.equals(e.getValue());
             used.put(new JSONObject().put("command", e.getKey()).put("path", e.getValue())
@@ -10239,11 +10285,11 @@ public final class UpdateManager {
                                ? I18n.tr("server.um.panelUsage.4")
                                : I18n.tr("server.um.panelUsage.5", java.util.Map.of("inUseNow", String.valueOf(inUseNow))))));
         }
-        // Un pacchetto puo' non avere nessun comando e servire lo stesso, perche' e' una
-        // LIBRERIA: nessuno la digita, ma qualcuno ci si collega. giflib e' esattamente
-        // questo. Dirlo qui evita che "non ne uso i comandi" venga letto come "si puo'
-        // togliere": per una libreria la domanda giusta e' un'altra, ed e' quella che
-        // pone la scheda dei pacchetti senza la libreria che richiedono.
+        // A package may have no command at all and still be needed, because it is a
+        // LIBRARY: nobody types it, but something links to it. giflib is exactly
+        // this. Saying it here prevents "I do not use its commands" from being read as "it
+        // can be removed": for a library the right question is a different one, and it is the
+        // one asked by the tab of packages without the library they require.
         JSONArray libraries = new JSONArray();
         for (String l : sh("pkg query %b " + pkgName + " 2>/dev/null", 30).split("\n"))
             if (l.trim().matches("[A-Za-z0-9._+-]{1,128}")) libraries.put(l.trim());
@@ -10273,7 +10319,7 @@ public final class UpdateManager {
                 }
             }
             if (reallyItsOwn == 0) {
-                // Li nomina, ma non e' questo pacchetto a fornire i binari che girano.
+                // It names them, but it is not this package that provides the binaries that run.
                 verdict = "NAMES_NOT_THEIRS";
                 explanation = used.length() == 1
                         ? I18n.tr("server.um.x.namesOther.one", java.util.Map.of("pkg", String.valueOf(pkgName)))
@@ -10296,10 +10342,10 @@ public final class UpdateManager {
     }
 
     /**
-     * L'analisi dell'uscita dello scan, staccata dal comando che la produce: cosi' si puo'
-     * provare senza FreeBSD, che e' l'unico modo di sapere che legge davvero cio' che crede.
-     * Una riga e' "pid TAB comando TAB percorso [percorso ...]". Il percorso in /usr/local
-     * e' il port; quello in /usr/lib e' il sistema base.
+     * The parsing of the scan's output, separated from the command that produces it: that way it can be
+     * tested without FreeBSD, which is the only way to know that it really reads what it believes it does.
+     * A line is "pid TAB command TAB path [path ...]". The path in /usr/local
+     * is the port; the one in /usr/lib is the base system.
      */
     static JSONArray analyzeMappings(String scan) {
         JSONArray processes = new JSONArray();
@@ -10328,13 +10374,13 @@ public final class UpdateManager {
         }
         r.put("installed", true).put("version", sh("pkg query %v openssl", 20));
 
-        // --- 1. chi lo dichiara nel registro ---
+        // --- 1. who declares it in the registry ---
         JSONArray declare = new JSONArray();
         for (String s : sh("pkg query %rn openssl 2>/dev/null", 30).split("\n"))
             if (isValidName(s.trim())) declare.put(s.trim());
         r.put("declare", declare);
 
-        // --- 2. i soname delle due copie, e se si sovrappongono ---
+        // --- 2. the sonames of the two copies, and whether they overlap ---
         java.util.LinkedHashSet<String> sonPort = new java.util.LinkedHashSet<>();
         for (String s : sh("pkg query %b openssl 2>/dev/null", 30).split("\n")) {
             String t = s.trim();
@@ -10353,7 +10399,7 @@ public final class UpdateManager {
          .put("sharedSoname", new JSONArray(new ArrayList<>(common)))
          .put("ambiguous", !common.isEmpty());
 
-        // --- 2b. chi richiede quei soname (vale solo se NON sono in comune col base) ---
+        // --- 2b. who requires those sonames (valid only if they are NOT shared with base) ---
         JSONArray require = new JSONArray();
         if (!sonPort.isEmpty()) {
             for (String line : sh("pkg query '%n %B' 2>/dev/null", 120).split("\n")) {
@@ -10367,7 +10413,7 @@ public final class UpdateManager {
         }
         r.put("requireTheSoname", require);
 
-        // --- 3. la misura che decide: cosa e' mappato ADESSO dai processi vivi ---
+        // --- 3. the measurement that decides: what is mapped NOW by live processes ---
         JSONArray processes = new JSONArray();
         JSONArray useThePort = new JSONArray();
         boolean hasProcstat = ok("command -v procstat >/dev/null 2>&1", 15);
@@ -10384,14 +10430,14 @@ public final class UpdateManager {
         }
         boolean reliableMeasure = hasProcstat && withLibssl > 0;
 
-        // --- 4. il comando, non solo le librerie. procstat vede i processi VIVI: un
-        // "openssl x509" dura millisecondi e non si fa quasi mai cogliere. Ma il pannello
-        // lo invoca eccome (AcmeManager legge i certificati cosi', e gli script di
-        // installazione generano password e chiavi con "openssl rand"), e lo invoca SENZA
-        // percorso assoluto. Nel PATH di FreeBSD /usr/local/bin viene prima di /usr/bin,
-        // quindi con il port installato e' il suo binario a vincere. Ignorarlo vorrebbe
-        // dire dire "non lo usa nessuno" di un programma che gira ogni volta che il
-        // pannello guarda un certificato.
+        // --- 4. the command, not just the libraries. procstat sees LIVE processes: an
+        // "openssl x509" lasts milliseconds and is almost never caught. But the panel
+        // certainly does invoke it (AcmeManager reads certificates this way, and the install
+        // scripts generate passwords and keys with "openssl rand"), and it invokes it WITHOUT
+        // an absolute path. In FreeBSD's PATH /usr/local/bin comes before /usr/bin,
+        // so with the port installed it is its binary that wins. Ignoring this would
+        // mean saying "nobody uses it" of a program that runs every time the
+        // panel looks at a certificate.
         JSONArray binaries = new JSONArray();
         for (String path : new String[]{"/usr/local/bin/openssl", "/usr/bin/openssl"}) {
             if (!ok("test -x " + path, 15)) continue;
@@ -10414,7 +10460,7 @@ public final class UpdateManager {
                  ? I18n.tr("server.um.opensslUsage.3", java.util.Map.of("withLibssl", String.valueOf(withLibssl)))
                  : I18n.tr("server.um.opensslUsage.4"));
 
-        // --- il verdetto, nell'ordine in cui le prove pesano ---
+        // --- the verdict, in the order in which the evidence weighs ---
         String verdict, explanation;
         if (useThePort.length() > 0) {
             verdict = "IN_USE_NOW";
@@ -10442,22 +10488,22 @@ public final class UpdateManager {
         r.put("note", I18n.tr("server.um.opensslUsage.10"));
         r.put("whyItIsHere", I18n.tr("server.um.opensslUsage.11"));
         r.put("panel", panelUsage("openssl"));
-        // Questo testo diceva di digitare "pkg unlock" e "pkg delete" da riga di comando.
-        // Da quando la rimozione e' un pulsante, dettare i comandi e' peggio che inutile:
-        // il pulsante rifa' i controlli e verifica dopo, una mano no.
+        // This text used to say to type "pkg unlock" and "pkg delete" on the command line.
+        // Since removal became a button, dictating the commands is worse than useless:
+        // the button redoes the checks and verifies afterwards, a human hand does not.
         r.put("howToRemove", I18n.tr("server.um.opensslUsage.12"));
         return r;
     }
 
     /**
-     * Chi dichiara cosa, sui client MySQL. Serve a rispondere con i fatti a una domanda che
-     * altrimenti si risponde a intuito: perche' e' stato installato un client 9.7 quando il
-     * predefinito dei port FreeBSD (Mk/bsd.default-versions.mk, rami main e 2026Q3) e' 8.4?
+     * Who declares what, on the MySQL clients. It serves to answer with facts a question that
+     * would otherwise be answered by intuition: why was a 9.7 client installed when the
+     * FreeBSD ports default (Mk/bsd.default-versions.mk, branches main and 2026Q3) is 8.4?
      *
-     * Si guardano tre cose distinte, che e' facile confondere in una sola:
-     *  - cosa dichiara il pacchetto INSTALLATO
-     *  - cosa dichiara la versione nel REPOSITORY
-     *  - quali pacchetti forniscono davvero la libreria contesa
+     * Three distinct things are looked at, which are easy to confuse as one:
+     *  - what the INSTALLED package declares
+     *  - what the version in the REPOSITORY declares
+     *  - which packages really provide the contested library
      */
     public static JSONObject mysqlClientDiagnostics() {
         JSONObject r = new JSONObject();
@@ -10480,28 +10526,28 @@ public final class UpdateManager {
         }
         r.put("dependents", dependents);
 
-        // Chi fornisce la libreria contesa, e da quale pacchetto proviene il file sul disco.
+        // Who provides the contested library, and which package the file on the disk comes from.
         r.put("provideLib", sh("pkg which -q /usr/local/lib/mysql/libmysqlclient.so.24 2>/dev/null", 20));
         r.put("fileLib", sh("ls -l /usr/local/lib/mysql/libmysqlclient.so.24 2>/dev/null", 20));
-        // File che i due pacchetti si contendono: quanti ne ha persi la 8.4.
+        // Files the two packages fight over: how many of them 8.4 lost.
         r.put("hasConflicts", sh("pkg check -s mysql84-client 2>&1 | head -20", 180));
         return r.put("success", true);
     }
 
     /**
-     * I predefiniti dei port FreeBSD, letti dalla fonte ufficiale.
+     * The FreeBSD ports defaults, read from the official source.
      *
-     * Colonne: componente, valore predefinito, come si rileva cio' che e' installato,
-     * cosa comporta discostarsene.
+     * Columns: component, default value, how what is installed is detected,
+     * what departing from it entails.
      *
-     * FONTE: Mk/bsd.default-versions.mk del repository ufficiale dei port
-     * (cgit.freebsd.org), rami main e 2026Q3 — coincidono. Verificato il 31/08/2026.
+     * SOURCE: Mk/bsd.default-versions.mk from the official ports repository
+     * (cgit.freebsd.org), branches main and 2026Q3 - they match. Verified on 2026-08-31.
      *
-     * E' una fotografia datata, non una lettura dal vivo: il pannello non va su internet.
-     * Va riverificata quando cambia il trimestre, e la scheda lo dice invece di far credere
-     * che sia sempre aggiornata. Serve a rispondere alla domanda che oggi ci e' mancata —
-     * "cio' che ho installato e' quello che il sistema si aspetta?" — prima di una
-     * migrazione, non dopo.
+     * It is a dated snapshot, not a live read: the panel does not go on the internet.
+     * It must be re-verified when the quarter changes, and the tab says so instead of making people
+     * believe it is always up to date. It serves to answer the question we lacked today -
+     * "is what I installed what the system expects?" - before a
+     * migration, not after.
      */
     private static final String[][] DEFAULTS = {
         {"MySQL", "8.4",
@@ -10525,45 +10571,45 @@ public final class UpdateManager {
     };
 
     /**
-     * Confronta i predefiniti ufficiali con cio' che e' davvero installato.
-     * La colonna "installato" viene dal sistema, quella "predefinito" dalla fonte ufficiale:
-     * il confronto e' il punto, perche' e' la divergenza a rompere le cose.
+     * Compares the official defaults with what is really installed.
+     * The "installed" column comes from the system, the "default" one from the official source:
+     * the comparison is the point, because it is the divergence that breaks things.
      */
     /**
-     * Da quale ramo dei pacchetti si serve questo sistema.
+     * Which package branch this system is served from.
      *
-     * Cambia quanto ci mette una correzione ad arrivare, ed e' la risposta alla domanda "perche'
-     * il repository non ha ancora la versione che chiude questa vulnerabilita'". Non si legge da
-     * un file scelto a occhio: pkg fonde /etc/pkg/FreeBSD.conf con gli eventuali file in
-     * /usr/local/etc/pkg/repos/, e solo lui sa quale ha vinto. "pkg -vv" stampa la
-     * configurazione EFFICACE, quella davvero in uso.
+     * It changes how long a fix takes to arrive, and it is the answer to the question "why does
+     * the repository not have the version that closes this vulnerability yet". It is not read from
+     * a file picked by eye: pkg merges /etc/pkg/FreeBSD.conf with any files in
+     * /usr/local/etc/pkg/repos/, and only pkg knows which one won. "pkg -vv" prints the
+     * EFFECTIVE configuration, the one really in use.
      *
-     * Nota sul significato, dall'Handbook di FreeBSD: quarterly viene tagliato da HEAD a
-     * gennaio, aprile, luglio e ottobre, e riceve comunque le correzioni di sicurezza — anche
-     * come aggiornamento di versione. Cio' che tiene fuori sono le novita', non le correzioni.
+     * Note on the meaning, from the FreeBSD Handbook: quarterly is cut from HEAD in
+     * January, April, July and October, and still receives security fixes - even
+     * as a version update. What it keeps out are new features, not fixes.
      */
     /**
-     * Un rapporto unico, in testo, da copiare e incollare.
+     * A single report, in text, to copy and paste.
      *
-     * I dati ci sono gia' tutti, ma sparsi in sei schede: quando serve mandarli a qualcuno si
-     * finisce a copiare pezzi a mano, e i pezzi che si dimenticano sono sempre quelli che
-     * servivano. Qui stanno insieme, nell'ordine in cui uno li chiederebbe.
+     * The data is all already there, but scattered across six tabs: when it has to be sent to someone
+     * one ends up copying pieces by hand, and the pieces that get forgotten are always the ones that
+     * were needed. Here they are together, in the order in which one would ask for them.
      *
-     * Due scelte deliberate:
-     *  - le versioni installate e quelle del repository si leggono con DUE interrogazioni sole
-     *    (pkg query e pkg rquery -U su tutto) e si uniscono qui: interrogare pkg 41 volte per 41
-     *    pacchetti ci metterebbe minuti per la stessa informazione.
-     *  - non entra NIENTE di segreto: nomi, versioni, stati e avvisi. Nessun file di
-     *    configurazione, nessuna password, nessuna chiave. Un rapporto fatto per essere
-     *    incollato deve poter essere incollato senza rileggerlo riga per riga.
+     * Two deliberate choices:
+     *  - the installed versions and the repository ones are read with only TWO queries
+     *    (pkg query and pkg rquery -U on everything) and joined here: querying pkg 41 times for 41
+     *    packages would take minutes for the same information.
+     *  - NOTHING secret goes in: names, versions, states and warnings. No configuration
+     *    file, no password, no key. A report made to be
+     *    pasted must be pasteable without rereading it line by line.
      */
     /**
-     * Fine supporto delle release di FreeBSD, dalla pagina ufficiale della sicurezza.
+     * End of support of the FreeBSD releases, from the official security page.
      *
-     * Fotografia datata come PREDEFINITI, per lo stesso motivo: il pannello non va su internet.
-     * Fonte: https://www.FreeBSD.org/security/ — letta il 31/08/2026.
-     * Da rileggere quando esce una release nuova: una data di fine supporto sbagliata e' peggio
-     * di nessuna data, perche' rassicura invece di far controllare.
+     * A dated snapshot like DEFAULTS, for the same reason: the panel does not go on the internet.
+     * Source: https://www.FreeBSD.org/security/ - read on 2026-08-31.
+     * To be reread when a new release comes out: a wrong end-of-support date is worse
+     * than no date, because it reassures instead of prompting a check.
      */
     private static final String[][] END_OF_SUPPORT = {
         {"15.1", "31/03/2027", "server.um.mysqlClientDiagnostics.7"},
@@ -10574,53 +10620,53 @@ public final class UpdateManager {
         "server.um.mysqlClientDiagnostics.10";
 
     /**
-     * Quando la tabella qui sopra e' stata copiata, in forma leggibile da un programma.
+     * When the table above was copied, in a form a program can read.
      *
-     * La stessa informazione e' gia' dentro FONTE_SUPPORTO, ma dentro una frase: per mostrarla
-     * accanto alla data di fine supporto bisognerebbe estrarla dal testo con un'espressione
-     * regolare. Un dato che serve a un programma si mette in un campo, non lo si va a pescare
-     * da una prosa scritta per un essere umano — e' lo stesso errore per cui il piano MTA-STS
-     * cercava la parola "Cloudflare" dentro un motivo.
+     * The same information is already inside SUPPORT_SOURCE, but inside a sentence: to show it
+     * next to the end-of-support date it would have to be extracted from the text with a regular
+     * expression. A piece of data a program needs goes in a field, it is not fished out
+     * of prose written for a human being - it is the same mistake by which the MTA-STS plan
+     * looked for the word "Cloudflare" inside a reason.
      */
     private static final String SUPPORT_SOURCE_READ = "31/08/2026";
 
     /**
-     * Stato del sistema operativo di base: versione, livello di patch, riavvio necessario,
-     * fine del supporto, aggiornamenti gia' scaricati.
+     * State of the base operating system: version, patch level, restart needed,
+     * end of support, updates already downloaded.
      *
-     * I pacchetti sono una meta' del server; l'altra e' il sistema sotto, che pkg non tocca e
-     * che nessuna delle schede finora guardava. Tutto in sola lettura: "freebsd-update fetch"
-     * SCARICA, quindi sta in un'azione separata e dichiarata, non qui dentro.
+     * The packages are one half of the server; the other is the system underneath, which pkg does not
+     * touch and which none of the tabs looked at until now. All read-only: "freebsd-update fetch"
+     * DOWNLOADS, so it lives in a separate, declared action, not in here.
      */
     public static JSONObject operatingSystem() {
         JSONObject r = new JSONObject();
         try {
-            String kernel = sh("freebsd-version -k 2>/dev/null", 20).trim();     // kernel installato
-            String running = sh("freebsd-version -r 2>/dev/null", 20).trim();     // kernel in esecuzione
+            String kernel = sh("freebsd-version -k 2>/dev/null", 20).trim();     // installed kernel
+            String running = sh("freebsd-version -r 2>/dev/null", 20).trim();     // running kernel
             String userland = sh("freebsd-version -u 2>/dev/null", 20).trim();   // userland
             String uname = sh("uname -r 2>/dev/null", 20).trim();
             String arch = sh("uname -mi 2>/dev/null", 20).trim();
             r.put("installedKernel", kernel).put("runningKernel", running)
              .put("userland", userland).put("uname", uname).put("arch", arch);
 
-            // L'Handbook: se freebsd-version -k e uname -r differiscono, il kernel installato
-            // non e' quello in esecuzione — cioe' manca un riavvio.
+            // The Handbook: if freebsd-version -k and uname -r differ, the installed kernel
+            // is not the running one - that is, a restart is missing.
             boolean restart = !kernel.isEmpty() && !uname.isEmpty() && !kernel.equals(uname);
             r.put("restartNeeded", restart);
 
-            // Fine supporto: si confronta la parte X.Y della userland con la tabella ufficiale.
+            // End of support: the X.Y part of the userland is compared with the official table.
             Matcher m = Pattern.compile("^([0-9]+\\.[0-9]+)").matcher(userland);
             String series = m.find() ? m.group(1) : "";
             String eol = "", eolNotes = "";
             for (String[] e : END_OF_SUPPORT)
                 if (e[0].equals(series)) { eol = e[1]; eolNotes = I18n.tr(e[2]); }
-            // "Non conosco questa serie" e' un'informazione, e va detta.
+            // "I do not know this series" is a piece of information, and it must be said.
             //
-            // Prima, se la serie non era in tabella, eol restava vuoto e la scheda non mostrava
-            // nulla: un silenzio che si legge come "niente da segnalare". Ma il caso in cui la
-            // serie manca e' esattamente quello in cui il sistema e' PIU' NUOVO della fotografia,
-            // cioe' quello in cui la tabella andrebbe riletta. Il difetto si nascondeva proprio
-            // dove voleva farsi notare.
+            // Before, if the series was not in the table, eol stayed empty and the tab showed
+            // nothing: a silence that reads as "nothing to report". But the case in which the
+            // series is missing is exactly the one in which the system is NEWER than the snapshot,
+            // that is the one in which the table should be reread. The defect hid exactly
+            // where it wanted to be noticed.
             r.put("series", series).put("endOfSupport", eol).put("supportNotes", eolNotes)
              .put("knownSeries", !eol.isEmpty())
              .put("supportSourceRead", SUPPORT_SOURCE_READ)
@@ -10631,13 +10677,13 @@ public final class UpdateManager {
             if (!release) {
                 r.put("updatesNote", I18n.tr("server.um.operatingSystem.1", java.util.Map.of("userland", String.valueOf(userland))));
             } else {
-                // updatesready NON scarica: dice solo se c'e' gia' qualcosa di pronto da installare.
+                // updatesready does NOT download: it only says whether something is already ready to install.
                 String ready = sh("freebsd-update updatesready 2>&1", 60).trim();
                 r.put("alreadyReady", ready);
                 boolean readyExist = !ready.toLowerCase().contains("no updates are available");
                 r.put("readyExist", readyExist);
-                // Cosa porterebbero, se si installano: la versione (dal file tag) e se c'e' il kernel,
-                // cioe' se dopo servira' un riavvio (reperto 185).
+                // What they would bring, if installed: the version (from the tag file) and whether the kernel
+                // is included, that is whether a restart will be needed afterwards (finding 185).
                 if (readyExist) {
                     r.put("readyTarget", OsPatch.target(sh("cat /var/db/freebsd-update/tag 2>/dev/null", 10)));
                     r.put("readyKernel", number(sh("cat /var/db/freebsd-update/*-install/INDEX-NEW 2>/dev/null"
@@ -10651,12 +10697,12 @@ public final class UpdateManager {
     }
 
     /**
-     * Cerca gli aggiornamenti del sistema di base. SCARICA, non installa.
+     * Looks for updates to the base system. It DOWNLOADS, it does not install.
      *
-     * Sta in un'azione a parte proprio perche' scrive: "freebsd-update fetch" scarica le patch
-     * in /var/db/freebsd-update e le lascia li'. Installarle e' un altro comando, e comporta un
-     * riavvio se tocca il kernel: quello non lo faccio partire da un pulsante senza che sia una
-     * decisione presa guardando cosa cambierebbe.
+     * It is in a separate action precisely because it writes: "freebsd-update fetch" downloads the
+     * patches into /var/db/freebsd-update and leaves them there. Installing them is another command, and it
+     * requires a restart if it touches the kernel: I do not start that from a button unless it is a
+     * decision made by looking at what would change.
      */
     public static JSONObject startSystemUpdateSearch() {
         String id = "osf-" + System.currentTimeMillis();
@@ -10682,9 +10728,9 @@ public final class UpdateManager {
                 j.write(I18n.tr("server.um.startSystemUpdateSearch.6"));
                 j.write("");
 
-                // Battito: senza, un comando che scarica per minuti senza andare a capo sembra
-                // bloccato. Non e' un abbellimento — e' la differenza fra "sta lavorando" e
-                // "e' morto", che dal registro non si distinguerebbe altrimenti.
+                // Heartbeat: without it, a command that downloads for minutes without a newline looks
+                // stuck. It is not an embellishment - it is the difference between "it is working" and
+                // "it is dead", which could not otherwise be told apart from the log.
                 final long start = System.currentTimeMillis();
                 final java.util.concurrent.atomic.AtomicBoolean finished =
                         new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -10732,21 +10778,21 @@ public final class UpdateManager {
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
     }
 
-    // ===================== Le patch di FreeBSD, installate dal pannello (reperto 185) =====================
+    // ===================== FreeBSD patches, installed by the panel (finding 185) =====================
 
-    /** L'ultima installazione di patch fatta dal pannello: serve a dire, dopo, se manca il riavvio. */
+    /** The last patch installation done by the panel: it serves to tell, afterwards, whether the restart is missing. */
     static Path osPatchState = Paths.get("/var/db/daemoxcp-mail/system/os-patch.json");
-    /** La configurazione di freebsd-update con cui il pannello installa: vedi OsPatch.installConfig. */
+    /** The freebsd-update configuration the panel installs with: see OsPatch.installConfig. */
     static Path osPatchConfig = Paths.get("/var/db/daemoxcp-mail/system/freebsd-update.conf");
 
     /**
-     * Installa gli aggiornamenti del sistema di base: prima li scarica (quelli pronti possono essere
-     * vecchi: sul server vero erano del 22/10), poi l'ambiente di avvio per tornare indietro, poi
-     * "freebsd-update install", poi controlla le versioni e dice se serve un riavvio.
+     * Installs the updates of the base system: first it downloads them (the ready ones may be old: on
+     * the production server they were from 22 October), then the boot environment to go back, then
+     * "freebsd-update install", then it checks the versions and says whether a restart is needed.
      *
-     * Prende il turno dei pacchetti (PackageQueue): un pkg upgrade e un'installazione del sistema
-     * di base insieme si pestano i piedi (le librerie di sistema sotto i pacchetti che si
-     * aggiornano), e il turno vale anche fra processi.
+     * It takes the package turn (PackageQueue): a pkg upgrade and an installation of the base
+     * system at the same time step on each other's toes (the system libraries under the packages being
+     * updated), and the turn also holds across processes.
      */
     public static JSONObject startOsPatchInstall() {
         String id = "osp-" + System.currentTimeMillis();
@@ -10766,7 +10812,7 @@ public final class UpdateManager {
         }
     }
 
-    /** I passi delle patch di FreeBSD, senza chiudere il registro: li usa anche «Aggiorna tutto» (reperto 207). */
+    /** The steps of the FreeBSD patches, without closing the log: "Update all" uses them too (finding 207). */
     private static void osPatchSteps(Job j) {
         j.status = "running";
         final int TOT = 5;
@@ -10865,14 +10911,14 @@ public final class UpdateManager {
     }
 
     /**
-     * Cerca gli aggiornamenti di tutto, per la scheda «Aggiorna il server» (reperto 186): il catalogo
-     * dei pacchetti (pkg update), l'elenco delle vulnerabilita' (pkg audit -F) e le patch del sistema
-     * di base (freebsd-update fetch, se la release le riceve). Scarica e basta: non installa niente.
-     * Prima ognuna stava in una scheda diversa, e il quadro dei pacchetti confronta col catalogo gia'
-     * scaricato, senza rete: senza un pkg update i conteggi erano quelli dell'ultima volta.
+     * Looks for updates to everything, for the "Update the server" tab (finding 186): the package
+     * catalog (pkg update), the vulnerability list (pkg audit -F) and the base system patches
+     * (freebsd-update fetch, if the release receives them). It only downloads: it installs nothing.
+     * Before, each one was in a different tab, and the package overview compares with the catalog already
+     * downloaded, without network: without a pkg update the counts were those of the last time.
      *
-     * Col turno dei pacchetti: un pkg update mentre un altro lavoro installa cambia il catalogo sotto
-     * il suo piano.
+     * With the package turn: a pkg update while another job installs changes the catalog under
+     * its plan.
      */
     public static JSONObject startUpdatesSearch() {
         String id = "srch-" + System.currentTimeMillis();
@@ -10896,7 +10942,7 @@ public final class UpdateManager {
             j.advance(2, TOT);
             j.write("");
             j.write(I18n.tr("server.search.step2", Map.of("total", String.valueOf(TOT))));
-            // pkg audit esce con 1 anche quando trova pacchetti vulnerabili: conta l'elenco scaricato.
+            // pkg audit also exits with 1 when it finds vulnerable packages: what counts is the downloaded list.
             runLogged(j, "pkg audit -F -q 2>&1 | tail -5", 600);
 
             j.advance(3, TOT);
@@ -10925,8 +10971,8 @@ public final class UpdateManager {
     }
 
     /**
-     * Se il server va riavviato, per ogni pagina del pannello (la striscia in alto): letture leggere,
-     * senza freebsd-update ne' pkg. Anche un riavvio gia' programmato, per poterlo annullare.
+     * Whether the server needs a restart, for every page of the panel (the strip at the top): light reads,
+     * without freebsd-update or pkg. Also a restart already scheduled, so that it can be canceled.
      */
     public static JSONObject rebootState() {
         String installedKernel = sh("freebsd-version -k 2>/dev/null", 10).trim();
@@ -10953,13 +10999,13 @@ public final class UpdateManager {
     }
 
     /**
-     * Cerca gli aggiornamenti del sistema di base. SCARICA, non installa.
+     * Looks for updates to the base system. It DOWNLOADS, it does not install.
      *
-     * Gira dentro un lavoro asincrono e non dentro la richiesta HTTP: su un sistema a p0
-     * "freebsd-update fetch" deve scaricare mesi di patch e ci mette minuti, e il 31/08/2026
-     * il browser ha mollato la connessione prima che il server rispondesse — lavoro fatto,
-     * risposta persa, e a video solo un "Broken pipe". Le operazioni che durano si seguono
-     * con il polling, come tutte le altre qui dentro.
+     * It runs inside an asynchronous job and not inside the HTTP request: on a system at p0
+     * "freebsd-update fetch" has to download months of patches and takes minutes, and on 2026-08-31
+     * the browser dropped the connection before the server answered - job done,
+     * response lost, and on screen only a "Broken pipe". Long-running operations are followed
+     * by polling, like all the others in here.
      */
     private static JSONObject findSystemUpdates() {
         try {
@@ -10981,70 +11027,70 @@ public final class UpdateManager {
     }
 
     /**
-     * Controlli preliminari per il salto di release del sistema di base. Tutti in sola lettura.
+     * Preliminary checks for the release jump of the base system. All read-only.
      *
-     * Fonti: Handbook di FreeBSD, capitolo "Updating and Upgrading FreeBSD" (procedura
-     * freebsd-update upgrade), manuale di bectl(8) per gli ambienti di avvio, e la pagina
-     * https://www.FreeBSD.org/security/ per le date di fine supporto.
+     * Sources: FreeBSD Handbook, chapter "Updating and Upgrading FreeBSD" (the
+     * freebsd-update upgrade procedure), the bectl(8) manual for boot environments, and the page
+     * https://www.FreeBSD.org/security/ for the end-of-support dates.
      *
-     * Il punto che decide tutto: 15.0 e 15.1 hanno la STESSA ABI dei pacchetti
-     * (FreeBSD:15:arch), perche' l'ABI porta solo il numero maggiore. L'Handbook impone
-     * "pkg-static upgrade -f" solo per i salti di versione MAGGIORE, proprio a causa del
-     * cambio di ABI. Qui l'ABI non cambia: i 41 pacchetti protetti non vanno toccati. Fosse
-     * un salto maggiore, sarebbe un'altra procedura.
+     * The point that decides everything: 15.0 and 15.1 have the SAME package ABI
+     * (FreeBSD:15:arch), because the ABI carries only the major number. The Handbook requires
+     * "pkg-static upgrade -f" only for MAJOR version jumps, precisely because of the
+     * ABI change. Here the ABI does not change: the 41 locked packages must not be touched. Were
+     * it a major jump, it would be a different procedure.
      */
     /**
-     * Lo script rc.d del pannello: contenuto, e installazione su richiesta.
+     * The panel's rc.d script: content, and installation on request.
      *
-     * Serve perche' oggi, se il server si riavvia per un qualsiasi motivo, il pannello resta
-     * spento e nessuno lo segnala. Con questo torna su da solo, in modalita' --web.
+     * It is needed because today, if the server restarts for any reason, the panel stays
+     * off and nobody reports it. With this it comes back up on its own, in --web mode.
      *
-     * Struttura presa dall'articolo ufficiale "Practical rc.d scripting in BSD" della
-     * documentazione FreeBSD: le righe PROVIDE/REQUIRE/KEYWORD per rcorder, l'inclusione di
-     * /etc/rc.subr, name, rcvar, load_rc_config e run_rc_command.
+     * Structure taken from the official article "Practical rc.d scripting in BSD" in the
+     * FreeBSD documentation: the PROVIDE/REQUIRE/KEYWORD lines for rcorder, the inclusion of
+     * /etc/rc.subr, name, rcvar, load_rc_config and run_rc_command.
      *
-     * Due scelte che la documentazione stessa suggerisce:
-     *  - il pannello NON e' un demone: sta in primo piano. La documentazione dice che in questi
-     *    casi si definisce un start_cmd proprio, e qui si usa daemon(8) per staccarlo, con -p
-     *    per il pidfile e -o per il registro.
-     *  - procname e' il percorso della java, non /usr/sbin/daemon: rc.subr confronta il pid del
-     *    pidfile con procname, e daemon -p scrive il pid del FIGLIO — che dopo l'exec e' java.
-     *    Sbagliando questo, "service daemoxcp_mail status" direbbe sempre che non gira.
+     * Two choices that the documentation itself suggests:
+     *  - the panel is NOT a daemon: it stays in the foreground. The documentation says that in such
+     *    cases one defines a custom start_cmd, and here daemon(8) is used to detach it, with -p
+     *    for the pidfile and -o for the log.
+     *  - procname is the path of java, not /usr/sbin/daemon: rc.subr compares the pid in the
+     *    pidfile with procname, and daemon -p writes the pid of the CHILD - which after the exec is
+     *    java. Getting this wrong, "service daemoxcp_mail status" would always say it is not running.
      *
-     * REQUIRE resta LOGIN e basta: il pannello tollera MySQL spento (lo segnala e prosegue),
-     * quindi legarlo a mysql lo renderebbe piu' fragile senza guadagnarci niente.
+     * REQUIRE stays LOGIN and nothing else: the panel tolerates MySQL being down (it reports it and
+     * carries on), so tying it to mysql would make it more fragile without gaining anything.
      */
     /**
-     * Riavvio del server dal pannello.
+     * Server restart from the panel.
      *
-     * E' l'azione piu' irreversibile che il pannello possa fare, e ha senso solo da quando il
-     * pannello torna su da solo: senza lo script rc.d, premere questo pulsante significherebbe
-     * spegnere l'unica interfaccia da cui lo stai usando. Per questo, senza rc.d abilitato,
-     * si rifiuta invece di avvisare.
+     * It is the most irreversible action the panel can perform, and it makes sense only since the
+     * panel comes back up on its own: without the rc.d script, pressing this button would mean
+     * switching off the only interface you are using it from. That is why, without rc.d enabled,
+     * it refuses instead of warning.
      *
-     * Il riavvio e' PROGRAMMATO, non immediato, per due motivi. Il primo e' tecnico: shutdown
-     * con un tempo futuro resta in esecuzione fino al momento indicato (manuale di shutdown(8)),
-     * quindi va lanciato staccato o la risposta HTTP non arriverebbe mai. Il secondo e' umano:
-     * un minuto e' la finestra per ripensarci, e il pannello ha un pulsante per annullarlo.
-     * (Su FreeBSD si annulla terminando il processo shutdown: "-c" e' power cycle, non cancel.)
+     * The restart is SCHEDULED, not immediate, for two reasons. The first is technical: shutdown
+     * with a future time keeps running until the given moment (shutdown(8) manual),
+     * so it must be launched detached or the HTTP response would never arrive. The second is human:
+     * one minute is the window to change one's mind, and the panel has a button to cancel it.
+     * (On FreeBSD it is canceled by terminating the shutdown process: "-c" is power cycle, not cancel.)
      */
     /**
-     * Annulla un riavvio programmato.
+     * Cancels a scheduled restart.
      *
-     * Su FreeBSD non c'e' un'opzione per annullare: il manuale di shutdown(8) dice
+     * On FreeBSD there is no option to cancel: the shutdown(8) manual says
      * "A scheduled shutdown can be canceled by killing the shutdown process (a SIGTERM should
-     * suffice)". Attenzione a "shutdown -c": su Linux annulla, su FreeBSD e' POWER CYCLE —
-     * spegne e riaccende la macchina. Il 31/08/2026 l'ho scritto a memoria e l'ho detto
-     * sbagliato: e' esattamente il genere di ricordo che va verificato prima di usarlo.
+     * suffice)". Beware of "shutdown -c": on Linux it cancels, on FreeBSD it is POWER CYCLE -
+     * it switches the machine off and on again. On 2026-08-31 I wrote it from memory and got it
+     * wrong: it is exactly the kind of memory that must be verified before using it.
      */
     /**
-     * Dove sta davvero un comando, chiesto al sistema invece che ricordato.
+     * Where a command really is, asked of the system instead of remembered.
      *
-     * Il 31/08/2026 il pulsante di riavvio non ha riavviato niente perche' avevo scritto
-     * /usr/sbin/shutdown a memoria. "daemon" fa fork e poi exec: se l'exec fallisce, il
-     * fallimento avviene nel figlio e il padre esce comunque con successo — quindi nemmeno il
-     * codice di uscita lo rivelava. Il manuale non dichiara il percorso, e allora la risposta
-     * non e' scegliere fra /sbin e /usr/sbin: e' chiederlo.
+     * On 2026-08-31 the restart button restarted nothing because I had written
+     * /usr/sbin/shutdown from memory. "daemon" forks and then execs: if the exec fails, the
+     * failure happens in the child and the parent exits successfully anyway - so not even the
+     * exit code revealed it. The manual does not state the path, so the answer
+     * is not choosing between /sbin and /usr/sbin: it is asking.
      */
     private static String commandPath(String name, String... candidates) {
         if (!name.matches("[a-z0-9_-]{1,32}")) return "";
@@ -11063,7 +11109,7 @@ public final class UpdateManager {
                         .put("note", I18n.tr("server.um.cancelReboot.1"));
             String line = sh("ps -o command= -p " + pid + " 2>/dev/null", 20).trim();
             boolean done = ok("kill " + pid, 20);
-            // La prova che conta: il processo e' davvero sparito?
+            // The proof that matters: is the process really gone?
             String still = sh("pgrep -x shutdown 2>/dev/null | head -1", 20).trim();
             boolean via = still.isEmpty();
             if (via) RestartLock.cleared(); else RestartLock.forget();
@@ -11098,7 +11144,7 @@ public final class UpdateManager {
                         .put("error", I18n.tr("server.um.restartServer.1"));
             }
 
-            // Cosa si ferma: elencarlo prima e' meglio che scoprirlo dopo.
+            // What stops: listing it beforehand is better than finding out afterwards.
             JSONArray services = new JSONArray();
             for (String[] cand : SERVICES) {
                 String svc = null;
@@ -11110,9 +11156,9 @@ public final class UpdateManager {
             r.put("services", services);
             r.put("effect", I18n.tr("server.um.restartServer.2", java.util.Map.of("length", String.valueOf(services.length()))));
 
-            // Un lavoro in corso il riavvio lo interromperebbe a meta' (un pkg che sostituisce le librerie, un file
-            // riscritto senza il reload): finche' c'e', il riavvio non si programma. Lo si dice gia' nella finestra,
-            // prima del pulsante.
+            // A running job would be cut off halfway by the restart (a pkg replacing the libraries, a file
+            // rewritten without the reload): as long as there is one, the restart is not scheduled. This is
+            // already said in the dialog, before the button.
             String busy = runningWork();
             if (busy != null) {
                 return r.put("success", false).put("busy", busy)
@@ -11121,8 +11167,8 @@ public final class UpdateManager {
 
             String pending = sh("ps -axo command | grep '^shutdown ' | head -1", 20).trim();
             r.put("gaScheduled", pending);
-            // Il manuale: "-f  Ignore the presence of the /var/run/noshutdown file". Se quel
-            // file c'e', shutdown si rifiuta — ed e' meglio saperlo prima di premere.
+            // The manual: "-f  Ignore the presence of the /var/run/noshutdown file". If that
+            // file exists, shutdown refuses - and it is better to know that before pressing.
             boolean noshutdown = ok("test -f /var/run/noshutdown", 10);
             r.put("noshutdown", noshutdown);
             String shPrev = commandPath("shutdown", "/sbin/shutdown", "/usr/sbin/shutdown");
@@ -11142,14 +11188,14 @@ public final class UpdateManager {
             String logR = "/var/db/daemoxcp-mail/reboot.log";
             ok("mkdir -p /var/db/daemoxcp-mail", 20);
             ok("rm -f " + logR, 15);
-            // Staccato: shutdown con un tempo futuro non torna finche' non e' ora. E con -o
-            // invece del solo -f, se rifiuta lo dice a qualcuno: la prima versione mandava la
-            // sua uscita in /dev/null e il 31/08/2026 il riavvio non e' avvenuto senza che
-            // nessuno sapesse perche'.
+            // Detached: shutdown with a future time does not return until it is time. And with -o
+            // instead of just -f, if it refuses it tells someone: the first version sent
+            // its output to /dev/null and on 2026-08-31 the restart did not happen without
+            // anyone knowing why.
             ok(daemon + " -f -o " + logR + " " + shutdown + " -r +" + minutes + " '" + msg + "'", 30);
 
-            // "daemon" esce subito e con successo comunque: il suo codice di uscita non dice
-            // niente su shutdown. L'unica prova e' che il processo shutdown ESISTA.
+            // "daemon" exits immediately and successfully regardless: its exit code says
+            // nothing about shutdown. The only proof is that the shutdown process EXISTS.
             ok("sleep 2", 15);
             String pidS = sh("pgrep -x shutdown 2>/dev/null | head -1", 20).trim();
             String output = sh("cat " + logR + " 2>/dev/null", 20).trim();
@@ -11176,58 +11222,58 @@ public final class UpdateManager {
     }
 
     /**
-     * Il pannello torna su da solo dopo un riavvio del server?
+     * Does the panel come back up on its own after a server restart?
      *
-     * La risposta esisteva gia', ma solo DENTRO restartServer(): serviva a rifiutare un
-     * riavvio, e non veniva mai detta a nessuno. Cosi' il fatto piu' importante — se il
-     * pannello si riaccende o no — si scopriva soltanto provando a riavviare, cioe' nel
-     * momento peggiore per scoprirlo.
+     * The answer already existed, but only INSIDE restartServer(): it served to refuse a
+     * restart, and it was never told to anyone. So the most important fact - whether the
+     * panel switches back on or not - was discovered only by trying to restart, that is at the
+     * worst moment to discover it.
      *
-     * Conta piu' di quanto sembri: dentro il server web vivono lo scheduler della rotazione
-     * DKIM, il rinnovo automatico dei certificati e il rapporto periodico. Se il pannello non
-     * riparte, quelle cose non si rompono — si fermano dove sono, e nessuno lo segnala.
+     * It matters more than it seems: inside the web server live the DKIM rotation
+     * scheduler, the automatic certificate renewal and the periodic report. If the panel does not
+     * restart, those things do not break - they stop where they are, and nobody reports it.
      */
     /**
-     * La lista degli intervalli Cloudflare compilata nel pannello e' ancora quella ufficiale?
+     * Is the list of Cloudflare ranges compiled into the panel still the official one?
      *
-     * Perche' serve. Il pannello si fida di CF-Connecting-IP soltanto se la richiesta arriva da
-     * un indirizzo che riconosce come Cloudflare; l'elenco di quegli indirizzi e' scritto a mano
-     * dentro TrustedProxy e va tenuto uguale a cloudflare.com/ips-v4 e ips-v6.
+     * Why it is needed. The panel trusts CF-Connecting-IP only if the request comes from
+     * an address it recognizes as Cloudflare; the list of those addresses is written by hand
+     * inside TrustedProxy and must be kept equal to cloudflare.com/ips-v4 and ips-v6.
      *
-     * Se Cloudflare aggiunge un intervallo e comincia a servire da li', il pannello smette di
-     * riconoscerlo: da quel momento TUTTI i visitatori diventano un indirizzo solo — quello
-     * dell'edge — e il limite dei tentativi di accesso si applica a tutti insieme. Cinque
-     * tentativi sbagliati di chiunque chiuderebbero fuori anche te. Non e' un buco, e' un
-     * blocco: fallisce diventando piu' severo, che e' il modo piu' silenzioso di rompersi.
+     * If Cloudflare adds a range and starts serving from there, the panel stops
+     * recognizing it: from that moment ALL visitors become a single address - that
+     * of the edge - and the login attempt limit applies to all of them together. Five
+     * wrong attempts by anyone would lock you out too. It is not a hole, it is a
+     * lockout: it fails by becoming stricter, which is the quietest way of breaking.
      *
-     * Questa funzione LEGGE e basta: scarica le due liste ufficiali e le confronta. Non
-     * aggiorna niente da sola — una lista di chi e' degno di fiducia non si riscrive senza
-     * che un essere umano l'abbia guardata.
+     * This function only READS: it downloads the two official lists and compares them. It does not
+     * update anything on its own - a list of who is trustworthy is not rewritten without
+     * a human being having looked at it.
      */
     public static JSONObject cloudflareRanges() {
         JSONObject r = new JSONObject().put("updatedOn", org.daemoxcp.mail.security.TrustedProxy.UPDATED_ON);
-        // Cio' che il pannello CREDE si mostra sempre, anche se la rete non risponde: e' una
-        // conoscenza sua, non dipende da cloudflare.com. Una lista che decide di chi fidarsi e
-        // che nessuno puo' leggere e' una regola segreta; e nel momento in cui il confronto
-        // fallisce e' proprio quando serve poter guardare cosa c'e' scritto.
+        // What the panel BELIEVES is always shown, even if the network does not answer: it is
+        // its own knowledge, it does not depend on cloudflare.com. A list that decides whom to trust and
+        // that nobody can read is a secret rule; and the moment the comparison
+        // fails is exactly when one needs to be able to look at what is written in it.
         r.put("listV4", new JSONArray(org.daemoxcp.mail.security.TrustedProxy.cloudflareV4()));
         r.put("listV6", new JSONArray(org.daemoxcp.mail.security.TrustedProxy.cloudflareV6()));
         try {
             java.util.List<String> v4 = downloadIntervals("https://www.cloudflare.com/ips-v4", true);
             java.util.List<String> v6 = downloadIntervals("https://www.cloudflare.com/ips-v6", false);
 
-            // Una soglia minima, non il solo "non vuoto".
+            // A minimum threshold, not just "not empty".
             //
-            // Senza, una risposta parziale o una pagina di errore da cui si salvano due righe
-            // darebbe una lista ufficiale corta. Nessun intervallo "mancante" — quindi niente
-            // rosso — e invece una dozzina di "non piu' ufficiali": il pannello consiglierebbe
-            // di TOGLIERE dalla lista di fiducia intervalli che Cloudflare usa eccome. Un
-            // consiglio sbagliato e' peggio di un verde sbagliato, perche' chi lo segue rompe
-            // qualcosa di suo con le proprie mani.
+            // Without it, a partial response or an error page from which two lines survive
+            // would give a short official list. No "missing" range - so no
+            // red - and instead a dozen "no longer official": the panel would advise
+            // REMOVING from the trust list ranges that Cloudflare very much uses. A
+            // wrong piece of advice is worse than a wrong green, because whoever follows it breaks
+            // something of their own with their own hands.
             //
-            // Cloudflare pubblica da anni almeno 15 intervalli IPv4 e 7 IPv6. La soglia sta
-            // sotto apposta: deve scattare su una risposta rotta, non su un aggiornamento
-            // legittimo della lista.
+            // Cloudflare has published at least 15 IPv4 and 7 IPv6 ranges for years. The threshold
+            // is deliberately below that: it must trigger on a broken response, not on a legitimate
+            // update of the list.
             final int MIN_V4 = 10, MIN_V6 = 5;
             if (v4.size() < MIN_V4 || v6.size() < MIN_V6)
                 return r.put("success", false).put("verified", false)
@@ -11237,14 +11283,14 @@ public final class UpdateManager {
             java.util.List<String> myV4 = org.daemoxcp.mail.security.TrustedProxy.cloudflareV4();
             java.util.List<String> myV6 = org.daemoxcp.mail.security.TrustedProxy.cloudflareV6();
 
-            // Mancanti = presenti da Cloudflare e NON nel pannello. Sono quelli che contano:
-            // sono gli indirizzi da cui il pannello non riconoscerebbe il proxy.
+            // Missing = present at Cloudflare and NOT in the panel. They are the ones that matter:
+            // they are the addresses from which the panel would not recognize the proxy.
             JSONArray missing = new JSONArray();
             for (String c : v4) if (!myV4.contains(c)) missing.put(c);
             for (String c : v6) if (!myV6.contains(c)) missing.put(c);
 
-            // In piu' = nel pannello e non piu' ufficiali. Non fanno danno diretto, ma sono
-            // fiducia concessa a indirizzi che Cloudflare non usa piu'.
+            // Extra = in the panel and no longer official. They do no direct harm, but they are
+            // trust granted to addresses that Cloudflare no longer uses.
             JSONArray extra = new JSONArray();
             for (String c : myV4) if (!v4.contains(c)) extra.put(c);
             for (String c : myV6) if (!v6.contains(c)) extra.put(c);
@@ -11268,11 +11314,11 @@ public final class UpdateManager {
     }
 
     /**
-     * Una riga per intervallo, righe vuote e commenti scartati.
+     * One line per range, blank lines and comments discarded.
      *
-     * @param ipv4 la famiglia attesa: una riga della famiglia sbagliata viene scartata. Il
-     *             controllo di forma da solo non distingue un CIDR IPv6 da uno IPv4, e una
-     *             lista arrivata sul file sbagliato falserebbe il confronto.
+     * @param ipv4 the expected family: a line of the wrong family is discarded. The
+     *             shape check alone does not tell an IPv6 CIDR from an IPv4 one, and a
+     *             list that arrived on the wrong file would skew the comparison.
      */
     public static java.util.List<String> downloadIntervals(String url, boolean ipv4) {
         java.util.List<String> out = new java.util.ArrayList<>();
@@ -11286,12 +11332,12 @@ public final class UpdateManager {
             if (resp.statusCode() != 200) return out;
             for (String line : resp.body().split("\n")) {
                 String c = line.trim();
-                // Si accetta solo cio' che ha la forma di un CIDR: da una pagina di errore o da
-                // una risposta inattesa non deve entrare niente in una lista di fiducia.
+                // Only what has the shape of a CIDR is accepted: nothing from an error page or from
+                // an unexpected response must get into a trust list.
                 if (c.isEmpty() || c.startsWith("#")) continue;
-                // Due filtri, non uno. La forma deve valere per la riga INTERA — cosi' una riga
-                // di HTML che contenga un CIDR non passa — e la riga dev'essere un CIDR vero
-                // della famiglia giusta.
+                // Two filters, not one. The shape must hold for the WHOLE line - so a line
+                // of HTML that contains a CIDR does not pass - and the line must be a real CIDR
+                // of the right family.
                 if (!c.matches("[0-9a-fA-F:.]+/[0-9]{1,3}")) continue;
                 boolean looksLikeV4 = c.indexOf(':') < 0;
                 if (looksLikeV4 != ipv4) continue;
@@ -11302,7 +11348,7 @@ public final class UpdateManager {
         return out;
     }
 
-    /** Il CIDR e' scrivibile davvero: indirizzo letterale valido e prefisso nella scala giusta. */
+    /** The CIDR can really be written: a valid literal address and a prefix in the right range. */
     private static boolean validCidr(String cidr, boolean ipv4) {
         try {
             int i = cidr.indexOf('/');
@@ -11316,35 +11362,35 @@ public final class UpdateManager {
     }
 
     /**
-     * Il riepilogo per la Home: versioni, riavvio necessario, quanti aggiornamenti, quante
-     * vulnerabilita'. VELOCE — e la velocita' qui e' un requisito, non un vezzo.
+     * The summary for the Home page: versions, restart needed, how many updates, how many
+     * vulnerabilities. FAST - and speed here is a requirement, not a whim.
      *
-     * updatesStatus() risponde alle stesse domande ma esegue "pkg update" e "pkg upgrade -n":
-     * fino a cinque minuti, e con la rete di mezzo. In una pagina che si apre di continuo
-     * sarebbe una Home che gira. Qui si legge il catalogo GIA' scaricato e il database delle
-     * vulnerabilita' GIA' presente: nessuna richiesta di rete.
+     * updatesStatus() answers the same questions but runs "pkg update" and "pkg upgrade -n":
+     * up to five minutes, with the network in the middle. In a page that is opened all the time it
+     * would be a Home page that keeps spinning. Here the catalog ALREADY downloaded and the vulnerability
+     * database ALREADY present are read: no network request.
      *
-     * Il prezzo di quella scelta e' che i numeri possono essere vecchi, e va detto invece che
-     * nascosto: si riporta anche l'ETA' del catalogo e del database. Un conteggio preciso
-     * ricavato da dati di tre settimane fa e' un numero che sembra una misura e non lo e' —
-     * per la simulazione vera resta la pagina Aggiornamenti, che la fa apposta.
+     * The price of that choice is that the numbers can be old, and that must be said instead of
+     * hidden: the AGE of the catalog and of the database is reported too. A precise count
+     * derived from three-week-old data is a number that looks like a measurement and is not one -
+     * for the real simulation there is still the Updates page, which does it on purpose.
      */
     public static JSONObject systemSummary() {
         JSONObject r = new JSONObject();
         try {
             r.put("os", operatingSystem());
 
-            // Quanti pacchetti differiscono dal catalogo locale, DIVISI PER MOTIVO.
+            // How many packages differ from the local catalog, BROKEN DOWN BY REASON.
             //
-            // "pkg version -L=" mostra tutto cio' che non e' "=" , e il manuale (pkg-version(8))
-            // elenca quattro casi diversi: "<" installato piu' vecchio, ">" installato piu'
-            // recente del catalogo, "?" non presente nel catalogo, "!" confronto non riuscito.
-            // Solo il primo vuol dire "c'e' un aggiornamento".
+            // "pkg version -L=" shows everything that is not "=" , and the manual (pkg-version(8))
+            // lists four different cases: "<" installed is older, ">" installed is newer
+            // than the catalog, "?" not present in the catalog, "!" comparison failed.
+            // Only the first means "there is an update".
             //
-            // Contarli tutti insieme e chiamarli "versione piu' recente disponibile" dava un
-            // numero che non corrispondeva a niente: qui diceva 5 mentre "pkg upgrade -n"
-            // rispondeva "Your packages are up to date", cioe' zero. Un numero che nessuna
-            // altra schermata conferma fa dubitare di tutte le altre.
+            // Counting them all together and calling them "newer version available" gave a
+            // number that matched nothing: here it said 5 while "pkg upgrade -n"
+            // answered "Your packages are up to date", that is zero. A number that no
+            // other screen confirms casts doubt on all the others.
             String list = sh("pkg version -U -vRL= 2>/dev/null", 60);
             int toUpdate = 0, mostRecent = 0, outsideCatalog = 0, notComparable = 0;
             for (String line : list.split("\n")) {
@@ -11365,13 +11411,13 @@ public final class UpdateManager {
              .put("outsideCatalog", outsideCatalog)
              .put("notComparable", notComparable);
 
-            // L'eta' del catalogo: senza, il numero qui sopra sembra piu' preciso di quanto sia.
-            // E' la data di pubblicazione sul server (vedi PkgCatalog).
+            // The age of the catalog: without it, the number above looks more precise than it is.
+            // It is the publication date on the server (see PkgCatalog).
             JSONObject cat = PkgCatalog.read();
             r.put("catalogDays", cat.optLong("days", -1)).put("catalogDate", cat.optString("data"))
              .put("catalogNote", cat.optString("note"));
 
-            // Vulnerabilita' dal database locale: "pkg audit" senza -F non scarica.
+            // Vulnerabilities from the local database: "pkg audit" without -F does not download.
             String audit = sh("pkg audit -q 2>/dev/null", 60);
             int vuln = 0;
             for (String line : audit.split("\n")) if (!line.trim().isEmpty()) vuln++;
@@ -11384,7 +11430,7 @@ public final class UpdateManager {
         }
     }
 
-    /** Da quanti giorni non viene toccato un file. -1 se non c'e' o non si riesce a leggerlo. */
+    /** For how many days a file has not been touched. -1 if it does not exist or cannot be read. */
     private static long daysSince(String path) {
         try {
             String m = sh("stat -f %m " + path + " 2>/dev/null", 15).trim();
@@ -11419,33 +11465,33 @@ public final class UpdateManager {
                   : I18n.tr("server.um.x.rcNotEnabled", java.util.Map.of("v", String.valueOf(enabledBy.isEmpty() ? I18n.tr("server.um.x.notSet") : enabledBy))));
             return r;
         } catch (Exception e) {
-            // "Non ho potuto controllare" non e' "va bene": chi legge deve vederlo.
+            // "I could not check" is not "all is well": whoever reads must see it.
             return r.put("success", false).put("active", false)
                     .put("reason", I18n.tr("server.um.autoStart.3", java.util.Map.of("message", ErrorText.detail("autoStart", e))));
         }
     }
 
     /**
-     * Toglie l'avvio automatico: disabilita daemoxcp_mail_enable e rimuove lo script rc.d.
+     * Removes the automatic start: disables daemoxcp_mail_enable and removes the rc.d script.
      *
-     * NON ferma il pannello. Se stai leggendo queste righe da un pannello avviato dal
-     * servizio, quel processo continua a girare: chiudergli la porta in faccia mentre premi
-     * il pulsante sarebbe assurdo. Cambia solo che al prossimo riavvio non torna su — e con
-     * lui non tornano su lo scheduler della rotazione DKIM, il rinnovo dei certificati e il
-     * rapporto periodico.
+     * It does NOT stop the panel. If you are reading these lines from a panel started by the
+     * service, that process keeps running: slamming the door in its face while you press the
+     * button would be absurd. The only change is that at the next restart it does not come back up -
+     * and with it the DKIM rotation scheduler, the certificate renewal and the
+     * periodic report do not come back up either.
      *
-     * Tre cautele, tutte imparate a spese di qualcun altro:
+     * Three precautions, all learned at someone else's expense:
      *
-     *  - Prima di cancellare si fa una COPIA, e se la copia non riesce non si cancella. Uno
-     *    script rc.d cancellato senza copia si riscrive solo reinstallandolo.
-     *  - "sysrc -x" su una variabile che non esiste ha un esito non documentato: in quel caso
-     *    non lo si chiama nemmeno. Non si danno comandi al buio a un file di configurazione
-     *    del boot.
-     *  - Il verdetto NON si legge dai codici di uscita: si rilegge "sysrc -n" e si ricontrolla
-     *    il file. Un comando che "riesce" senza aver fatto la cosa e' il modo piu' comune di
-     *    raccontarsi che e' andata bene.
+     *  - Before deleting, a COPY is made, and if the copy fails nothing is deleted. An
+     *    rc.d script deleted without a copy can only be rewritten by reinstalling it.
+     *  - "sysrc -x" on a variable that does not exist has an undocumented outcome: in that case
+     *    it is not even called. No blind commands are given to a boot
+     *    configuration file.
+     *  - The verdict is NOT read from exit codes: "sysrc -n" is read again and the file is
+     *    checked again. A command that "succeeds" without having done the thing is the most
+     *    common way of telling oneself that it went well.
      *
-     * @param esegui false = anteprima, non tocca niente.
+     * @param run false = preview, touches nothing.
      */
     public static JSONObject removePanelRcScript(boolean run) {
         JSONObject r = new JSONObject();
@@ -11461,8 +11507,8 @@ public final class UpdateManager {
             r.put("path", path).put("copy", copy)
              .put("installed", installed).put("variableExists", variableExists);
 
-            // Chi sta togliendo l'avvio automatico del pannello deve sapere che i blocchi
-            // restano: e' l'unico punto in cui la domanda si pone da se'.
+            // Whoever is removing the panel's automatic start must know that the locks
+            // stay: it is the only point where the question arises by itself.
             String locksWarning = locksStayWarning();
             if (!locksWarning.isEmpty()) r.put("locksStay", locksWarning);
 
@@ -11478,7 +11524,7 @@ public final class UpdateManager {
 
             ok("mkdir -p /var/db/daemoxcp-mail", 20);
 
-            // 1. La copia PRIMA di tutto: se non riesce, non si prosegue.
+            // 1. The copy BEFORE everything: if it fails, nothing goes on.
             if (installed) {
                 ok("cp -p " + path + " " + copy, 20);
                 if (!ok("test -s " + copy, 10))
@@ -11487,13 +11533,13 @@ public final class UpdateManager {
                 r.put("copyDone", true);
             }
 
-            // 2. La variabile, solo se c'e' davvero.
+            // 2. The variable, only if it really exists.
             if (variableExists) ok("sysrc -x " + RC_NAME + "_enable", 30);
 
             // 3. Lo script.
             if (installed) ok("rm -f " + path, 20);
 
-            // 4. Il verdetto: si RILEGGE, non si deduce dai codici di uscita.
+            // 4. The verdict: it is READ AGAIN, not inferred from the exit codes.
             JSONObject after = autoStart();
             r.put("after", after);
             boolean fileStays = after.optBoolean("installed", false);
@@ -11537,8 +11583,8 @@ public final class UpdateManager {
             r.put("exists", exists).put("enabled", enabled);
             if (!run) return r.put("success", true).put("executed", false);
 
-            // Verifica la sintassi PRIMA di metterlo dove il sistema lo eseguira' all'avvio:
-            // uno script rc.d rotto puo' fermare la sequenza di boot.
+            // Checks the syntax BEFORE putting it where the system will run it at startup:
+            // a broken rc.d script can stop the boot sequence.
             String tmp = DataFolderRename.NEW + "/" + RC_NAME + ".rc.test";
             ok("mkdir -p /var/db/daemoxcp-mail", 20);
             Files.writeString(Paths.get(tmp), text);
@@ -11554,7 +11600,7 @@ public final class UpdateManager {
             ok("rm -f " + tmp, 15);
             boolean sysrc = ok("sysrc " + RC_NAME + "_enable=YES", 30);
 
-            // La prova che conta: rc.subr lo carica senza errori?
+            // The test that matters: does rc.subr load it without errors?
             String test = sh("service " + RC_NAME + " rcvar 2>&1", 30).trim();
             boolean loaded = test.contains(RC_NAME + "_enable");
             return r.put("success", true).put("executed", true)
@@ -11567,22 +11613,22 @@ public final class UpdateManager {
     }
 
     /**
-     * Verso quali versioni ha senso andare, partendo da quella installata.
+     * Which versions it makes sense to go to, starting from the installed one.
      *
-     * Un campo di testo libero lasciava scrivere 16.0 (salto maggiore, tutti i pacchetti da
-     * ricostruire), 15.9 (non esiste), o 14.4 (indietro). Il pannello sa quali release sono
-     * supportate e sa da dove parte: puo' proporre le sole scelte sensate invece di accettare
-     * qualunque cosa e poi lamentarsene.
+     * A free text field let one write 16.0 (major jump, all packages to be
+     * rebuilt), 15.9 (does not exist), or 14.4 (backwards). The panel knows which releases are
+     * supported and knows where it starts from: it can offer only the sensible choices instead of
+     * accepting anything and then complaining about it.
      */
     /**
-     * Che rapporto c'e' fra la versione installata e quella scelta.
+     * How the installed version relates to the chosen one.
      *
-     * Funzione a se' perche' dev'essere PROVABILE. Dentro il preflight era irraggiungibile da
-     * qualunque test: il primo controllo guarda se il sistema e' una -RELEASE, e su una
-     * macchina che FreeBSD non e' si ferma li'. Un test che non arriva a esercitare cio' che
-     * deve verificare passa e non dimostra niente.
+     * A function of its own because it must be TESTABLE. Inside the preflight it was unreachable by
+     * any test: the first check looks at whether the system is a -RELEASE, and on a
+     * machine that is not FreeBSD it stops there. A test that does not get to exercise what it
+     * must verify passes and proves nothing.
      *
-     * Restituisce: "indietro", "stessa", "minore", "maggiore", "illeggibile".
+     * Returns: "backward", "same", "minor", "major", "unreadable".
      */
     static String updateDirection(String current, String target) {
         Matcher a = Pattern.compile("^([0-9]+)\\.([0-9]+)").matcher(current == null ? "" : current);
@@ -11609,8 +11655,8 @@ public final class UpdateManager {
                 Matcher m2 = Pattern.compile("^([0-9]+)\\.([0-9]+)$").matcher(e[0]);
                 if (!m2.find()) continue;
                 int ma = Integer.parseInt(m2.group(1)), mi = Integer.parseInt(m2.group(2));
-                if (ma != majorExpected) continue;          // i salti maggiori non passano di qui
-                if (mi <= minorExpected) continue;          // se stessa o indietro: non e' un aggiornamento
+                if (ma != majorExpected) continue;          // major jumps do not go through here
+                if (mi <= minorExpected) continue;          // if same or backward: it is not an update
                 outside.put(new JSONObject().put("version", e[0])
                         .put("endOfSupport", e[1]).put("note", I18n.tr(e[2])));
             }
@@ -11654,12 +11700,12 @@ public final class UpdateManager {
                 lock = true;
             }
 
-            // Salto minore o maggiore? Cambia se i pacchetti vanno ricostruiti.
+            // Minor or major jump? It changes whether the packages must be rebuilt.
             String majorExpected = userland.replaceAll("[^0-9.].*$", "").replaceAll("\\..*$", "");
             String majorNew = targetVersion.replaceAll("\\..*$", "");
             boolean minor = majorExpected.equals(majorNew);
 
-            // Direzione: la decide una funzione a parte, che si puo' mettere alla prova.
+            // Direction: decided by a separate function, which can be put to the test.
             String direction = updateDirection(os.optString("series"), targetVersion);
             r.put("direction", direction);
             if ("backward".equals(direction) || "same".equals(direction)) {
@@ -11679,8 +11725,8 @@ public final class UpdateManager {
                     ? I18n.tr("server.um.systemUpgradePreflight.10", java.util.Map.of("abi", String.valueOf(abiName), "majorNow", String.valueOf(majorExpected), "majorNew", String.valueOf(majorNew)))
                     : I18n.tr("server.um.systemUpgradePreflight.11", java.util.Map.of("majorNow", String.valueOf(majorExpected), "majorNew", String.valueOf(majorNew))));
 
-            // Fine supporto della versione di arrivo: passare a qualcosa che scade fra poco
-            // non risolve niente.
+            // End of support of the target version: moving to something that expires soon
+            // solves nothing.
             String eolNew = "", noteNew = "";
             for (String[] e : END_OF_SUPPORT) if (e[0].equals(targetVersion)) { eolNew = e[1]; noteNew = I18n.tr(e[2]); }
             r.put("targetEndOfSupport", eolNew);
@@ -11689,7 +11735,7 @@ public final class UpdateManager {
                     ? I18n.tr("server.um.systemUpgradePreflight.13", java.util.Map.of("target", String.valueOf(targetVersion)))
                     : I18n.tr("server.um.x.supportedUntil", java.util.Map.of("target", String.valueOf(target), "eol", String.valueOf(eolNew), "note", String.valueOf(noteNew), "series", String.valueOf(os.optString("series")), "end", String.valueOf(os.optString("endOfSupport")))));
 
-            // Kernel personalizzato: l'Handbook avverte che non viene aggiornato.
+            // Custom kernel: the Handbook warns that it is not updated.
             String kconf = sh("sysctl -n kern.conftxt 2>/dev/null | head -1", 20).trim();
             boolean generic = os.optString("arch").contains("GENERIC");
             addCheck(checks, "kernel", "Kernel", generic ? "ok" : "wait",
@@ -11697,7 +11743,7 @@ public final class UpdateManager {
                     ? I18n.tr("server.um.systemUpgradePreflight.14")
                     : I18n.tr("server.um.x.notGeneric", java.util.Map.of("arch", String.valueOf(os.optString("arch")))));
 
-            // Ambienti di avvio: e' la vera via di ritorno di un aggiornamento di base.
+            // Boot environments: they are the real way back from a base update.
             boolean be = ok("bectl check", 30);
             r.put("bootEnvironment", be);
             if (be) {
@@ -11710,8 +11756,8 @@ public final class UpdateManager {
                         I18n.tr("server.um.systemUpgradePreflight.16"));
             }
 
-            // Spazio: l'ambiente di avvio e' un clone, ma i file scaricati e le vecchie librerie
-            // occupano comunque.
+            // Space: the boot environment is a clone, but the downloaded files and the old libraries
+            // take up space anyway.
             long freeMb = number(sh("df -m / | tail -1 | awk '{print $4}'", 30));
             r.put("freeMb", freeMb);
             addCheck(checks, "space", I18n.tr("server.um.x.spaceRoot"), freeMb > 5000 ? "ok" : "block",
@@ -11720,11 +11766,11 @@ public final class UpdateManager {
                         : I18n.tr("server.um.systemUpgradePreflight.18")));
             if (freeMb <= 5000) lock = true;
 
-            // Il pannello stesso: due riavvii, e lui non torna su da solo.
-            // Attenzione a cosa si afferma. Il file c'e' e sysrc dice YES: sono fatti. Che il
-            // pannello TORNI SU e' una previsione, e l'unica prova e' averlo avviato una volta
-            // con "service daemoxcp_mail start". Dire "tornera' su da solo" perche' esiste un file
-            // e' la stessa distanza fra "installato" e "funziona" su cui sbaglio di continuo.
+            // The panel itself: two restarts, and it does not come back up on its own.
+            // Careful about what is asserted. The file is there and sysrc says YES: those are facts. That
+            // the panel COMES BACK UP is a prediction, and the only proof is having started it once
+            // with "service daemoxcp_mail start". Saying "it will come back up on its own" because a file
+            // exists is the same gap between "installed" and "works" that I keep getting wrong.
             boolean rc = ok("test -f " + PanelRcScript.PATH + " -o -f /etc/rc.d/" + RC_NAME, 10);
             String enabledBy = sh("sysrc -n " + RC_NAME + "_enable 2>/dev/null", 20).trim();
             boolean enabled = "YES".equalsIgnoreCase(enabledBy) || "yes".equalsIgnoreCase(enabledBy)
@@ -11741,7 +11787,7 @@ public final class UpdateManager {
                     ? I18n.tr("server.um.systemUpgradePreflight.22")
                     : I18n.tr("server.um.systemUpgradePreflight.23"));
 
-            // I servizi che devono tornare su: si annotano ORA per poterli confrontare DOPO.
+            // The services that must come back up: they are noted down NOW so they can be compared AFTERWARDS.
             JSONArray services = new JSONArray();
             for (String[] cand : SERVICES) {
                 String svc = null;
@@ -11754,7 +11800,7 @@ public final class UpdateManager {
             addCheck(checks, "services", I18n.tr("server.um.systemUpgradePreflight.24"), "ok",
                     I18n.tr("server.um.systemUpgradePreflight.25", java.util.Map.of("length", String.valueOf(services.length()))));
 
-            // Patch di sicurezza arretrate: l'Handbook dice di applicarle PRIMA di aggiornare.
+            // Pending security patches: the Handbook says to apply them BEFORE upgrading.
             String pl = uname.contains("-p") ? uname.replaceAll(".*-p", "p") : "p0 " + I18n.tr("server.um.x.noPatch");
             addCheck(checks, "patch", I18n.tr("server.um.systemUpgradePreflight.26"), "wait",
                     I18n.tr("server.um.systemUpgradePreflight.27", java.util.Map.of("pl", String.valueOf(pl))));
@@ -11781,13 +11827,13 @@ public final class UpdateManager {
     }
 
     /**
-     * Prepara il salto di release: copia di /etc, ambiente di avvio, patch arretrate.
+     * Prepares the release jump: copy of /etc, boot environment, pending patches.
      *
-     * Non aggiorna la release: mette il sistema nelle condizioni in cui l'Handbook dice che
-     * deve essere prima di cominciare, e crea la via di ritorno. Il salto vero e' interattivo
-     * (chiede conferma, puo' aprire un editor per fondere i file di /etc) e comporta due
-     * riavvii durante i quali questa pagina non esiste: quella parte la fa una persona, con le
-     * istruzioni che il pannello genera sui valori veri di questo server.
+     * It does not upgrade the release: it puts the system in the condition the Handbook says it
+     * must be in before starting, and creates the way back. The real jump is interactive
+     * (it asks for confirmation, it may open an editor to merge the files in /etc) and involves two
+     * restarts during which this page does not exist: that part is done by a person, with the
+     * instructions that the panel generates from the real values of this server.
      */
     private static void runSystemPreparation(Job job, String target) {
         job.status = "running";
@@ -11867,11 +11913,11 @@ public final class UpdateManager {
             } else {
                 StringBuilder cat = new StringBuilder();
                 runLogged(job, "freebsd-update install 2>&1", 1800, cat);
-                // Il criterio e' quello dell'Handbook: kernel INSTALLATO contro kernel IN
-                // ESECUZIONE. Cercare la parola "kernel" nell'output era una supposizione, e
-                // il 31/08/2026 non ha visto un caso in cui il riavvio serviva davvero: il
-                // pannello ha stampato "p13 / p0 / p13" e non ha detto niente. Avere il dato
-                // e non trarne la conclusione e' come non averlo.
+                // The criterion is the Handbook's: INSTALLED kernel versus RUNNING
+                // kernel. Looking for the word "kernel" in the output was a guess, and
+                // on 2026-08-31 it missed a case in which the restart was really needed: the
+                // panel printed "p13 / p0 / p13" and said nothing. Having the data
+                // and not drawing the conclusion is like not having it.
                 JSONObject afterJ = operatingSystem();
                 job.write("    " + I18n.tr("server.um.x.kernelInstalled", java.util.Map.of("k", String.valueOf(afterJ.optString("installedKernel")))));
                 job.write("    " + I18n.tr("server.um.x.kernelRunning", java.util.Map.of("k", String.valueOf(afterJ.optString("uname")))));
@@ -11888,8 +11934,8 @@ public final class UpdateManager {
                 }
             }
 
-            // La preparazione fatta si ricorda: la pagina guida il passo dopo (il comando da SSH) anche se la si
-            // riapre domani, e un passaggio preparato ma non cominciato si puo' annullare (cancelVersionJump).
+            // The preparation done is remembered: the page guides the next step (the command over SSH) even if
+            // it is reopened tomorrow, and a jump prepared but not started can be canceled (cancelVersionJump).
             writeJumpState(new JSONObject().put("phase", "prepared").put("target", target)
                     .put("preparedUtc", java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString())
                     .put("bootEnvironment", beName).put("steps", new JSONArray()));
@@ -11909,12 +11955,12 @@ public final class UpdateManager {
     }
 
     /**
-     * Le istruzioni per la parte che una persona deve fare da SSH, sui valori veri.
+     * The instructions for the part a person must do over SSH, on the real values.
      *
-     * Non e' un rinvio: e' il riconoscimento che quella parte chiede decisioni. freebsd-update
-     * puo' aprire un editor per fondere file di /etc — su questo server sono master.passwd,
-     * rc.conf, i file di Postfix — e una fusione decisa da un automatismo e' il modo di rompere
-     * qualcosa senza che nessuno se ne accorga. La sequenza e' quella dell'Handbook, capitolo
+     * It is not a deferral: it is the recognition that that part requires decisions. freebsd-update
+     * can open an editor to merge files in /etc - on this server they are master.passwd,
+     * rc.conf, the Postfix files - and a merge decided by an automatism is the way to break
+     * something without anyone noticing. The sequence is the Handbook's, chapter
      * "Updating and Upgrading FreeBSD".
      */
     public static JSONObject systemUpgradeInstructions(String target) {
@@ -11927,9 +11973,9 @@ public final class UpdateManager {
             String dir = System.getProperty("user.dir", "/home/panel");
             boolean minor = pf.optBoolean("minorJump", true);
 
-            // Le istruzioni devono sapere se il pannello torna su da solo, altrimenti dicono
-            // il contrario della scheda accanto. Tre stati, non due: c'e' lo script, e' abilitato,
-            // ed e' stato provato almeno una volta (il pidfile lo dimostra).
+            // The instructions must know whether the panel comes back up on its own, otherwise they say
+            // the opposite of the tab next to them. Three states, not two: the script exists, it is enabled,
+            // and it has been tested at least once (the pidfile proves it).
             boolean rcC = pf.optBoolean("rcPanel", false);
             boolean rcA = pf.optBoolean("rcEnabled", false);
             boolean rcP = pf.optBoolean("rcTested", false);
@@ -11995,39 +12041,39 @@ public final class UpdateManager {
     }
 
     /**
-     * Verifica dopo il salto di release, confrontando con cio' che era stato annotato PRIMA.
+     * Verification after the release jump, comparing with what had been noted down BEFORE.
      *
-     * "Il sistema si e' acceso" non e' una verifica: un servizio puo' non essere ripartito e
-     * nessuno accorgersene finche' qualcuno non prova a mandare una mail. Qui si confronta con
-     * l'inventario preso dalla preparazione — versione, pacchetti, servizi — perche' un
-     * confronto ha bisogno di due termini, e il primo va preso quando le cose funzionavano.
+     * "The system switched on" is not a verification: a service may not have restarted and
+     * nobody notice it until someone tries to send a mail. Here the comparison is with
+     * the inventory taken during the preparation - version, packages, services - because a
+     * comparison needs two terms, and the first must be taken when things were working.
      */
-    // ===================== proseguimento guidato del salto di release =====================
+    // ===================== guided continuation of the release jump =====================
 
-    /** Dove il pannello ricorda a che punto e' del salto, per ritrovarlo dopo un riavvio. */
+    /** Where the panel remembers how far along the jump it is, to find it again after a restart. */
     private static final String VERSION_JUMP_STATE = "/var/db/daemoxcp-mail/system/version-jump.json";
 
     /**
-     * Cosa dice di fare freebsd-update, letto da chi lo esegue invece che dall'utente.
+     * What freebsd-update says to do, read by whoever runs it instead of by the user.
      *
-     * freebsd-update non ha un codice di uscita che distingua "finito" da "riavvia e richiamami":
-     * lo scrive in inglese, in fondo all'output, e finora quella riga la leggeva Pietro. Le tre
-     * frasi qui sotto sono quelle che stampa davvero, viste sul server il 31/08/2026:
+     * freebsd-update has no exit code that distinguishes "finished" from "reboot and call me again":
+     * it writes it in English, at the end of the output, and until now that line was read by the owner. The
+     * three sentences below are the ones it really prints, seen on the server on 2026-08-31:
      *   - "Kernel updates have been installed.  Please reboot and run ... again"
      *   - "No updates are available to install."
      *   - "Installing updates... done."
-     * Nel dubbio si torna "again", cioe' si riesegue: rieseguire quando non serve costa un
-     * comando e non fa danni, fermarsi troppo presto lascia il sistema a meta'.
+     * When in doubt "again" is returned, that is it is run again: rerunning when it is not needed costs
+     * a command and does no harm, stopping too early leaves the system halfway.
      */
     static String whatFreebsdUpdateAsks(String output) {
         String u = output == null ? "" : output.toLowerCase();
         if (u.contains("please reboot")) return "restart";
-        // Questa e' una richiesta DIVERSA dal "rieseguimi", e sta nello stesso messaggio:
+        // This is a DIFFERENT request from the "run me again", and it is in the same message:
         // "Completing this upgrade requires removing old shared object files. Please rebuild
         // all installed 3rd party software ... and then run 'freebsd-update install' again."
-        // Il 31/08/2026 il pannello ha visto solo la seconda meta' e ha proseguito in silenzio,
-        // mentre la prima meta' chiedeva di ricostruire i pacchetti. Due istruzioni in una
-        // frase: leggerne una sola e' peggio che non leggerne nessuna.
+        // On 2026-08-31 the panel saw only the second half and carried on silently,
+        // while the first half asked for the packages to be rebuilt. Two instructions in one
+        // sentence: reading only one is worse than reading neither.
         if (u.contains("rebuild all installed 3rd party software")
                 || u.contains("removing old shared object files")) return "rebuild";
         if (u.contains("no updates are available to install")
@@ -12044,15 +12090,15 @@ public final class UpdateManager {
         } catch (Exception e) { return new JSONObject(); }
     }
 
-    // Le chiavi e i valori che lo stato del salto aveva prima del 24 e del 29/10/2026 stanno nel
-    // file di dati (LegacyNames: jumpKeys, jumpStepKeys, jumpAsks, jumpPhases), non qui.
+    // The keys and values that the jump state had before 2026-10-24 and 2026-10-29 are in the
+    // data file (LegacyNames: jumpKeys, jumpStepKeys, jumpAsks, jumpPhases), not here.
 
-    /** Il prefisso dei boot environment che il pannello crea prima di un salto di release. */
+    /** The prefix of the boot environments that the panel creates before a release jump. */
     static final String BE_PREFIX = "before-";
 
     /**
-     * Un boot environment creato dal pannello: col prefisso di adesso o con quello delle versioni
-     * di prima (file di dati), che sui server gia' avviati c'e' ancora.
+     * A boot environment created by the panel: with the current prefix or with that of the earlier
+     * versions (data file), which is still there on servers already running.
      */
     static boolean panelBootEnvironment(String name) {
         if (name.startsWith(BE_PREFIX)) return true;
@@ -12062,9 +12108,9 @@ public final class UpdateManager {
     }
 
     /**
-     * La via di ritorno piu' recente, da "bectl list -H": l'ultimo creato col prefisso di adesso
-     * e, solo se non ce n'e', l'ultimo col prefisso di prima. Un nome di adesso e' sempre piu'
-     * recente di uno di prima, anche se nell'elenco alfabetico viene prima.
+     * The most recent way back, from "bectl list -H": the last one created with the current prefix
+     * and, only if there is none, the last one with the earlier prefix. A current name is always more
+     * recent than an earlier one, even if it comes first in the alphabetical list.
      */
     static String lastPanelBootEnvironment(String bectlList) {
         String now = "", before = "";
@@ -12077,8 +12123,8 @@ public final class UpdateManager {
     }
 
     /**
-     * "cat" di un file dell'inventario preso prima di un salto: il nome di adesso e, se manca,
-     * quelli delle copie fatte dalle versioni di prima (file di dati).
+     * "cat" of a file of the inventory taken before a jump: the current name and, if it is missing,
+     * those of the copies made by the earlier versions (data file).
      */
     static String inventoryCat(String dir, String name) {
         StringBuilder c = new StringBuilder("cat " + dir + "/" + name + " 2>/dev/null");
@@ -12088,12 +12134,12 @@ public final class UpdateManager {
     }
 
     /**
-     * Lo stato di un salto scritto dal pannello di prima, letto con i nomi di adesso.
+     * The state of a jump written by the earlier panel, read with the current names.
      *
-     * Un salto di versione attraversa un riavvio, e il pannello puo' essere aggiornato proprio
-     * in mezzo: il file l'ha scritto il codice vecchio, con le chiavi italiane, e lo rilegge il
-     * codice nuovo. Senza questa traduzione la fase sembrerebbe vuota, e il salto si
-     * dichiarerebbe mai cominciato. Una chiave nuova gia' presente vince: non si sovrascrive.
+     * A version jump spans a restart, and the panel may be updated right
+     * in the middle: the file was written by the old code, with the Italian keys, and the new
+     * code reads it back. Without this translation the phase would look empty, and the jump would
+     * declare itself never started. A new key already present wins: it is not overwritten.
      */
     static JSONObject upgradeOldJumpState(JSONObject st) {
         for (String[] k : LegacyNames.pairs("jumpKeys"))
@@ -12117,7 +12163,7 @@ public final class UpdateManager {
         } catch (Exception ignored) { }
     }
 
-    /** Lo stato del salto, per la scheda: a che punto siamo e cosa serve adesso. */
+    /** The state of the jump, for the tab: where we are and what is needed now. */
     public static JSONObject versionJumpStatus() {
         JSONObject st = readJumpState();
         JSONObject os = operatingSystem();
@@ -12132,18 +12178,18 @@ public final class UpdateManager {
                 .put("userland", os.optString("userland"))
                 .put("restartNeeded", os.optBoolean("restartNeeded"))
                 .put("bootEnvironment", st.optString("bootEnvironment", ""))
-                // Il passo da SSH fatto: freebsd-update ha scaricato la release scelta e aspetta l'installazione.
+                // SSH step done: freebsd-update has downloaded the chosen release and awaits installation.
                 .put("upgradeFetched", !st.optString("target", "").isEmpty() && os.optBoolean("readyExist")
                         && os.optString("readyTarget", "").startsWith(st.optString("target") + "-"));
-        // Se aspettavamo un riavvio e il kernel adesso combacia, il riavvio c'e' stato.
+        // If we were waiting for a restart and the kernel now matches, the restart has happened.
         if ("awaiting-restart".equals(st.optString("phase")) && !os.optBoolean("restartNeeded"))
             r.put("restartHappened", true);
         return r;
     }
 
     /**
-     * Annulla un passaggio di release preparato e non cominciato: si toglie solo il suo stato. Dopo che
-     * freebsd-update ha installato qualcosa no: da li' si va avanti, o si torna indietro col boot environment.
+     * Cancels a release jump that was prepared and not started: only its state is removed. Not after
+     * freebsd-update has installed something: from there one goes forward, or back with the boot environment.
      */
     public static JSONObject cancelVersionJump() {
         JSONObject st = readJumpState();
@@ -12171,13 +12217,13 @@ public final class UpdateManager {
     }
 
     /**
-     * Esegue "freebsd-update install" quante volte serve, leggendo cosa chiede di fare.
+     * Runs "freebsd-update install" as many times as needed, reading what it asks to do.
      *
-     * Non e' un ciclo cieco: dopo ogni esecuzione guarda cosa freebsd-update ha scritto e si
-     * comporta di conseguenza — se chiede un riavvio, si ferma, lo annota su disco e programma
-     * il riavvio; se dice che non c'e' altro, finisce; altrimenti riesegue. Il tetto di sei giri
-     * e' una rete, non una previsione: se ci arriva vuol dire che sta succedendo qualcosa che
-     * non avevo previsto, e a quel punto e' giusto fermarsi e mostrarlo.
+     * It is not a blind loop: after each run it looks at what freebsd-update wrote and
+     * acts accordingly - if it asks for a restart, it stops, notes it on disk and schedules
+     * the restart; if it says there is nothing else, it finishes; otherwise it runs again. The cap of
+     * six rounds is a safety net, not a forecast: if it reaches it, it means something is happening
+     * that I had not foreseen, and at that point it is right to stop and show it.
      */
     private static void runJumpContinuation(Job job, String target) {
         job.status = "running";
@@ -12260,9 +12306,9 @@ public final class UpdateManager {
                     } else {
                         job.write(I18n.tr("server.um.x.youAreOn", java.util.Map.of("v", String.valueOf(after.optString("userland")))));
                     }
-                    // La domanda "vanno ricostruiti i pacchetti?" non si risponde con un'opinione
-                    // sull'ABI: si chiede a pkg quali librerie ogni pacchetto pretende e si guarda
-                    // se esistono. E' l'unica prova diretta.
+                    // The question "do the packages need rebuilding?" is not answered with an opinion
+                    // on the ABI: pkg is asked which libraries each package requires and we look at
+                    // whether they exist. It is the only direct proof.
                     if (rebuildRequested) {
                         job.write("");
                         job.write("--- " + I18n.tr("server.um.x.fuRebuildCheck") + " ---");
@@ -12303,15 +12349,15 @@ public final class UpdateManager {
     }
 
     /**
-     * Gli ambienti di avvio, spiegati invece che elencati.
+     * The boot environments, explained instead of listed.
      *
-     * "bectl list" e' una tabella per chi sa gia' cosa sta guardando: una colonna Active con
-     * sigle (N, R, NR), nomi generati da programmi diversi, e nessuna indicazione di cosa si
-     * possa toccare. Rovesciarla in una riga con dei trattini in mezzo, come faceva il pannello,
-     * non e' informare: e' spostare il lavoro di capire dall'altra parte.
+     * "bectl list" is a table for whoever already knows what they are looking at: an Active column with
+     * abbreviations (N, R, NR), names generated by different programs, and no indication of what
+     * can be touched. Dumping it into a line with dashes in between, as the panel used to do,
+     * is not informing: it is shifting the work of understanding to the other side.
      *
-     * Le sigle, dal manuale di bectl(8): N = quello avviato adesso, R = quello che si avviera'
-     * al prossimo riavvio, NR = entrambi. Un trattino vuol dire che sta li' e basta.
+     * The abbreviations, from the bectl(8) manual: N = the one booted now, R = the one that will boot
+     * at the next restart, NR = both. A dash means it just sits there.
      */
     public static JSONObject bootEnvironments() {
         JSONObject r = new JSONObject();
@@ -12327,23 +12373,23 @@ public final class UpdateManager {
                 boolean inUse = active.contains("N");
                 boolean atRestart = active.contains("R");
 
-                // Chi l'ha creato si capisce dal nome: il pannello usa BE_PREFIX (o il prefisso
-                // delle versioni di prima), e freebsd-update usa <versione>_<data>. Saperlo cambia
-                // cosa significa tenerlo.
+                // Who created it can be told from the name: the panel uses BE_PREFIX (or the prefix
+                // of the earlier versions), and freebsd-update uses <version>_<date>. Knowing that
+                // changes what keeping it means.
                 String origin, explain;
                 if (PackageWayBack.REINSTALL_OWN.matcher(name).matches()) {
-                    // La via di ritorno di una reinstallazione completa dal menu: il server di prima,
-                    // configurazioni, caselle e database compresi.
+                    // The way back from a full reinstallation from the menu: the previous server,
+                    // configurations, mailboxes and databases included.
                     origin = I18n.tr("server.um.bootEnvironments.reinstallOrigin");
                     explain = I18n.tr("server.um.bootEnvironments.reinstallExplain");
-                    // Il suo «used» e' 0 appena creata: lo spazio che tiene sta nello snapshot da cui e'
-                    // nata (reperto 170). Lo si dice, o sembra gratis.
+                    // Its "used" is 0 right after creation: the space it holds is in the snapshot it was
+                    // born from (finding 170). This is said, or it looks free.
                     long pinned = PackageWayBack.pinnedBytes(name);
                     if (pinned >= 0) explain += " " + I18n.tr("server.um.bootEnvironments.keepsSpace",
                             java.util.Map.of("space", PackageWayBack.mb(pinned)));
                 } else if (PackageWayBack.OWN.matcher(name).matches()) {
-                    // La via di ritorno di un lavoro sui pacchetti (PackageWayBack): senza questo
-                    // ramo cadeva in "origine non riconosciuta, guardalo prima di toccarlo".
+                    // The way back of a package job (PackageWayBack): without this
+                    // branch it fell into "origin not recognized, look at it before touching it".
                     origin = I18n.tr("server.um.bootEnvironments.packagesOrigin");
                     explain = I18n.tr("server.um.bootEnvironments.packagesExplain");
                     long pinned = PackageWayBack.pinnedBytes(name);
@@ -12386,13 +12432,13 @@ public final class UpdateManager {
     }
 
     /**
-     * Elimina un ambiente di avvio, ma solo uno che si puo' eliminare.
+     * Deletes a boot environment, but only one that can be deleted.
      *
-     * Tre protezioni, e nessuna e' teorica: non si tocca quello in uso (spegneresti il sistema
-     * sotto i tuoi piedi), non si tocca quello che partirebbe al prossimo riavvio (il server non
-     * si rialzerebbe), e il nome dev'essere uno di quelli che esistono davvero — non una stringa
-     * arrivata da fuori. Il controllo non si fida di cio' che chiede il pulsante: rilegge la
-     * lista e decide su quella.
+     * Three protections, and none is theoretical: the one in use is not touched (you would switch off
+     * the system under your own feet), the one that would boot at the next restart is not touched (the
+     * server would not get back up), and the name must be one of those that really exist - not a string
+     * that came from outside. The check does not trust what the button asks for: it rereads the
+     * list and decides on that.
      */
     public static JSONObject deleteBootEnvironment(String name) {
         try {
@@ -12412,7 +12458,7 @@ public final class UpdateManager {
                         .put("error", I18n.tr("server.um.x.beNoDelete", java.util.Map.of("name", String.valueOf(name), "state", String.valueOf(found.getString("state")), "why", String.valueOf(found.getString("why")))));
 
             String output = sh("bectl destroy -F " + name + " 2>&1", 300).trim();
-            // La prova e' che non compaia piu' nella lista, non che il comando sia uscito con zero.
+            // The proof is that it no longer appears in the list, not that the command exited with zero.
             boolean via = !ok("bectl list -H 2>/dev/null | cut -f1 | grep -qx '" + name + "'", 30);
             return new JSONObject().put("success", via).put("name", name)
                     .put("space", found.getString("space"))
@@ -12448,10 +12494,10 @@ public final class UpdateManager {
                         I18n.tr("server.um.verifyAfterUpdate.2"));
             }
 
-            // Servizi: quelli che erano attivi prima devono esserlo adesso.
+            // Services: those that were active before must be active now.
             java.util.List<String> off = new ArrayList<>(), absent = new ArrayList<>();
             int checked = 0;
-            // Una copia fatta prima del 24/10/2026 ha il file e lo stato coi nomi di prima.
+            // A copy made before 2026-10-24 has the file and the state with the earlier names.
             for (String line : sh(inventoryCat(dir, "services.txt"), 30).split("\n")) {
                 String[] c = line.trim().split("\\s+");
                 if (c.length != 2 || !"active".equals(LegacyNames.current("inventoryServiceStates", c[1]))) continue;
@@ -12467,7 +12513,7 @@ public final class UpdateManager {
                       + (off.isEmpty() ? "" : I18n.tr("server.um.x.svcOff", java.util.Map.of("list", String.valueOf(String.join(", ", off)))) + "  ")
                       + (absent.isEmpty() ? "" : I18n.tr("server.um.x.svcGone", java.util.Map.of("list", String.valueOf(String.join(", ", absent))))));
 
-            // Pacchetti: nessuno deve essere sparito.
+            // Packages: none must have disappeared.
             java.util.Map<String, String> now = new java.util.HashMap<>();
             for (String line : sh("pkg query '%n %v' 2>/dev/null", 120).split("\n")) {
                 String[] c = line.trim().split("\\s+");
@@ -12475,7 +12521,7 @@ public final class UpdateManager {
             }
             java.util.List<String> missing = new ArrayList<>(), different = new ArrayList<>();
             int totalBefore = 0;
-            // Una copia fatta prima del 29/10/2026 ha il file col nome di prima.
+            // A copy made before 2026-10-29 has the file with the earlier name.
             for (String line : sh(inventoryCat(dir, "packages.txt"), 60).split("\n")) {
                 String[] c = line.trim().split("\\s+");
                 if (c.length != 2) continue;
@@ -12490,14 +12536,14 @@ public final class UpdateManager {
                       + (different.isEmpty() ? "" : ". " + I18n.tr("server.um.x.pkgsChanged", java.util.Map.of("list", String.valueOf(String.join(", ", different)))))
                     : I18n.tr("server.um.x.pkgsGone", java.util.Map.of("n", String.valueOf(missing.size()), "list", String.valueOf(String.join(", ", missing)))));
 
-            // Protezione: dopo un'operazione di questa portata va riconfermata.
+            // Locks: after an operation of this scale they must be confirmed again.
             JSONObject st = packagesStatus();
             int inst = st.optInt("installedCount"), lock = st.optInt("lockedCount");
             addCheck(checks, "lock", I18n.tr("server.um.packagePreflight.25"), inst == lock ? "ok" : "wait",
                     I18n.tr("server.um.x.lockOfInst", java.util.Map.of("lock", String.valueOf(lock), "inst", String.valueOf(inst)))
                     + (inst == lock ? "" : ": " + I18n.tr("server.um.x.someUnlocked")));
 
-            // Gli ambienti di avvio: quello vecchio va tenuto finche' non sei sicuro.
+            // The boot environments: the old one must be kept until you are sure.
             JSONObject be = bootEnvironments();
             if (be.optBoolean("success")) {
                 r.put("environments", be);
@@ -12559,7 +12605,7 @@ public final class UpdateManager {
                     t.append("           ").append(I18n.tr("server.um.x.repOutside", java.util.Map.of("v", String.valueOf(x.getString("outsideDefault"))))).append('\n');
             }
 
-            // Due interrogazioni sole, poi si uniscono: e' l'unico modo di non metterci minuti.
+            // Only two queries, then they are joined: it is the only way not to take minutes.
             java.util.Map<String, String> inst = new java.util.LinkedHashMap<>(), repo = new java.util.HashMap<>();
             for (String r2 : sh("pkg query '%n %v' 2>/dev/null", 120).split("\n")) {
                 String[] c = r2.trim().split("\\s+");
@@ -12648,9 +12694,9 @@ public final class UpdateManager {
     }
 
     /**
-     * Il ramo per la scheda dei predefiniti: lo legge PkgBranch, come la scheda "Ramo dei pacchetti".
-     * Prima qui si prendeva il primo indirizzo di pkg.FreeBSD.org, che poteva essere quello dei
-     * moduli del kernel, e un ramo misto non si vedeva.
+     * The branch for the defaults tab: PkgBranch reads it, like the "Package branch" tab.
+     * Before, this took the first pkg.FreeBSD.org address, which could be the one for the
+     * kernel modules, and a mixed branch could not be seen.
      */
     public static JSONObject branchRepositories() {
         JSONObject st = PkgBranch.state(PkgBranch.real());
@@ -12676,8 +12722,8 @@ public final class UpdateManager {
     }
 
     /**
-     * Il cambio di ramo, sul turno dei lavori sui pacchetti: riscrivere da dove pkg prende i
-     * pacchetti mentre un altro lavoro li sta installando cambierebbe i pacchetti sotto i suoi piedi.
+     * The branch change, on the package turn: rewriting where pkg gets the packages
+     * from while another job is installing them would change the packages under its feet.
      */
     public static JSONObject startBranchChange(String target, String fingerprint) {
         if (!PkgBranch.BRANCHES.contains(target)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.branchPreview.1"));
@@ -12713,14 +12759,14 @@ public final class UpdateManager {
             if (installed.isEmpty()) {
                 outcome = "absent";
             } else if ("base".equals(d[1])) {
-                // Il predefinito e' il sistema base: il port installato e' l'anomalia.
+                // The default is the base system: the installed port is the anomaly.
                 outcome = "port-beside-base";
             } else {
-                // Si confrontano TUTTI i valori installati, uno per uno. Cercare se il
-                // predefinito compare "da qualche parte" nella stringa era sbagliato: con
-                // py311 e py312 insieme trovava py312 e dichiarava tutto coerente, nascondendo
-                // proprio la divergenza che la scheda esiste per mostrare. La presenza del
-                // predefinito non dimostra l'assenza di altro.
+                // ALL the installed values are compared, one by one. Looking for whether the
+                // default appears "somewhere" in the string was wrong: with
+                // py311 and py312 together it found py312 and declared everything consistent, hiding
+                // exactly the divergence the tab exists to show. The presence of the
+                // default does not prove the absence of anything else.
                 String expectedDigits = d[1].replaceAll("[^0-9]", "");
                 java.util.List<String> nonconforming = new ArrayList<>();
                 int conforming = 0;
@@ -12737,17 +12783,17 @@ public final class UpdateManager {
                     .put("installed", installed).put("outcome", outcome).put("why", I18n.tr(d[3]));
             if (!outside.isEmpty()) line.put("outsideDefault", outside);
 
-            // "Port installato accanto al sistema base" descrive, non risponde. La domanda che
-            // uno si fa leggendola e' una sola: lo posso togliere? Dipende da chi lo richiede,
-            // e quello il pannello puo' chiederlo invece di lasciarlo indovinare.
-            // Solo per le righe non coerenti, e solo per i valori che sono davvero nomi di
-            // pacchetto: per Python la colonna contiene prefissi (py311), non pacchetti, e
-            // interrogarli darebbe un vuoto che sembrerebbe "non lo richiede nessuno".
+            // "Port installed next to the base system" describes, it does not answer. The question
+            // one asks when reading it is just one: can I remove it? It depends on who requires it,
+            // and the panel can ask that instead of leaving it to guesswork.
+            // Only for the inconsistent rows, and only for the values that really are package
+            // names: for Python the column contains prefixes (py311), not packages, and
+            // querying them would give an empty result that would look like "nobody requires it".
             if (!"consistent".equals(outcome) && !"absent".equals(outcome)) {
                 JSONArray who = new JSONArray();
                 for (String tok : installed.split("\\s+")) {
                     if (tok.isBlank() || !isValidName(tok)) continue;
-                    if (!ok("pkg info -e " + tok, 15)) continue;   // e' un prefisso, non un pacchetto
+                    if (!ok("pkg info -e " + tok, 15)) continue;   // it is a prefix, not a package
                     String dependents = sh("pkg query %rn " + tok + " 2>/dev/null", 30).trim();
                     who.put(new JSONObject().put("pkgName", tok)
                             .put("requiredBy", dependents.isEmpty() ? new JSONArray()
@@ -12764,16 +12810,16 @@ public final class UpdateManager {
     }
 
     /**
-     * Toglie un client MySQL estraneo e ripristina i file del client corretto.
+     * Removes a stray MySQL client and restores the files of the correct client.
      *
-     * Situazione che lo rende necessario: un "pkg install -f" ha tirato dentro mysql97-client
-     * e ne ha sovrascritto 19 file di mysql84-client — i comandi e gli header, NON la libreria
-     * condivisa, che infatti e' rimasta quella della 8.4 ed e' il motivo per cui la posta ha
-     * continuato a funzionare.
+     * The situation that makes it necessary: a "pkg install -f" pulled in mysql97-client
+     * and with it overwrote 19 files of mysql84-client - the commands and the headers, NOT the shared
+     * library, which in fact stayed the 8.4 one and is the reason why the mail
+     * kept working.
      *
-     * L'ordine e' deliberato: prima si rimuove l'estraneo, poi si reinstalla quello giusto.
-     * Cosi' qualunque file la rimozione porti via viene rimesso subito dopo. L'ordine inverso
-     * lascerebbe la rimozione libera di cancellare cio' che si era appena ripristinato.
+     * The order is deliberate: first the stray one is removed, then the right one is reinstalled.
+     * That way any file the removal takes away is put back right after. The reverse order
+     * would leave the removal free to delete what had just been restored.
      */
     public static JSONObject startForeignClientCleanup(String foreign, String correct) {
         if (!isValidName(foreign) || !isValidName(correct)
@@ -12812,11 +12858,11 @@ public final class UpdateManager {
                 j.write("");
                 j.write(I18n.tr("server.um.startForeignClientCleanup.6", java.util.Map.of("correct", String.valueOf(correct))));
                 if (locked(sh("pkg lock -l 2>/dev/null"), correct)) {
-                    // Prima l'elenco su disco, poi lo sblocco: se l'elenco non si scrive, non si sblocca.
+                    // First the list on disk, then the unlock: if the list cannot be written, nothing is unlocked.
                     String stateError = PackageQueue.writeState(java.util.List.of(correct));
                     if (stateError != null)
                         throw new IllegalStateException("I could not save the list for the restore, so I do not unlock " + correct + ": " + stateError);
-                    // Da qui il finally riprotegge e chiude l'elenco, anche se lo sblocco fallisse a meta'.
+                    // From here on the finally re-locks and closes the list, even if the unlock failed halfway.
                     unlocked = true;
                     if (!ok("pkg unlock -y " + correct, 30)) throw new IllegalStateException("I could not unlock " + correct);
                     j.write("    " + I18n.tr("server.um.x.unlockedTemp"));
@@ -12884,8 +12930,8 @@ public final class UpdateManager {
     }
 
     /**
-     * Reinstalla dal repository i pacchetti rimasti senza la libreria che pretendono, cosi'
-     * tornano collegati a quella presente, e rimette in servizio cio' che ne dipende.
+     * Reinstalls from the repository the packages left without the library they require, so that
+     * they are linked again to the one present, and puts back into service what depends on them.
      */
     private static void runRelinking(Job job) {
         job.status = "running";
@@ -12916,11 +12962,11 @@ public final class UpdateManager {
             java.util.List<String> toUnlock = new ArrayList<>();
             for (String n : names) if (locked(lock, n)) toUnlock.add(n);
             if (!toUnlock.isEmpty()) {
-                // Prima l'elenco su disco, poi lo sblocco: se l'elenco non si scrive, non si sblocca.
+                // First the list on disk, then the unlock: if the list cannot be written, nothing is unlocked.
                 String stateError = PackageQueue.writeState(toUnlock);
                 if (stateError != null)
                     throw new IllegalStateException("I could not save the list for the restore, so I did not unlock anything: " + stateError);
-                // Da riproteggere tutti, anche uno sblocco fallito: cosi' l'elenco su disco si chiude.
+                // All of them must be re-locked, even a failed unlock: that way the list on disk is closed.
                 unlockedPackages.addAll(toUnlock);
                 for (String n : toUnlock)
                     job.write("    " + n + ": " + (ok("pkg unlock -y " + n, 30) ? I18n.tr("server.um.x.unlocked") : I18n.tr("server.um.runRelinking.4")));
@@ -12931,10 +12977,10 @@ public final class UpdateManager {
             job.write(I18n.tr("server.um.runRelinking.6"));
             StringBuilder el = new StringBuilder();
             for (String n : names) el.append(' ').append(n);
-            // PRIMA una simulazione: se pkg segnala conflitti di file, ci si ferma.
-            // "-f" serve a forzare la REINSTALLAZIONE, ma forza anche il passare sopra ai
-            // conflitti — e sono due cose diverse. Averle confuse ha fatto sovrascrivere i
-            // file del client MySQL 8.4 con quelli di un altro pacchetto.
+            // FIRST a dry run: if pkg reports file conflicts, we stop.
+            // "-f" serves to force the REINSTALLATION, but it also forces going over the
+            // conflicts - and those are two different things. Confusing them got the
+            // files of the MySQL 8.4 client overwritten with those of another package.
             String simulation = sh("pkg install -f -n" + el + " 2>&1", 600);
             if (simulation.toLowerCase().contains("conflicts with")) {
                 job.write(I18n.tr("server.um.runRelinking.7"));
@@ -12998,7 +13044,7 @@ public final class UpdateManager {
         }
     }
 
-    /** @param approvedSignature l'impronta del piano mostrato dall'anteprima: si esegue quello o niente. */
+    /** @param approvedSignature the fingerprint of the plan shown by the preview: that one is run, or nothing. */
     public static JSONObject startMaintenance(String approvedSignature) {
         if (approvedSignature == null || !approvedSignature.matches("[0-9a-f]{16}"))
             return new JSONObject().put("success", false)
@@ -13008,7 +13054,7 @@ public final class UpdateManager {
         return startOnTurn(id, j, I18n.tr("server.um.x.turnMaintenance"), "update-maintenance", () -> runMaintenanceJob(j, approvedSignature));
     }
 
-    /** @param approvedSignature la firma del piano letto nella scheda: si esegue quello o niente. */
+    /** @param approvedSignature the signature of the plan read in the tab: that one is run, or nothing. */
     public static JSONObject startUnlockedPackagesUpdate(String approvedSignature) {
         if (approvedSignature == null || !approvedSignature.matches("[0-9a-f]{16}"))
             return new JSONObject().put("success", false)
@@ -13019,7 +13065,7 @@ public final class UpdateManager {
                 () -> runUpdateJob(j, approvedSignature));
     }
 
-    /** Aggiorna solo cio' che non e' protetto: e' pkg stesso a saltare i pacchetti bloccati. */
+    /** Updates only what is not locked: it is pkg itself that skips the locked packages. */
     private static void runUpdateJob(Job job, String approvedSignature) {
         try {
             updateJobSteps(job, approvedSignature);
@@ -13028,13 +13074,13 @@ public final class UpdateManager {
         }
     }
 
-    /** I passi del lavoro sugli altri pacchetti, senza chiudere il registro: li usa anche «Aggiorna tutto» (reperto 207). */
+    /** The steps of the job on the other packages, without closing the log: "Update all" uses them too (finding 207). */
     private static void updateJobSteps(Job job, String approvedSignature) {
         job.status = "running";
-        // Lo stato dei servizi PRIMA dell'aggiornamento: e' l'unico modo di distinguere un
-        // servizio caduto da uno che non era attivo nemmeno prima.
+        // The state of the services BEFORE the update: it is the only way to tell a
+        // service that went down from one that was not active even before.
         Map<String, Boolean> servicesBefore = servicesState();
-        // Come negli altri due: cio' che gli script fanno a configurazione e indirizzi.
+        // As in the other two: what the scripts do to the configuration and addresses.
         InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
         final int TOTAL_STEPS = 4;
         job.advance(1, TOTAL_STEPS);
@@ -13042,7 +13088,7 @@ public final class UpdateManager {
         job.write(I18n.tr("server.um.runUpdateJob.2"));
         job.write("");
         try {
-            // Si esegue il piano che e' stato letto, o niente: come gli altri due lavori.
+            // The plan that was read is run, or nothing: like the other two jobs.
             JSONObject plan = PackagePlan.fullPlan(java.util.Set.of(), lockedNames(),
                     b -> I18n.tr("server.um.x.staysLockedHere"));
             if (!plan.optBoolean("measured"))
@@ -13056,9 +13102,9 @@ public final class UpdateManager {
                 job.write(I18n.tr("server.um.runUpdateJob.8"));
                 return;
             }
-            // Come la manutenzione: un piano che non si puo' eseguire non si esegue, e si
-            // dice perche'. Senza questo, premere il pulsante su una macchina aggiornata
-            // lanciava un pkg upgrade che non faceva niente e si dichiarava riuscito.
+            // Like the maintenance: a plan that cannot be run is not run, and the reason
+            // is given. Without this, pressing the button on an up-to-date machine
+            // launched a pkg upgrade that did nothing and declared itself successful.
             if (!plan.optBoolean("runnable")) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.x.planNotRunnable", java.util.Map.of("errors", String.valueOf(String.join(" | ", jsonArrayToList(plan.getJSONArray("pkgErrors"))))))
@@ -13066,7 +13112,7 @@ public final class UpdateManager {
                 job.write(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
                 return;
             }
-            // La stessa regola degli altri due: niente rimozioni, niente retrocessioni.
+            // The same rule as the other two: no removals, no downgrades.
             String destructive = destructivePlanReason(judged(plan));
             if (destructive != null) {
                 job.status = "error";
@@ -13085,8 +13131,8 @@ public final class UpdateManager {
 
             job.advance(2, TOTAL_STEPS);
             job.write("");
-            // Come negli altri due: prima si scarica e si ricalcola, perche' il piano dipende
-            // da cio' che e' nella cache di pkg (vedi fetchAndRecheck).
+            // As in the other two: first download and recalculate, because the plan depends
+            // on what is in pkg's cache (see fetchAndRecheck).
             Recheck grown = fetchAndRecheck(job, "pkg upgrade -F -y -U 2>&1", plan,
                     () -> PackagePlan.fullPlan(java.util.Set.of(), lockedNames(),
                             b -> I18n.tr("server.um.x.staysLockedHere")));
@@ -13098,16 +13144,16 @@ public final class UpdateManager {
 
             job.advance(3, TOTAL_STEPS);
             job.write("");
-            // L'uscita si tiene anche qui, per ripescare alla fine i messaggi degli script.
+            // The output is kept here too, to fish out the scripts' messages at the end.
             StringBuilder captured = new StringBuilder();
-            // Chi legge ogni tipo di mappa di Postfix, e il contenuto delle mappe che non si rigenerano
-            // dal testo, prima: se dopo la libreria e' cambiata, le mappe si rigenerano uguali a prima.
+            // Who reads each type of Postfix map, and the content of the maps that are not regenerated
+            // from text, beforehand: if the library has changed afterwards, the maps are regenerated as before.
             PostfixMaps.Before mapsBefore = PostfixMaps.before();
-            // -U: lo stesso catalogo su cui e' stato calcolato il piano. Prima era senza, cioe'
-            // riscaricava il catalogo e poteva installare versioni diverse da quelle mostrate.
+            // -U: the same catalog the plan was calculated on. Before, it was missing, that is
+            // it downloaded the catalog again and could install versions different from those shown.
             int code = runLogged(job, "pkg upgrade -y -U 2>&1", 3600, captured);
-            // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
-            // da sole e fanno il resto; se questa si e' fermata li', la si rilancia una volta, uguale.
+            // 4 = EX_NEEDRESTART: pkg has updated itself. Recent versions relaunch themselves
+            // and do the rest; if this one stopped there, it is relaunched once, unchanged.
             if (code == 4) {
                 job.write(I18n.tr("server.um.runUpdateJob.3"));
                 code = runLogged(job, "pkg upgrade -y -U 2>&1", 3600, captured);
@@ -13124,13 +13170,13 @@ public final class UpdateManager {
             }
             JSONArray outsidePlan = compareWithInventory(job, inventoryBefore, plan,
                     "Update of the unprotected packages");
-            // Questo lavoro non riavvia niente: quello che uno script ha scritto entra in
-            // vigore al prossimo riavvio del servizio, e va detto prima.
+            // This job restarts nothing: what a script has written takes
+            // effect at the next restart of the service, and that must be said beforehand.
             sideEffects.checkConfig(job, plan, outsidePlan, false);
-            // Le mappe DOPO il controllo della configurazione, come nell'aggiornamento guidato: una mappa
-            // che il pannello ricostruisce dal contenuto, senza il suo testo accanto, il controllo la
-            // prenderebbe per un file cambiato da uno script (misurato sulla VM il 31/10/2026). E anche
-            // se pkg e' uscito con un errore: e' proprio quando la macchina puo' essere rimasta a meta'.
+            // The maps AFTER the configuration check, as in the guided update: a map that
+            // the panel rebuilds from its content, without its text next to it, would be taken by the
+            // check for a file changed by a script (measured on the VM on 2026-10-31). And even
+            // if pkg exited with an error: that is exactly when the machine may have been left halfway.
             String mapsProblem = PostfixMaps.afterUpgrade(mapsBefore, l -> job.write("  " + l)).problem();
             writeActionMessages(job, captured.toString());
 
@@ -13157,17 +13203,17 @@ public final class UpdateManager {
     }
 
     /**
-     * Sblocca -> aggiorna -> riprotegge ESATTAMENTE cio' che era protetto.
-     * La riprotezione sta in un finally: deve avvenire anche se l'aggiornamento fallisce o
-     * solleva un'eccezione. Lasciare i pacchetti sbloccati dopo un errore e' lo scenario
-     * peggiore, perche' nessuno se ne accorge finche' un upgrade successivo non porta via
-     * un servizio.
+     * Unlocks -> updates -> re-locks EXACTLY what was locked.
+     * The re-lock is in a finally: it must happen even if the update fails or
+     * throws an exception. Leaving the packages unlocked after an error is the worst
+     * scenario, because nobody notices until a later upgrade takes away
+     * a service.
      */
     /**
-     * Chi resta protetto durante la manutenzione completa, e perche'; e il piano esatto che ne
-     * risulta. L'anteprima e il lavoro vero chiamano QUESTA funzione: se la decisione fosse
-     * scritta due volte, prima o poi diventerebbe due decisioni diverse, e l'anteprima
-     * mostrerebbe un piano che il lavoro non esegue.
+     * Who stays locked during the full maintenance, and why; and the exact plan that
+     * results. The preview and the real job call THIS function: if the decision were
+     * written twice, sooner or later it would become two different decisions, and the preview
+     * would show a plan that the job does not run.
      */
     private static JSONObject maintenancePlan(JSONArray lockedPackages) {
         Map<String, String> why = new LinkedHashMap<>();
@@ -13176,9 +13222,9 @@ public final class UpdateManager {
             if (o.has("advisory") && "wait".equals(o.getJSONObject("advisory").getString("level")))
                 why.put(o.getString("name"), I18n.tr("server.um.x.waitAdvisory"));
         }
-        // La prova sul campo batte l'avvertenza generica: se la configurazione Dovecot
-        // VIVA contiene costrutti che la versione nuova non accetta, quel pacchetto non
-        // si sblocca, punto. Non e' un'ipotesi sulla versione, e' cio' che c'e' sul disco.
+        // Evidence from the field beats the generic warning: if the LIVE Dovecot configuration
+        // contains constructs that the new version does not accept, that package is not
+        // unlocked, full stop. It is not an assumption about the version, it is what is on the disk.
         JSONObject dc = dovecotCompatibility();
         if (dc.optBoolean("scanned", false) && !dc.optBoolean("compatible24", true)) {
             for (String n : sh("pkg query %n 2>/dev/null | grep -E '^dovecot' ", 20).split("\n")) {
@@ -13204,20 +13250,20 @@ public final class UpdateManager {
         List<String> toRelock = new ArrayList<>();
         JSONObject plan = null;
         boolean planNotFollowed = false;
-        // Il file di stato si cancella solo se l'ha scritto QUESTA esecuzione. Prima si cancellava
-        // quando "tutti i pacchetti da riproteggere" erano riprotetti — e con l'elenco vuoto di un
-        // rifiuto a partire lo erano sempre: una manutenzione che si rifiutava perche' ne esisteva
-        // una interrotta ne cancellava lo stato, cioe' l'elenco che l'avvio usa per riproteggere.
+        // The state file is deleted only if THIS run wrote it. Before, it was deleted
+        // when "all the packages to re-lock" were re-locked - and with the empty list of a
+        // refusal to start they always were: a maintenance that refused because an
+        // interrupted one existed deleted its state, that is the list that startup uses to re-lock.
         boolean stateWritten = false;
         Set<String> lockedBefore = new TreeSet<>();
         Map<String, Boolean> servicesBefore = new LinkedHashMap<>();
-        // Come negli altri due: cio' che gli script fanno a configurazione e indirizzi. Se il
-        // lavoro si ferma prima di pkg upgrade non fotografa niente, e alla fine non dice niente.
+        // As in the other two: what the scripts do to the configuration and addresses. If the
+        // job stops before pkg upgrade it takes no snapshot, and at the end it says nothing.
         InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
-        // La fine la scrive SOLO il finally, come sua ultima riga. Anche i rifiuti a partire qui
-        // sotto escono passando dal finally, che scrive ancora la riprotezione e la verifica:
-        // con la fine scritta prima del return, il loro esito diventava visibile (vedi
-        // Job.visibleStatus) mentre il lavoro stava ancora scrivendo.
+        // The end is written ONLY by the finally, as its last line. The refusals to start below
+        // also exit through the finally, which still writes the re-lock and the verification:
+        // with the end written before the return, their outcome became visible (see
+        // Job.visibleStatus) while the job was still writing.
         try {
             if (Files.exists(Paths.get(MAINTENANCE_STATE))) {
                 job.status = "error";
@@ -13239,14 +13285,14 @@ public final class UpdateManager {
             job.write("");
             job.write(I18n.tr("server.um.runMaintenanceJob.5"));
 
-            // --- Chi resta protetto, e perche': la stessa funzione dell'anteprima ---
+            // --- Who stays locked, and why: the same function as the preview ---
             JSONObject decision = maintenancePlan(lockedUpdates());
             plan = decision.getJSONObject("plan");
             JSONObject why = decision.getJSONObject("heldBack");
             for (String n : new TreeSet<>(why.keySet()))
                 job.write("    " + n + "  -> " + I18n.tr("server.um.x.heldBack", java.util.Map.of("reason", String.valueOf(why.getString(n)))));
 
-            // Si esegue il piano che e' stato letto, o niente.
+            // The plan that was read is run, or nothing.
             if (!plan.optBoolean("measured")) {
                 throw new IllegalStateException("I could not work out the exact plan: "
                         + plan.optString("error", "?"));
@@ -13265,9 +13311,9 @@ public final class UpdateManager {
                 job.write(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
                 return;
             }
-            // La stessa regola della scheda di un pacchetto: il pannello non esegue piani
-            // che rimuovono o retrocedono pacchetti. Qui mancava, e questo e' il lavoro che
-            // si preme per aggiornare tutto.
+            // The same rule as a package's tab: the panel does not run plans
+            // that remove or downgrade packages. It was missing here, and this is the job that
+            // gets pressed to update everything.
             String destructive = destructivePlanReason(judged(plan));
             if (destructive != null) {
                 job.status = "error";
@@ -13293,12 +13339,12 @@ public final class UpdateManager {
             job.advance(2, 4);
             job.write("");
             job.write("[2/4] " + I18n.tr("server.um.x.tempUnlock"));
-            // L'elenco si salva PRIMA di sbloccare: se il pannello muore adesso, il ripristino
-            // all'avvio sa cosa riproteggere. Se non si scrive, non si sblocca niente.
+            // The list is saved BEFORE unlocking: if the panel dies now, the restore
+            // at startup knows what to re-lock. If it cannot be written, nothing is unlocked.
             if (!toRelock.isEmpty()) {
                 String stateError = PackageQueue.writeState(toRelock);
                 if (stateError != null) {
-                    toRelock.clear();   // non si e' sbloccato niente: niente da riproteggere
+                    toRelock.clear();   // nothing was unlocked: nothing to re-lock
                     job.status = "error";
                     job.errorMessage = I18n.tr("server.um.runMaintenanceJob.10", java.util.Map.of("stateError", String.valueOf(stateError)));
                     job.write(I18n.tr("server.um.runMaintenanceJob.11", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
@@ -13312,27 +13358,27 @@ public final class UpdateManager {
             job.advance(3, 4);
             job.write("");
             job.write(I18n.tr("server.um.runMaintenanceJob.12"));
-            // Come nell'aggiornamento guidato: prima si scarica e si ricalcola, perche' il
-            // piano dipende da cio' che e' nella cache di pkg (vedi fetchAndRecheck).
+            // As in the guided update: first download and recalculate, because the
+            // plan depends on what is in pkg's cache (see fetchAndRecheck).
             Recheck grown = fetchAndRecheck(job, "pkg upgrade -F -y -U 2>&1", plan,
                     () -> maintenancePlan(lockedUpdates()).getJSONObject("plan"));
             if (grown.stop() != null) throw org.daemoxcp.mail.util.ShownException.translated(grown.stop());
             plan = grown.plan();
 
-            // L'inventario PRIMA, per accorgersi di cio' che cambia senza essere nel piano.
-            // Si prende dopo lo scaricamento, a ridosso dell'aggiornamento: lo scaricamento
-            // non installa niente, ma l'inventario deve fotografare il momento esatto.
+            // The inventory BEFORE, to notice what changes without being in the plan.
+            // It is taken after the download, right before the update: the download
+            // installs nothing, but the inventory must capture the exact moment.
             Map<String, String> inventoryBefore = PackagePlan.versionsOnly(PackagePlan.installed());
             sideEffects.takeBefore();
-            // L'uscita si tiene anche qui, per ripescare alla fine i messaggi degli script.
+            // The output is kept here too, to fish out the scripts' messages at the end.
             StringBuilder captured = new StringBuilder();
-            // Chi legge ogni tipo di mappa di Postfix, e il contenuto delle mappe che non si rigenerano
-            // dal testo, prima: se dopo la libreria e' cambiata, le mappe si rigenerano uguali a prima.
+            // Who reads each type of Postfix map, and the content of the maps that are not regenerated
+            // from text, beforehand: if the library has changed afterwards, the maps are regenerated as before.
             PostfixMaps.Before mapsBefore = PostfixMaps.before();
-            // -U: lo stesso catalogo su cui e' stato calcolato il piano.
+            // -U: the same catalog the plan was calculated on.
             int code = runLogged(job, "pkg upgrade -y -U 2>&1", 3600, captured);
-            // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
-            // da sole e fanno il resto; se questa si e' fermata li', la si rilancia una volta, uguale.
+            // 4 = EX_NEEDRESTART: pkg has updated itself. Recent versions relaunch themselves
+            // and do the rest; if this one stopped there, it is relaunched once, unchanged.
             if (code == 4) {
                 job.write(I18n.tr("server.um.runUpdateJob.3"));
                 code = runLogged(job, "pkg upgrade -y -U 2>&1", 3600, captured);
@@ -13350,21 +13396,21 @@ public final class UpdateManager {
                 if (!v.getBoolean("ok")) planNotFollowed = true;
             }
 
-            // E dall'altra direzione: ogni differenza fra l'inventario di prima e quello di
-            // adesso che il piano non spiega. Il confronto qui sopra scorre il PIANO e non
-            // puo' vedere un pacchetto cambiato che nel piano non c'era.
+            // And from the other direction: every difference between the earlier inventory and the
+            // current one that the plan does not explain. The comparison above walks the PLAN and
+            // cannot see a changed package that was not in the plan.
             JSONArray outsidePlan = compareWithInventory(job, inventoryBefore, plan, "Maintenance");
-            // La manutenzione non riavvia niente: cio' che uno script ha scritto entra in vigore
-            // al prossimo riavvio, ed e' quello che chi legge la lista qui sotto sta per fare.
+            // The maintenance restarts nothing: what a script has written takes effect
+            // at the next restart, which is what whoever reads the list below is about to do.
             sideEffects.checkConfig(job, plan, outsidePlan, false);
-            // Le mappe DOPO il controllo della configurazione, come nell'aggiornamento guidato: una mappa
-            // che il pannello ricostruisce dal contenuto, senza il suo testo accanto, il controllo la
-            // prenderebbe per un file cambiato da uno script (misurato sulla VM il 31/10/2026). E anche
-            // se pkg e' uscito con un errore: e' proprio quando la macchina puo' essere rimasta a meta'.
+            // The maps AFTER the configuration check, as in the guided update: a map that
+            // the panel rebuilds from its content, without its text next to it, would be taken by the
+            // check for a file changed by a script (measured on the VM on 2026-10-31). And even
+            // if pkg exited with an error: that is exactly when the machine may have been left halfway.
             String mapsProblem = PostfixMaps.afterUpgrade(mapsBefore, l -> job.write("  " + l)).problem();
 
-            // I problemi si sommano al messaggio che c'e' gia' (per esempio l'uscita di pkg
-            // diversa da zero): nessuno dei tre deve coprire gli altri.
+            // The problems are added to the message already there (for example pkg's non-zero
+            // exit): none of the three must hide the others.
             java.util.List<String> problems = new ArrayList<>();
             if (planNotFollowed) problems.add(I18n.tr("server.um.runMaintenanceJob.14"));
             if (!outsidePlan.isEmpty()) problems.add(divergenceMessage(outsidePlan));
@@ -13375,10 +13421,10 @@ public final class UpdateManager {
                         ? "" : job.errorMessage + " ") + String.join(" ", problems);
             }
 
-            // Aggiornare un pacchetto non aggiorna il processo che lo usa: finche' non riparte gira
-            // sui file vecchi, e la correzione risulta installata senza essere in servizio. La
-            // manutenzione completa non riavvia niente da sola (lo fa l'aggiornamento guidato, un
-            // pacchetto alla volta), ma dice esattamente chi va riavviato.
+            // Updating a package does not update the process that uses it: until it restarts it runs
+            // on the old files, and the fix shows as installed without being in service. The
+            // full maintenance restarts nothing on its own (the guided update does, one
+            // package at a time), but it says exactly what needs restarting.
             java.util.LinkedHashSet<String> toRestart = new java.util.LinkedHashSet<>();
             for (int i = 0; i < planChanges.length(); i++) {
                 JSONObject c = planChanges.getJSONObject(i);
@@ -13399,7 +13445,7 @@ public final class UpdateManager {
             job.status = "error"; job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
-            // La riprotezione avviene SEMPRE, qualunque cosa sia andata storta sopra.
+            // The re-lock ALWAYS happens, whatever went wrong above.
             job.advance(4, 4);
             job.write("");
             job.write(I18n.tr("server.um.runMaintenanceJob.16"));
@@ -13415,7 +13461,7 @@ public final class UpdateManager {
                 job.write(I18n.tr("server.um.runPythonTransition.21", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE))));
             }
 
-            // === Verifica del proprio operato: non basta aver eseguito i passi. ===
+            // === Checking its own work: having run the steps is not enough. ===
             job.write("");
             job.write(I18n.tr("server.um.runMaintenanceJob.19"));
             boolean alarm = false;
@@ -13430,11 +13476,11 @@ public final class UpdateManager {
                 job.write("  " + I18n.tr("server.um.x.protLost", java.util.Map.of("list", String.valueOf(String.join(", ", missing)))));
             }
 
-            // Questo confronto era giusto solo qui, e scritto a mano: adesso e' lo stesso
-            // che usano gli altri tre lavori.
+            // This comparison was right only here, and hand-written: now it is the same
+            // one the other three jobs use.
             if (fallenServices(job, servicesBefore)) alarm = true;
 
-            // E la configurazione e gli indirizzi: nessuno dei due conti sopra li vede.
+            // And the configuration and the addresses: neither of the two counts above sees them.
             sideEffects.checkListening(job);
             java.util.List<String> effects = sideEffects.problems();
             if (!effects.isEmpty()) {

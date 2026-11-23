@@ -15,17 +15,17 @@ import java.nio.file.StandardOpenOption;
 public class PanelContent {
 
     /**
-     * Legge un pezzo di interfaccia dalle risorse del jar.
+     * Reads a piece of interface from the jar's resources.
      *
-     * Perche' esiste: finche' HTML, CSS e JavaScript vivono dentro literal Java, si sbatte
-     * contro il limite di 65535 byte per costante del formato .class — e ci si sbatte a ogni
-     * aggiunta, perche' javac fonde anche i literal adiacenti uniti da un "+". La cura non e'
-     * spezzare i metodi all'infinito: e' smettere di tenere il contenuto dentro il codice.
-     * Un file nel jar non ha nessun limite di dimensione, si legge con gli accenti giusti, e
-     * si puo' aprire in un editor che sa cos'e' invece che come stringa Java.
+     * Why it exists: as long as HTML, CSS and JavaScript live inside Java literals, you crash
+     * into the limit of 65535 bytes per constant of the .class format -- and you crash into it at every
+     * addition, because javac also merges adjacent literals joined by a "+". The cure is not
+     * splitting the methods forever: it is to stop keeping the content inside the code.
+     * A file in the jar has no size limit at all, is read with the right accents, and
+     * can be opened in an editor that knows what it is instead of as a Java string.
      *
-     * Il contenuto e' fissato al momento della compilazione, quindi nessun percorso arriva
-     * mai dalla rete: qui non c'e' niente da filtrare, a differenza della rotta /fa e /vendor.
+     * The content is fixed at compile time, so no path ever comes
+     * from the network: here there is nothing to filter, unlike the /fa and /vendor route.
      */
     private static String resource(String path) {
         try (java.io.InputStream in = PanelContent.class.getResourceAsStream("/" + path)) {
@@ -41,8 +41,8 @@ public class PanelContent {
     }
 
     /**
-     * Lo stile della pagina che il server mostra quando MySQL non risponde (SSLMailServer), come
-     * file: si vede anche prima di entrare. Sta qui perche' generateAllContent scrive i file.
+     * The style of the page the server shows when MySQL does not answer (SSLMailServer), as a
+     * file: it is seen even before logging in. It is here because generateAllContent writes the files.
      */
     public static final String UNAVAILABLE_STYLE = PageAssets.stylesheet(
             "body{background:#16213e;color:#e6e6e6;font-family:-apple-system,Segoe UI,Roboto,sans-serif;"
@@ -79,10 +79,10 @@ public class PanelContent {
             page(adminDir, "firewall.html", getFirewallHtml(), false);
             page(adminDir, "cloudflare.html", getCloudflareHtml(), false);
             page(adminDir, "paths.html", getPathsHtml(), false);
-            // La pagina Installa non c'e' piu' (reperto 230): veniva scritta ma nessuna rotta la serviva (/install finisce
-            // su /home), e i suoi pulsanti chiamavano /api/install, che non esiste (l'installazione si fa dal menu del
-            // terminale). Il file lasciato dalle versioni di prima si toglie, perche' nella cartella delle pagine resta
-            // solo quello che il pannello serve.
+            // The Install page no longer exists (finding 230): it was written but no route served it (/install ends
+            // up on /home), and its buttons called /api/install, which does not exist (installation is done from the
+            // terminal menu). The file left by earlier versions is removed, because in the pages folder only what the
+            // panel serves remains.
             Files.deleteIfExists(adminPath.resolve("install.html"));
             page(adminDir, "settings.html", getSettingsHtml(), false);
             page(adminDir, "account.html", getAccountHtml(), false);
@@ -92,8 +92,8 @@ public class PanelContent {
             page(adminDir, "updates.html", getUpdatesHtml(), false);
             page(adminDir, "diagnostics.html", getDiagnosticsHtml(), false);
             page(adminDir, "forbidden.html", getForbiddenHtml(), false);
-            // Gli script e gli stili che le pagine qui sopra hanno messo in file (PageAssets), quelli
-            // della cornice (Layout) e della pagina «non disponibile», e via quelli di una versione di prima.
+            // The scripts and styles that the pages above have put into files (PageAssets), those
+            // of the frame (Layout) and of the "unavailable" page, and away with those of an earlier version.
             Layout.registerAssets();
             PageAssets.writeAll(adminPath);
 
@@ -103,9 +103,9 @@ public class PanelContent {
     }
 
     /**
-     * Una pagina su disco, con i suoi script e stili in file (PageAssets): nessun codice in linea,
-     * per la Content-Security-Policy senza 'unsafe-inline' (reperto 178).
-     * @param open true per le pagine che si vedono prima di entrare
+     * A page on disk, with its scripts and styles in files (PageAssets): no inline code,
+     * for the Content-Security-Policy without 'unsafe-inline' (finding 178).
+     * @param open true for the pages seen before logging in
      */
     private static void page(String adminDir, String name, String html, boolean open) throws IOException {
         writeFile(adminDir + "/" + name, PageAssets.externalize(html, open));
@@ -118,17 +118,17 @@ public class PanelContent {
     }
 
     /**
-     * Le pagine e i loro file li legge solo il pannello: cartelle 0750, file 0640, col gruppo della cartella.
-     * Permessi scritti e non lasciati all'umask: il servizio gira con 077, e i file nati cosi' (0600) la
-     * parte web del pannello separato, che gira con l'utente daemoxcp_mail e il suo gruppo, non li leggeva
-     * (misurato sulla VM il 07/11/2026: la pagina di accesso senza i suoi script). Su FreeBSD un file nuovo
-     * prende il gruppo della cartella, che col pannello separato e' daemoxcp_mail (PanelSeparation).
+     * The pages and their files are read only by the panel: folders 0750, files 0640, with the folder's group.
+     * Permissions written and not left to the umask: the service runs with 077, and the files born that way (0600)
+     * could not be read by the web part of the separated panel, which runs with the daemoxcp_mail user and its group
+     * (measured on the VM on 2026-11-07: the login page without its scripts). On FreeBSD a new file
+     * takes the folder's group, which with the separated panel is daemoxcp_mail (PanelSeparation).
      */
     public static void readableByPanel(Path p, boolean dir) {
         try {
             Files.setPosixFilePermissions(p, java.nio.file.attribute.PosixFilePermissions.fromString(dir ? "rwxr-x---" : "rw-r-----"));
         } catch (IOException | UnsupportedOperationException e) {
-            // File system senza permessi POSIX, o non nostro: resta com'e'
+            // File system without POSIX permissions, or not ours: it stays as it is
         }
     }
 
@@ -357,20 +357,20 @@ public class PanelContent {
     }
 
     /**
-     * L'inizio di ogni pagina con la cornice: la <head> e il segnaposto della barra laterale e della
-     * barra in alto, che il server completa a ogni richiesta (Layout.expand) insieme ai testi nella
-     * lingua di chi chiede (I18n.render).
-     * @param titleKey la chiave del titolo nei file di lingua
-     * @param pageName la pagina, per evidenziarla nel menu (e.g., "home", "domains")
-     * @param extraStyles CSS della sola pagina (puo' essere vuoto)
+     * The start of every page with the frame: the <head> and the placeholder of the sidebar and of the
+     * top bar, which the server completes at every request (Layout.expand) together with the texts in the
+     * language of whoever asks (I18n.render).
+     * @param titleKey the key of the title in the language files
+     * @param pageName the page, to highlight it in the menu (e.g., "home", "domains")
+     * @param extraStyles CSS of this page only (can be empty)
      */
     private static String getHead(String titleKey, String pageName, String extraStyles) {
-        // {{THEME}} e {{COLOR_SCHEME}} li scrive il server a ogni richiesta (handleProtectedPage):
-        // la preferenza dell'admin arriva dentro la pagina, e il tema si applica qui nella <head>,
-        // prima del primo disegno. Prima lo applicava lo script in fondo alla pagina, e solo dopo
-        // una chiamata a /api/theme: fino ad allora il browser disegnava la pagina chiara, cioe'
-        // il lampo bianco a ogni cambio di pagina. La meta color-scheme copre l'attimo prima che
-        // arrivi il CSS: e' lei a dire al browser di che colore e' la pagina vuota.
+        // {{THEME}} and {{COLOR_SCHEME}} are written by the server at every request (handleProtectedPage):
+        // the admin's preference arrives inside the page, and the theme is applied here in the <head>,
+        // before the first paint. Before, the script at the bottom of the page applied it, and only after
+        // a call to /api/theme: until then the browser painted the page light, that is,
+        // the white flash at every page change. The color-scheme meta covers the moment before
+        // the CSS arrives: it is what tells the browser what colour the empty page is.
         return """
 <!DOCTYPE html>
 <html lang="{{lang}}" data-theme-pref="{{THEME}}">
@@ -610,9 +610,9 @@ public class PanelContent {
     }
 
     /**
-     * Le opzioni WebAuthn arrivano dal server in JSON (base64url, dalla libreria Yubico): il browser
-     * vuole ArrayBuffer. E la risposta dell'autenticatore torna al server in JSON. Funzioni comuni
-     * alla pagina di accesso e alle Impostazioni (registrazione e conferma con la passkey).
+     * The WebAuthn options arrive from the server in JSON (base64url, from the Yubico library): the browser
+     * wants ArrayBuffer. And the authenticator's response goes back to the server in JSON. Functions shared
+     * by the login page and Settings (registration and confirmation with the passkey).
      */
     static String getWebAuthnScript() {
         return """
@@ -980,9 +980,9 @@ public class PanelContent {
 
     // ============== SETUP.HTML ==============
     /**
-     * Il pannello non ha ancora un amministratore. La pagina non lo crea: chi la raggiungesse per
-     * primo diventerebbe amministratore. Mostra il comando da lanciare sul server (--create-admin),
-     * che crea il primo superadmin e stampa un codice di accesso monouso.
+     * The panel has no administrator yet. The page does not create one: whoever reached it
+     * first would become administrator. It shows the command to run on the server (--create-admin),
+     * which creates the first superadmin and prints a one-time access code.
      */
     public static String getSetupHtml() {
         return """
@@ -1454,9 +1454,9 @@ public class PanelContent {
     }
 
     /**
-     * Una riga di "Servizi Mail" nella Home: il nome, la versione (la scrive loadVersions), lo
-     * stato (checkStatus) e i tre comandi, con il loro nome per chi usa un lettore di schermo.
-     * Una definizione sola per tutte le righe.
+     * A row of "Mail Services" in the Home page: the name, the version (loadVersions writes it), the
+     * state (checkStatus) and the three commands, with their name for whoever uses a screen reader.
+     * A single definition for all the rows.
      */
     private static String serviceLine(String key, String service, String icon, String name, String who) {
         return """
@@ -1474,9 +1474,9 @@ public class PanelContent {
     }
 
     /**
-     * Le versioni nella Home (SoftwareVersions sul server): la colonna Versione di "Servizi Mail"
-     * e la tabella "Altro software". Tutto con textContent: le versioni arrivano da programmi e
-     * file del server, e non devono poter diventare HTML.
+     * The versions in the Home page (SoftwareVersions on the server): the Version column of "Mail Services"
+     * and the "Other software" table. All with textContent: the versions come from programs and
+     * files of the server, and must not be able to become HTML.
      */
     private static String getVersionsJs() {
         return """
@@ -1759,8 +1759,8 @@ public class PanelContent {
 
     // ============== MAILBOXES.HTML ==============
     /**
-     * Modal "Configurazione Client Email" — credenziali + server IMAP/SMTP, POP3 solo se acceso (Pop3),
-     * con bottoni copia per ogni campo e reveal della password se nel vault.
+     * "Email Client Configuration" modal -- credentials + IMAP/SMTP server, POP3 only if on (Pop3),
+     * with copy buttons for every field and reveal of the password if in the vault.
      */
     private static String getMailConfigModal() {
         return """
@@ -1944,9 +1944,9 @@ public class PanelContent {
     }
 
     /**
-     * Modal "Generatore Password" — UI riusabile per generare password con opzioni dettagliate.
-     * Quando l'utente clicca "Usa questa password", invoca il callback registrato in
-     * window.__pwGenCallback (impostato da chi apre il modal).
+     * "Password Generator" modal -- reusable UI to generate passwords with detailed options.
+     * When the user clicks "Use this password", it invokes the callback registered in
+     * window.__pwGenCallback (set by whoever opens the modal).
      */
     private static String getPasswordGeneratorModal() {
         return """
@@ -2047,12 +2047,12 @@ public class PanelContent {
     }
 
     /**
-     * Campo password di una casella, con i suoi strumenti: mostra/nascondi, Genera (apre il
-     * Generatore Password), Copia, e l'avviso se un carattere non e' ammesso.
+     * Password field of a mailbox, with its tools: show/hide, Generate (opens the
+     * Password Generator), Copy, and the warning if a character is not allowed.
      *
-     * Lo stesso componente per "Aggiungi Casella" e "Modifica Casella". Prima la seconda aveva gli
-     * strumenti e la prima no: la password di una casella nuova si digitava alla cieca, senza poterla
-     * generare ne' copiare per chi l'avrebbe usata. Il codice del componente e' getPasswordFieldJs().
+     * The same component for "Add Mailbox" and "Edit Mailbox". Before, the second had the
+     * tools and the first did not: the password of a new mailbox was typed blind, without being able
+     * to generate it or copy it for whoever would use it. The component's code is getPasswordFieldJs().
      */
     private static String passwordField(String id, String placeholder) {
         return """
@@ -2068,11 +2068,11 @@ public class PanelContent {
     }
 
     /**
-     * Il codice del campo password (passwordField). La regola dei caratteri arriva da SecurityUtils
-     * quando si genera la pagina: e' la stessa che applica il server, che resta l'unico a decidere.
+     * The code of the password field (passwordField). The character rule comes from SecurityUtils
+     * when the page is generated: it is the same one the server applies, which remains the only one to decide.
      */
     private static String getPasswordFieldJs() {
-        // Righe normali, non text block: un text block comincia sempre a capo, e la regex si spezzerebbe.
+        // Normal lines, not a text block: a text block always starts on a new line, and the regex would break.
         String rule = "        const PW_CHARACTER = /^" + org.daemoxcp.mail.webserver.SecurityUtils.PASSWORD_CHARACTERS + "$/;\n"
                 + "        const PW_MIN = " + org.daemoxcp.mail.webserver.SecurityUtils.MAILBOX_PASSWORD_MIN
                 + ", PW_MAX = " + org.daemoxcp.mail.webserver.SecurityUtils.PASSWORD_MAX + ";\n"
@@ -2171,7 +2171,7 @@ public class PanelContent {
 """;
     }
 
-    /** Finestra "Trasforma in casella" della pagina Alias (AddressTransform sul server). */
+    /** "Transform into mailbox" window of the Aliases page (AddressTransform on the server). */
     private static String getAliasToMailboxModal() {
         return """
     <div class="modal fade" id="aMailboxModal" tabindex="-1" aria-labelledby="aMailboxTitle" aria-hidden="true">
@@ -2234,7 +2234,7 @@ public class PanelContent {
 """;
     }
 
-    /** Lo script di "Trasforma in casella": anteprima dal server, poi la richiesta con la sua impronta. */
+    /** The script of "Transform into mailbox": preview from the server, then the request with its fingerprint. */
     private static String getAliasToMailboxJs() {
         return """
         // ===== Trasforma in casella (decide il server: AddressTransform) =====
@@ -2355,7 +2355,7 @@ public class PanelContent {
 """;
     }
 
-    /** Finestra "Trasforma in alias" della pagina Caselle (AddressTransform sul server). */
+    /** "Transform into alias" window of the Mailboxes page (AddressTransform on the server). */
     private static String getMailboxToAliasModal() {
         return """
     <div class="modal fade" id="aAliasModal" tabindex="-1" aria-labelledby="aAliasTitle" aria-hidden="true">
@@ -2397,7 +2397,7 @@ public class PanelContent {
 """;
     }
 
-    /** Lo script di "Trasforma in alias": anteprima di cosa si perde e cosa resta, conferma scritta. */
+    /** The script of "Transform into alias": preview of what is lost and what remains, written confirmation. */
     private static String getMailboxToAliasJs() {
         return """
         // ===== Trasforma in alias (decide il server: AddressTransform) =====
@@ -2507,9 +2507,9 @@ public class PanelContent {
     }
 
     /**
-     * Il codice del Generatore Password (getPasswordGeneratorModal): con passwordField e
-     * getPasswordFieldJs e' il componente condiviso delle password delle caselle, in "Aggiungi
-     * casella", "Modifica casella" e "Trasforma in casella" (pagina Alias).
+     * The code of the Password Generator (getPasswordGeneratorModal): with passwordField and
+     * getPasswordFieldJs it is the shared component for mailbox passwords, in "Add
+     * mailbox", "Edit mailbox" and "Transform into mailbox" (Aliases page).
      */
     private static String getPasswordGeneratorJs() {
         return """
@@ -2637,15 +2637,15 @@ public class PanelContent {
     }
 
     /**
-     * Modal "Cambia password massivo" della pagina /mailboxes.
-     * Estratto come metodo per non gonfiare il text block constante della pagina.
+     * "Bulk password change" modal of the /mailboxes page.
+     * Extracted as a method so as not to swell the page's constant text block.
      */
 
 
     /**
-     * Le finestre della pagina Caselle dopo quella della configurazione dei client: una costante a parte. Nella stessa
-     * espressione della pagina tutte le parti fisse finiscono in una sola «ricetta» di invokedynamic, che non puo'
-     * superare i 64 KB (raggiunti il 20/11/2026).
+     * The windows of the Mailboxes page after the client configuration one: a constant of their own. In the same
+     * expression as the page, all the fixed parts end up in a single invokedynamic "recipe", which cannot
+     * exceed 64 KB (reached on 2026-11-20).
      */
     static String mailboxPageModals() {
         return """
@@ -2809,8 +2809,8 @@ public class PanelContent {
     }
 
     /**
-     * Lo svuotamento automatico della Junk e del Cestino nella finestra della casella: mai (il predefinito) o dopo 7-90
-     * giorni, come MailDatabase.CLEANUP_DAYS. Un metodo a parte: col resto della pagina la costante superava i 64 KB.
+     * The automatic emptying of Junk and Trash in the mailbox window: never (the default) or after 7-90
+     * days, like MailDatabase.CLEANUP_DAYS. A method of its own: with the rest of the page the constant exceeded 64 KB.
      */
     static String mailboxCleanupFields() {
         return """
@@ -2962,8 +2962,8 @@ public class PanelContent {
     }
 
     /**
-     * Funzioni JS per il "Cambio password massivo" delle caselle.
-     * Estratte come metodo separato per ridurre la dimensione del text block constante.
+     * JS functions for the mailboxes' "Bulk password change".
+     * Extracted as a separate method to reduce the size of the constant text block.
      */
     private static String getBulkRotateMailboxesJs() {
         return """
@@ -4201,8 +4201,8 @@ public class PanelContent {
     }
 
     // ============== ALIASES.HTML ==============
-    // La pagina mostrava solo l'elenco: non c'era modo di creare un alias, e "Elimina" non era
-    // collegato a niente, mentre /api/aliases sapeva gia' fare entrambe le cose.
+    // The page only showed the list: there was no way to create an alias, and "Delete" was not
+    // wired to anything, while /api/aliases could already do both.
     public static String getAliasesHtml() {
         return getHead("nav.aliases", "aliases", "") + """
     <main id="main" tabindex="-1" class="content container mt-4">
@@ -4456,8 +4456,8 @@ public class PanelContent {
 
     // ============== DNS.HTML - Full DNS Records Page ==============
     /**
-     * Seconda metà del blocco JS della pagina /dns,
-     * estratta per stare sotto il limite di 65535 byte del constant pool Java.
+     * Second half of the JS block of the /dns page,
+     * extracted to stay under the 65535-byte limit of the Java constant pool.
      */
     private static String getDnsJsPart2() {
         return """
@@ -4936,8 +4936,8 @@ public class PanelContent {
     }
 
     /**
-     * Terzo blocco JS della pagina /dns (verifica DKIM in DNS + storico rotazioni + schedule helpers),
-     * estratto per stare sotto il limite del constant pool Java.
+     * Third JS block of the /dns page (DKIM check in DNS + rotation history + schedule helpers),
+     * extracted to stay under the limit of the Java constant pool.
      */
     private static String getDnsJsPart3() {
         return """
@@ -5221,8 +5221,8 @@ public class PanelContent {
     }
 
     /**
-     * Blocco JS della diagnostica timezone DKIM (estratto per ridurre la dimensione
-     * del text block constante).
+     * JS block of the DKIM timezone diagnostics (extracted to reduce the size
+     * of the constant text block).
      */
     private static String getDnsJsTzDiag() {
         return """
@@ -5363,8 +5363,8 @@ public class PanelContent {
     }
 
     /**
-     * Markup HTML del modal di scelta della modalità di rotazione DKIM (Cloudflare vs Manuale).
-     * Estratto come metodo per ridurre la dimensione del text block constante.
+     * HTML markup of the modal for choosing the DKIM rotation mode (Cloudflare vs Manual).
+     * Extracted as a method to reduce the size of the constant text block.
      */
     private static String getDnsRotateModeChooserModal() {
         return """
@@ -5418,12 +5418,12 @@ public class PanelContent {
     }
 
     /**
-     * Markup HTML della card "Cambia Username" (estratta per ridurre la dimensione del
-     * text block constante della pagina admin settings).
+     * HTML markup of the "Change Username" card (extracted to reduce the size of the
+     * constant text block of the admin settings page).
      */
     /**
-     * Le schede dell'accesso nelle Impostazioni: l'email a cui arrivano i codici, le passkey e le
-     * sessioni aperte. Nessuna password: non esiste piu'.
+     * The access tabs in Settings: the email the codes arrive at, the passkeys and the
+     * open sessions. No password: it no longer exists.
      */
     private static String getAccountCards() {
         return """
@@ -5486,7 +5486,7 @@ public class PanelContent {
 """;
     }
 
-    /** Le finestre dell'accesso: nome della passkey, nuovo nome, conferma di un'operazione delicata. */
+    /** The access windows: passkey name, new name, confirmation of a sensitive operation. */
     private static String getAccountModals() {
         return """
     <!-- Nome della passkey nuova -->
@@ -5559,7 +5559,7 @@ public class PanelContent {
     }
 
     /**
-     * Markup HTML della card "Master key del vault" (gestione backup + rotazione).
+     * HTML markup of the "Vault master key" card (backup management + rotation).
      */
     private static String getClamavHealthCard() {
         return """
@@ -6117,8 +6117,8 @@ public class PanelContent {
     }
 
     /**
-     * Le chiavi SSH di root (RootSshKeys, /api/ssh-keys): l'elenco, una chiave nuova, toglierne una. Aggiungere e
-     * togliere chiedono una conferma recente (withIdentity), come il vault.
+     * Root's SSH keys (RootSshKeys, /api/ssh-keys): the list, a new key, removing one. Adding and
+     * removing ask for a recent confirmation (withIdentity), like the vault.
      */
     private static String getRootSshKeysCard() {
         return """
@@ -6140,9 +6140,9 @@ public class PanelContent {
     }
 
     /**
-     * Gli script dell'accesso nelle Impostazioni: email di accesso, passkey, sessioni, nome utente,
-     * conferma d'identita' e chiave del vault. Tutto passa da /api/account (e /api/admins per il
-     * vault); il token CSRF lo aggiunge a ogni fetch lo script della <head>.
+     * The access scripts in Settings: login email, passkeys, sessions, username,
+     * identity confirmation and vault key. Everything goes through /api/account (and /api/admins for the
+     * vault); the CSRF token is added to every fetch by the script in the <head>.
      */
     private static String getSettingsAuthJs() {
         return """
@@ -8171,11 +8171,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     // ============== INSTALL.HTML ==============
     // ============== SETTINGS.HTML ==============
     /**
-     * Il JavaScript della scheda "Rapporto periodico". Sta in un metodo suo per due
-     * ragioni: la pagina Impostazioni superava i 65535 byte di un singolo letterale
-     * (limite del formato .class), e una chiamata a metodo interrompe la fusione che
-     * javac fa dei letterali adiacenti, che e' il motivo per cui spezzare il testo
-     * in due pezzi affiancati non basterebbe.
+     * The JavaScript of the "Periodic report" tab. It is in a method of its own for two
+     * reasons: the Settings page exceeded the 65535 bytes of a single literal
+     * (limit of the .class format), and a method call interrupts the merging that
+     * javac does of adjacent literals, which is why splitting the text
+     * into two side-by-side pieces would not be enough.
      */
 
     public static String getSettingsHtml() {
@@ -8540,8 +8540,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
     // ============== QUEUE.HTML ==============
     /**
-     * JS della pagina Impostazioni per il cambio di hostname e del dominio di Roundcube.
-     * Metodo a parte: col resto della pagina il text block sforava il constant pool.
+     * JS of the Settings page for changing the hostname and the Roundcube domain.
+     * A separate method: with the rest of the page the text block overflowed the constant pool.
      */
     private static String getSettingsHostnameJs() {
         return """
@@ -9446,9 +9446,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         [data-theme="dark"] .form-text, [data-theme="dark"] .form-text.small { color: #adb5bd !important; }
         [data-theme="dark"] small.text-muted, [data-theme="dark"] .text-muted small, [data-theme="dark"] .small.text-muted { color: #adb5bd !important; }
         """;
-        // NOTA: Java fa constant folding sui text block adiacenti — questo crea
-        // un UNICO string literal nel constant pool. Limite: 65535 byte UTF-8.
-        // Spezziamo in variabili locali per non superare il limite:
+        // NOTE: Java does constant folding on adjacent text blocks -- this creates
+        // a SINGLE string literal in the constant pool. Limit: 65535 bytes UTF-8.
+        // We split into local variables so as not to exceed the limit:
         String htmlPart1 = """
     <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
     <main id="main" tabindex="-1" class="content container mt-4">
@@ -10255,10 +10255,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """;
     }
 
-    // ============== RUOLI: CHI PUO' FARE COSA ==============
+    // ============== ROLES: WHO CAN DO WHAT ==============
     /**
-     * Le aree del pannello nella tabella dei ruoli: la chiave del nome, il permesso per vedere e
-     * quello per cambiare ("" se nell'area non c'e' niente da cambiare).
+     * The panel's areas in the roles table: the name key, the permission to see and
+     * the one to change ("" if there is nothing to change in the area).
      */
     private static final String[][] ROLE_AREAS = {
         {"adm.area.home", "home.view", ""},
@@ -10273,14 +10273,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         {"adm.area.ssh", "ssh.manage", "ssh.manage"},
     };
 
-    /** Il nome di un ruolo nei file di lingua (adm.rSuperadmin, adm.rAdmin...). */
+    /** The name of a role in the language files (adm.rSuperadmin, adm.rAdmin...). */
     private static String roleKey(String role) {
         return "adm.r" + Character.toUpperCase(role.charAt(0)) + role.substring(1);
     }
 
     /**
-     * La tabella "chi puo' fare cosa", costruita dai permessi veri (AuthStore): non puo' dire una
-     * cosa diversa da quella che il server applica.
+     * The "who can do what" table, built from the real permissions (AuthStore): it cannot say
+     * anything different from what the server applies.
      */
     static String roleMatrix() {
         StringBuilder head = new StringBuilder();
@@ -10311,9 +10311,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
     // ============== ACCOUNT.HTML ==============
     /**
-     * Il proprio account: email di accesso, passkey, sessioni e nome utente. Ogni ruolo ci arriva
-     * dal pulsante col proprio nome in alto. Prima stava dentro Impostazioni, che ora e' solo del
-     * superadmin.
+     * One's own account: login email, passkeys, sessions and username. Every role gets there
+     * from the button with their own name at the top. Before, it was inside Settings, which is now for the
+     * superadmin only.
      */
     public static String getAccountHtml() {
         return getHead("nav.account", "account", "") + """
@@ -10342,8 +10342,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """;
     }
 
-    // ============== ACCESSO NEGATO ==============
-    /** La pagina che risponde, con 403, a chi apre una pagina che il suo ruolo non puo' vedere. */
+    // ============== ACCESS DENIED ==============
+    /** The page that answers, with 403, whoever opens a page their role cannot see. */
     public static String getForbiddenHtml() {
         return getHead("access.title", "forbidden", "") + """
     <main id="main" tabindex="-1" class="content container mt-4">
@@ -10364,9 +10364,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
     // ============== ADMINS.HTML ==============
     public static String getAdminsHtml() {
-        // Sul telefono cinque colonne di parole non ci stanno: nella tabella dei ruoli restano le
-        // icone (il testo lo leggono gli screen reader, sotto c'e' la legenda) e i nomi dei ruoli
-        // in testa alle colonne vanno in verticale.
+        // On a phone five columns of words do not fit: in the roles table the icons
+        // remain (screen readers read the text, the legend is below) and the role names
+        // at the top of the columns go vertical.
         String extraStyles = """
         @media (max-width: 575.98px) {
             #roleMatrix td { position: relative; }
@@ -10937,7 +10937,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """;
     }
 
-    // ============== FIREWALL.HTML — Geo-firewall pf con whitelist paesi + CIDR ==============
+    // ============== FIREWALL.HTML -- pf geo-firewall with country + CIDR whitelist ==============
     public static String getFirewallHtml() {
         String extraStyles = """
         .fw-mode-card {
@@ -11255,7 +11255,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """;
     }
 
-    /** JS della pagina /firewall (estratto per non sforare il constant pool). */
+    /** JS of the /firewall page (extracted so as not to overflow the constant pool). */
     private static String getFirewallJs() {
         return """
         let __fwCsrf = '';
@@ -11936,7 +11936,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """;
     }
 
-    // ============== CLOUDFLARE.HTML — Gestione account/API token Cloudflare ==============
+    // ============== CLOUDFLARE.HTML -- Cloudflare account/API token management ==============
     public static String getCloudflareHtml() {
         String extraStyles = """
         .cf-token-cell { font-family: monospace; font-size: .85rem; color: var(--text-secondary); }
@@ -12269,7 +12269,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """;
     }
 
-    // ============== PATHS.HTML — Diagnostic page con tutti i path usati dal pannello ==============
+    // ============== PATHS.HTML -- Diagnostic page with all the paths used by the panel ==============
     public static String getPathsHtml() {
         String extraStyles = """
         .path-entry { display: flex; flex-direction: column; padding: 12px; border-left: 4px solid #6c757d; background: #f8f9fa; border-radius: 4px; margin-bottom: 8px; }
@@ -12423,13 +12423,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """;
     }
 
-    // ============== AGGIORNAMENTI E PROTEZIONE PACCHETTI ==============
+    // ============== UPDATES AND PACKAGE PROTECTION ==============
     /**
-     * Pagina /updates. Il JavaScript sta in un metodo a parte: un blocco di testo Java non
-     * puo' superare i 65535 byte nel constant pool, e una chiamata a metodo interrompe la
-     * concatenazione costante che porterebbe a sforarlo.
+     * /updates page. The JavaScript is in a separate method: a Java text block cannot
+     * exceed 65535 bytes in the constant pool, and a method call interrupts the
+     * constant concatenation that would make it overflow.
      */
-    /** Gli stili delle pagine degli aggiornamenti e della diagnostica: i registri, i verdetti, la tabella dei pacchetti. */
+    /** The styles of the updates and diagnostics pages: the logs, the verdicts, the packages table. */
     private static String updatesStyles() {
         return """
         .upd-badge-ok    { background:#198754; }
@@ -12496,9 +12496,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     }
 
     /**
-     * Diagnostica (reperto 193): le schede che leggono il sistema e non cambiano niente, piu' qualche riparazione
-     * mirata, tolte dalla pagina degli aggiornamenti. Stesse azioni di /api/updates, stesso permesso; lo script e'
-     * quello degli aggiornamenti, che a ogni pagina fa solo cio' che trova (gli elementi che non ci sono si saltano).
+     * Diagnostics (finding 193): the tabs that read the system and change nothing, plus a few targeted
+     * repairs, taken out of the updates page. Same actions as /api/updates, same permission; the script is
+     * the updates one, which on every page does only what it finds (elements that are not there are skipped).
      */
     public static String getDiagnosticsHtml() {
         return getHead("nav.diagnostics", "diagnostics", updatesStyles()) + """
@@ -12721,16 +12721,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     }
 
     private static String getUpdatesScript() {
-        // Spezzato in parti perche' un letterale di testo non puo' superare 65535 byte
-        // (limite del formato .class). Concatenare due letterali NON basta: javac li fonde
-        // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
-        // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
+        // Split into parts because a text literal cannot exceed 65535 bytes
+        // (limit of the .class format). Concatenating two literals is NOT enough: javac merges them
+        // into a single constant and the limit comes back. A method call is not a constant,
+        // so it interrupts the merging -- and that is why the parts are methods.
         return resource("pages/upd-api.js") + getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js")
                 + resource("pages/os-update.js") + resource("pages/guided.js") + resource("pages/update-center.js")
                 + resource("pages/diag-all.js") + resource("pages/panel-release.js");
     }
 
-    /** La tabella dei pacchetti e la finestra di aggiornamento di un pacchetto. */
+    /** The packages table and the update window of a package. */
     private static String getUpdatesScriptPackages() {
         return """
         // ================= il quadro dei pacchetti =================

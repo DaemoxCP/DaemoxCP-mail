@@ -1,5 +1,5 @@
 // The packages of the Updates page in Chromium, on the English page, with the simulated server: the real reads (pkg
-// version, pkg query, pkg audit) are tested by PackagePlanTest. Since reperto 202 the packages are ONE row of "Update
+// version, pkg query, pkg audit) are tested by PackagePlanTest. Since finding 202 the packages are ONE row of "Update
 // the server" (no separate card, no separate row for the mail server ones): it says how many go in one plan and how many
 // of the mail server one at a time, and has one button, the step after: first protect the mail server packages that are
 // not locked, then the plan of the others, then the mail server ones one at a time. Under it, closed, the list one by
@@ -32,9 +32,9 @@ const requests = [];
 let rounds = 0, readings = 0;
 // Locking clamav (or all) protects the only mail server package without protection.
 let clamavLocked = false;
-// nginx and the PHP family updated by "Update everything" (reperto 207); allJob: the job is that one.
+// nginx and the PHP family updated by "Update everything" (finding 207); allJob: the job is that one.
 let nginxDone = false, phpDone = false, allJob = false;
-// The PHP family's checks stopped by a protected package with its own update (reperto 207): which one, or none.
+// The PHP family's checks stopped by a protected package with its own update (finding 207): which one, or none.
 let phpBlockedBy = '';
 
 const VULN_NGINX = { verdict: 'fixed-by-upgrade', installedVersion: '1.30.4,3', catalog: '1.30.5_1,3', firstFixed: '1.30.5,3',
@@ -59,7 +59,7 @@ function overview() {
               whyNot: 'The panel runs on this Java: it is updated with its own procedure.' },
             { name: 'clamav', installed: '1.5.4_1,1', available: '', update: false, locked: clamavLocked, stack: true, role: 'Antivirus', canUpdate: false, whyNot: '' },
             { name: 'expat', installed: '2.8.1', available: '2.8.4', update: true, locked: false, stack: false, role: '', canUpdate: true, whyNot: '', vuln: VULN_EXPAT },
-            // A family (reperto 203): php84 and its extensions go together, so they are ONE step of the row.
+            // A family (finding 203): php84 and its extensions go together, so they are ONE step of the row.
             ...['php84', 'php84-ctype', 'php84-curl'].map(n => ({ name: n, installed: phpDone ? '8.4.27_2' : '8.4.26', available: phpDone ? '' : '8.4.27_2', update: !phpDone, locked: true, stack: true,
               role: n === 'php84' ? 'PHP' : 'PHP extension', canUpdate: true, whyNot: '', family: '^php[0-9]+(-.+)?$',
               familyReason: 'PHP and its extensions share the version number' })),
@@ -96,7 +96,7 @@ async function served(route) {
         // The PHP family's checks, for "Update all": its own plan and signature, php-fpm to restart.
         case 'package_preflight': if (bodyText.package === 'php84' && phpBlockedBy) return json(route, { success: true, name: 'php84', canProceed: false,
             blocked: true, checks: [{ level: 'block', label: 'Protected package in the way', detail: phpBlockedBy + ' has its own update.' }],
-            // What the stopped plan already knows: a new library (reperto 208), shown and counted as shown.
+            // What the stopped plan already knows: a new library (finding 208), shown and counted as shown.
             plan: { measured: true, changes: [{ type: 'install', name: 'libxml3', from: '', to: '3.0.1' }],
                 blockers: [{ name: phpBlockedBy, reason: phpBlockedBy + ' has its own update.' }] } });
             if (bodyText.package === 'php84') return json(route, { success: true, name: 'php84', current: '8.4.26',
@@ -125,7 +125,7 @@ async function served(route) {
                 result: 'All 2 steps done.', consoleLog: '=== Step 1 of 2: nginx ===\n=== Step 2 of 2: php84 ===\n=== All 2 steps done. ===\n' } });
             return json(route, { success: true, job: { status: 'completed', percent: 100, elapsedSeconds: 12, errorMessage: '',
                 consoleLog: '[3/6] Upgrading...\n[6/6] Locking again...\n=== nginx 1.30.5_1,3 in service ===\n' } });
-        // The plan of the other packages would remove lmdb: it does not run from here (reperto 36), and the step after
+        // The plan of the other packages would remove lmdb: it does not run from here (finding 36), and the step after
         // passes to the mail server packages.
         case 'updates_status': return json(route, { success: true, dryRun: 'Your packages are up to date.', upToDate: false, signature: 'fedcba9876543210',
             plan: { measured: true, command: 'pkg upgrade -n', changes: [{ type: 'remove', name: 'lmdb', from: '1.0.2,1', to: '' },
@@ -250,7 +250,7 @@ async function served(route) {
     real('after: the card reads itself again and offers what is left, the other packages, with the button (it is tried again)',
         /Update everything \(1 step\)/.test(top) && /4 packages, all together in one plan/.test(top) && !/Nothing to update/.test(top));
 
-    // One family left: Update everything for one step, and the Packages row does not count it again (reperto 207).
+    // One family left: Update everything for one step, and the Packages row does not count it again (finding 207).
     const family = unlocked => page.evaluate(u => {
         const php = ['php84', 'php84-ctype', 'php84-curl'].map(n => ({ name: n, installed: '8.4.26', available: '8.4.27_2', update: true,
             locked: true, stack: true, canUpdate: true, whyNot: '', family: '^php[0-9]+(-.+)?$' }));

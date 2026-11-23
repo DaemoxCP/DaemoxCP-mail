@@ -1,9 +1,9 @@
 
-        // ---------- lo stato del pannello, in Home ----------
-        // Qui non ci sono pulsanti che AGISCONO: quelli stanno in Aggiornamenti, in un posto
-        // solo. Due copie dello stesso comando divergono, e la copia che si preme di rado
-        // resta indietro — e' il difetto che abbiamo tolto tutto il giorno. Qui si legge e si
-        // rimanda.
+        // ---------- the panel's state, in Home ----------
+        // There are no buttons here that ACT: those are in Updates, in a single
+        // place. Two copies of the same command diverge, and the copy that is pressed rarely
+        // falls behind: it is the defect we removed all day long. Here one reads and is
+        // sent elsewhere.
         async function homeApi(action) {
             try {
                 const res = await fetch('/api/updates', {
@@ -24,10 +24,10 @@
             return d.innerHTML;
         }
 
-        // Si carica da sola: sono due comandi di shell, non pesa. Ed e' la cosa che conta di
-        // piu', perche' dentro il server web vivono lo scheduler della rotazione DKIM, il
-        // rinnovo dei certificati e il rapporto periodico: se il pannello non riparte, quelli
-        // si fermano dove sono e nessuno lo segnala.
+        // It loads by itself: it is two shell commands, it is light. And it is the thing that matters
+        // most, because the DKIM rotation scheduler, the certificate renewal and the periodic report
+        // live inside the web server: if the panel does not come back up, those
+        // stop where they are and nobody reports it.
         async function homeState() {
             const el = document.getElementById('home-startup');
             el.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + homeEsc(t('hs.reading')) + '</span>';
@@ -40,12 +40,12 @@
                 return;
             }
             const ok = r.active === true;
-            // Il testo lo scrive il server, in "motivo": qui non se ne compone un secondo.
+            // The text is written by the server, in "reason": no second one is composed here.
             //
-            // Prima questa riga anteponeva un titolo ("Dopo un riavvio del server il pannello
-            // torna su da solo") e poi accodava motivo, che diceva la stessa cosa con altre
-            // parole: a schermo la frase compariva due volte di fila. Due punti che scrivono
-            // la stessa frase sono due punti che un giorno la scriveranno diversa.
+            // Before, this line prepended a title ("After a server restart the panel
+            // comes back up by itself") and then appended reason, which said the same thing in
+            // other words: on screen the sentence appeared twice in a row. Two places that write
+            // the same sentence are two places that will one day write it differently.
             el.innerHTML = '<div class="alert alert-' + (ok ? 'success' : 'warning') + ' py-2 small mb-0">'
                 + '<i class="fas fa-' + (ok ? 'check-circle' : 'triangle-exclamation') + ' me-1" aria-hidden="true"></i>'
                 + '<strong>' + homeEsc(r.reason || (ok ? t('hs.restarts') : t('hs.noRestart'))) + '</strong>'
@@ -53,8 +53,8 @@
                 + '</div>';
         }
 
-        // Questa NO: fa due scaricamenti da cloudflare.com e caricare la Home non deve
-        // dipendere da una rete esterna. Si preme quando serve.
+        // This one does NOT: it makes two downloads from cloudflare.com, and loading Home must not
+        // depend on an external network. It is pressed when needed.
         async function homeTrust() {
             const el = document.getElementById('home-trust');
             el.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
@@ -83,13 +83,13 @@
             }
         });
 
-        // La fine supporto NON e' misurata: e' una tabella copiata a mano dalla pagina
-        // ufficiale di FreeBSD, e il pannello non torna a rileggerla. Mostrarne la data senza
-        // dire che e' un ricordo la fa sembrare una misura di adesso.
+        // The end of support is NOT measured: it is a table copied by hand from the official
+        // FreeBSD page, and the panel does not go back to reread it. Showing its date without
+        // saying that it is a memory makes it look like a current measurement.
         //
-        // E il caso che conta e' quello in cui la serie NON e' in tabella: succede quando il
-        // sistema e' piu' nuovo della fotografia, cioe' proprio quando andrebbe riletta. Prima
-        // in quel caso non compariva niente, e un silenzio si legge come "nulla da segnalare".
+        // And the case that matters is the one where the series is NOT in the table: it happens when
+        // the system is newer than the snapshot, that is exactly when it should be reread. Before,
+        // in that case nothing appeared, and a silence reads as "nothing to report".
         function supportLine(so) {
             const read = so.supportSourceRead ? ' <span class="text-muted">'
                         + homeEsc(t('hs.tableCopied', { date: so.supportSourceRead })) + '</span>' : '';
@@ -98,7 +98,7 @@
                 return '<div class="small text-warning"><i class="fas fa-circle-question me-1" aria-hidden="true"></i>'
                      + t('hs.unknownSeries.html', { series: homeEsc(so.series) }) + read + '</div>';
             }
-            // Se la data e' passata o vicina, dirlo: una data sola non si legge da sola.
+            // If the date has passed or is near, say so: a date alone does not explain itself.
             let state = '';
             const p = String(so.endOfSupport).split('/');
             if (p.length === 3) {
@@ -111,14 +111,14 @@
                  + ' <strong>' + homeEsc(so.endOfSupport) + '</strong>' + state + read + '</div>';
         }
 
-        // ---------- versioni, riavvio, aggiornamenti ----------
-        // Si carica da sola perche' e' veloce: legge il catalogo GIA' scaricato, non fa
-        // "pkg update" ne' "pkg upgrade -n". Quelli stanno nella pagina Aggiornamenti e
-        // possono metterci minuti; una Home che gira non la apre piu' nessuno.
+        // ---------- versions, restart, updates ----------
+        // It loads by itself because it is fast: it reads the ALREADY downloaded catalog, it does not
+        // run "pkg update" or "pkg upgrade -n". Those are on the Updates page and
+        // can take minutes; a Home that keeps spinning is no longer opened by anyone.
         //
-        // Il prezzo e' che i numeri possono essere vecchi, e si dice: accanto al conteggio
-        // c'e' l'eta' del catalogo. Un numero preciso ricavato da dati di tre settimane fa
-        // sembra una misura e non lo e'.
+        // The price is that the numbers can be old, and this is said: next to the count
+        // there is the catalog's age. A precise number derived from data three weeks old
+        // looks like a measurement and is not.
         async function homeSystem() {
             const el = document.getElementById('home-system');
             if (!el) return;
@@ -133,8 +133,8 @@
                 return;
             }
             const so = r.os || {};
-            // L'eta' del dato accanto al dato: un conteggio senza la sua data sembra una
-            // misura di adesso anche quando viene da tre settimane fa.
+            // The age of the data next to the data: a count without its date looks like a
+            // current measurement even when it comes from three weeks ago.
             const ageText = (g, whatItem) => (g === undefined || g === null || g < 0) ? ''
                 : (g === 0 ? ' <span class="text-muted">' + homeEsc(t('hs.ageToday', { what: whatItem })) + '</span>'
                            : ' <span class="' + (g > 14 ? 'text-warning' : 'text-muted') + '">'
@@ -147,8 +147,8 @@
                + supportLine(so)
                + '</td></tr>';
 
-            // Kernel installato e in esecuzione sono due cose diverse: se differiscono manca
-            // un riavvio, ed e' l'unico modo per accorgersene.
+            // Installed kernel and running kernel are two different things: if they differ a
+            // restart is missing, and this is the only way to notice it.
             h += '<tr><td><strong>Kernel</strong></td><td>'
                + homeEsc(t('hs.kernelRunning')) + ' <code>' + homeEsc(so.uname || '?') + '</code>'
                + (so.installedKernel && so.installedKernel !== so.uname
@@ -159,17 +159,17 @@
                    : '')
                + '</td></tr>';
 
-            // Due conteggi diversi, e vanno etichettati come tali.
+            // Two different counts, and they must be labelled as such.
             //
-            // "Da aggiornare" viene da pkg version: pacchetti con una versione piu' recente
-            // nel catalogo. "Vulnerabili" viene da pkg audit: pacchetti con CVE note. Non
-            // sono lo stesso insieme e spesso non si somigliano nemmeno — un pacchetto puo'
-            // essere vulnerabile SENZA che esista una correzione, e aggiornabile senza avere
-            // nessuna vulnerabilita'. Messi uno sotto l'altro con due numeri diversi si
-            // leggono come una contraddizione, e chi guarda pensa che uno dei due sia rotto.
+            // "To update" comes from pkg version: packages with a more recent version
+            // in the catalog. "Vulnerable" comes from pkg audit: packages with known CVEs.
+            // They are not the same set and often do not even resemble each other: a package
+            // can be vulnerable WITHOUT a fix existing, and upgradable without having
+            // any vulnerability. Placed one under the other with two different numbers they
+            // read as a contradiction, and whoever looks thinks that one of the two is broken.
             const n = r.toUpdate || 0;
-            // Le altre tre categorie NON sono aggiornamenti, e vanno separate: contarle insieme
-            // dava un numero che nessun'altra schermata confermava.
+            // The other three categories are NOT updates, and must be kept separate: counting them
+            // together gave a number that no other screen confirmed.
             const others = [];
             if (r.newerThanCatalog) others.push(t('hs.newerThanCatalog.html', { n: homeEsc(r.newerThanCatalog) }));
             if (r.outsideCatalog) others.push(t('hs.notInCatalog.html', { n: homeEsc(r.outsideCatalog) }));
@@ -177,9 +177,9 @@
             h += '<tr><td><strong>' + homeEsc(t('hs.toUpdate')) + '</strong></td><td>'
                + (n === 0 ? '<span class="badge bg-success">' + homeEsc(t('hs.none')) + '</span>'
                           : '<span class="badge bg-warning text-dark">' + n + '</span>')
-               // La data del catalogo e' quella di pubblicazione sul server di pkg: la frase
-               // completa (piu' repository, uno senza catalogo) sta nel title.
-               // homeEsc non tocca le virgolette: dentro un attributo servono anche quelle.
+               // The catalog's date is that of its publication on the pkg server: the full
+               // sentence (several repositories, one without a catalog) is in the title.
+               // homeEsc does not touch quotes: inside an attribute those are needed too.
                + (r.catalogDate
                    ? ' <span class="' + (r.catalogDays > 14 ? 'text-warning' : 'text-muted') + '" title="'
                      + homeEsc(r.catalogNote || '').replace(/"/g, '&quot;') + '">'

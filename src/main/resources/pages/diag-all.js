@@ -1,24 +1,25 @@
 
-        // ---------- Diagnostica: controlla tutto (reperto 199) ----------
-        // Un pulsante: i controlli che leggono, uno dopo l'altro, e un elenco con prima quello da guardare. Ogni voce dice
-        // l'esito a parole e ha UN pulsante per il passo dopo (sistemare, andare dove si sistema, o aprire la scheda coi
-        // dettagli). Quello che e' a posto sta chiuso sotto. Il verdetto di ogni controllo segue le stesse regole della sua
-        // scheda (gli stessi campi, gli stessi colori): le schede qui sotto restano per i dettagli.
+        // ---------- Diagnostics: check everything (finding 199) ----------
+        // One button: the checks that read, one after the other, and a list with the one to look at first. Each
+        // entry states the outcome in words and has ONE button for the next step (fix it, go where it is fixed,
+        // or open the card with the details). What is fine stays collapsed below. The verdict of each check
+        // follows the same rules as its card (the same fields, the same colors): the cards below remain for the
+        // details.
 
-        // Il livello: problem (rosso), warn (giallo), todo (un passo da fare), info, ok. L'ordine dell'elenco.
+        // The level: problem (red), warn (yellow), todo (a step to take), info, ok. The order of the list.
         const DIAG_ORDER = { problem: 0, warn: 1, todo: 2, info: 3, ok: 4 };
 
         function diagOpen(key) { return { label: t('diag.all.open'), action: "diagOpenCard('" + key + "')" }; }
 
-        // Le regole di compatibilita' della scheda (updCompat), le stesse: rosso dove la scheda e' rossa, giallo dove e'
-        // gialla. Il testo dice cosa e di chi, componente per componente; i dettagli restano nella scheda.
+        // The card's compatibility rules (updCompat), the same ones: red where the card is red, yellow where it
+        // is yellow. The text says what and whose, component by component; the details stay in the card.
         function diagCompat(r) {
             const bad = [], warn = [];
             const d = r.dovecot || {}, pf = r.postfix || {}, rs = r.rspamd || {}, m = r.mysql || {}, w = r.webmail || {};
-            // Il verdetto della scheda e' un titolo in maiuscolo: qui sta dentro una frase.
+            // The card's verdict is an uppercase title: here it sits inside a sentence.
             const verdict = v => String(typeof updVerdict === 'function' ? updVerdict(v) : v).toLocaleLowerCase();
-            // Rosso solo se il pacchetto installato salterebbe alla 2.4; la 2.4 come pacchetto a parte (dovecot24), che
-            // niente installa da solo, e' da guardare, non un guasto (reperto 212).
+            // Red only if the installed package would jump to 2.4; 2.4 as a separate package (dovecot24), which
+            // nothing installs by itself, is something to look at, not a fault (finding 212).
             if (d.scanned && !d.compatible24) {
                 if (d.breakingUpgradeAvailable) bad.push(t('diag.c.dovecot24'));
                 else warn.push(t('diag.c.dovecot24Later'));
@@ -34,8 +35,8 @@
             return ['ok', t('diag.v.compatOk')];
         }
 
-        // I controlli, nell'ordine in cui girano: chiave, titolo (quello della scheda), azione di /api/updates, verdetto.
-        // Il verdetto: [livello, testo, pulsante?]; il pulsante e' { label, action } o niente.
+        // The checks, in the order they run: key, title (the card's), /api/updates action, verdict.
+        // The verdict: [level, text, button?]; the button is { label, action } or nothing.
         const DIAG_CHECKS = [
             { key: 'os', title: 'up.os', api: 'os_status', verdict: r => {
                 if (r.restartNeeded) return ['todo', t('osu.patchRestartRow', { now: r.userland, kernel: r.installedKernel }),
@@ -45,7 +46,7 @@
                 return ['ok', t('diag.v.osOk', { now: r.userland })];
             } },
             { key: 'journal', title: 'jr.title', api: 'journal_list', verdict: r => {
-                // Un errore a cui e' seguito un lavoro dello stesso tipo finito bene non e' da guardare (reperto 212).
+                // An error followed by a successful job of the same type is not something to look at (finding 212).
                 const ended = (r.journals || []).slice(0, 20).filter(j => j.status === 'error' || j.status === 'unfinished');
                 const bad = ended.filter(j => !j.settled);
                 if (!bad.length) return ['ok', ended.length ? tn('diag.v.jobsSettled', ended.length) : t('diag.v.jobsOk')];
@@ -69,10 +70,10 @@
             } },
             { key: 'env', title: 'up.env', api: 'panel_env', verdict: r => r.unreachable ? ['problem', r.explanation, diagOpen('env')]
                 : r.absent ? ['warn', r.explanation, diagOpen('env')] : ['ok', r.explanation] },
-            // La porta 25 in uscita (reperto 246): chiusa dal provider, la posta in uscita resta in coda.
+            // Outbound port 25 (finding 246): if the provider blocks it, outgoing mail stays in the queue.
             { key: 'smtpout', title: 'so.title', api: 'smtp_out', verdict: r => r.state === 'open' ? ['ok', t('so.v.open')]
                 : r.state === 'blocked' ? ['problem', t('so.v.blocked')] : ['info', t('so.v.unknown')] },
-            // Il firewall del provider con la lista di Cloudflare per pannello e webmail (reperto 245).
+            // The provider's firewall with Cloudflare's list for the panel and the webmail (finding 245).
             { key: 'pfw', title: 'pfw.title', api: 'provider_firewall', verdict: r => {
                 const go = { label: t('pfw.open'), href: '/firewall#provider-firewall' };
                 if (r.state === 'current') return ['ok', t('pfw.v.current')];
@@ -82,7 +83,7 @@
             } },
         ];
 
-        // La scheda di un controllo, coi suoi dettagli: la si riempie col suo controllo e ci si va.
+        // The card of a check, with its details: it is filled by its check, and the page goes to it.
         const DIAG_CARDS = { os: ['diag-os', 'osState'], svc: ['diag-svc', 'svcUsersLoad'], watch: ['diag-watch', 'watchLoad'],
             libs: ['diag-libs', 'libsCheck'], compat: ['diag-compat', 'updCompat'], java: ['diag-java', 'jvState'],
             web: ['diag-web', 'webDiag'], defaults: ['diag-defaults', 'defCheck'], env: ['diag-env', 'envCheck'] };

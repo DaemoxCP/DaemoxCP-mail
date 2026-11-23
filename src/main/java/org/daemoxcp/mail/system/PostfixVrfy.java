@@ -14,20 +14,20 @@ import java.time.Duration;
 import java.util.logging.Logger;
 
 /**
- * Il comando SMTP VRFY spento (disable_vrfy_command = yes).
+ * The SMTP VRFY command turned off (disable_vrfy_command = yes).
  *
- * Misurato sulla VM il 20/11/2026, sulla porta 25 e senza autenticazione: «VRFY casella-che-esiste» rispondeva 252,
- * «VRFY casella-che-non-esiste» 550 «User unknown». Chiunque poteva sapere quali caselle ci sono: e' l'enumerazione
- * degli account che la regola r6 vieta. La documentazione di Postfix (postconf(5), disable_vrfy_command): «Disable the
- * SMTP VRFY command. This stops some techniques used to harvest email addresses.» Nessun client di posta lo usa.
+ * Measured on the VM on 2026-11-20, on port 25 and without authentication: "VRFY existing-mailbox" answered 252,
+ * "VRFY nonexistent-mailbox" 550 "User unknown". Anyone could find out which mailboxes exist: it is the account
+ * enumeration that rule r6 forbids. Postfix's documentation (postconf(5), disable_vrfy_command): "Disable the
+ * SMTP VRFY command. This stops some techniques used to harvest email addresses." No mail client uses it.
  *
- * Il rifiuto al RCPT TO di un destinatario che non esiste resta com'e': e' quello che la documentazione raccomanda
- * (smtpd_reject_unlisted_recipient), perche' accettare e poi rimandare indietro produce posta di ritorno verso mittenti
- * falsificati.
+ * The rejection at RCPT TO of a recipient that does not exist stays as it is: it is what the documentation
+ * recommends (smtpd_reject_unlisted_recipient), because accepting and then bouncing produces backscatter towards
+ * forged senders.
  *
- * L'installatore lo scrive in main.cf; sui server installati prima lo fa questa riparazione all'avvio: postconf -e,
- * postfix check, reload, e la prova vera (un VRFY sulla 25 deve ricevere 502). Se qualcosa non torna rimette il valore
- * di prima e ricarica. Al secondo avvio non fa niente.
+ * The installer writes it into main.cf; on the servers installed earlier this boot repair does it: postconf -e,
+ * postfix check, reload, and the real test (a VRFY on 25 must receive 502). If something does not add up it puts
+ * the previous value back and reloads. On the second startup it does nothing.
  */
 public final class PostfixVrfy {
 
@@ -38,12 +38,12 @@ public final class PostfixVrfy {
 
     private PostfixVrfy() {}
 
-    /** Da fare: il valore di Postfix non e' yes (ne' il predefinito no, ne' altro). Funzione pura. */
+    /** To do: Postfix's value is not yes (neither the default no, nor anything else). Pure function. */
     static boolean needed(String value) {
         return !"yes".equalsIgnoreCase(value == null ? "" : value.trim());
     }
 
-    /** La risposta di Postfix a VRFY dice che il comando e' spento: 502 5.5.1. Funzione pura. */
+    /** Postfix's answer to VRFY says that the command is turned off: 502 5.5.1. Pure function. */
     static boolean refused(String reply) {
         return reply != null && reply.startsWith("502");
     }
@@ -86,7 +86,7 @@ public final class PostfixVrfy {
         if (reload) Shell.run(Duration.ofSeconds(30), "postfix", "reload");
     }
 
-    /** Un VRFY vero sulla 25 di questa macchina, aspettando ogni risposta: la riga che Postfix risponde, o null. */
+    /** A real VRFY on port 25 of this machine, waiting for every answer: the line Postfix answers, or null. */
     static String probe() {
         for (int attempt = 0; attempt < 10; attempt++) {
             try (Socket s = new Socket()) {
@@ -111,7 +111,7 @@ public final class PostfixVrfy {
         return null;
     }
 
-    /** L'ultima riga di una risposta SMTP (le righe «250-» continuano, «250 » chiude). */
+    /** The last line of an SMTP answer ("250-" lines continue, "250 " ends it). */
     private static String last(BufferedReader in) throws Exception {
         String line;
         while ((line = in.readLine()) != null) {

@@ -1,4 +1,4 @@
-// acme.sh and its Let's Encrypt account from the SSL page (reperto 247), on the real panel of the TEST VM:
+// acme.sh and its Let's Encrypt account from the SSL page (finding 247), on the real panel of the TEST VM:
 //
 //  1. without acme.sh, or with acme.sh but without an account, the card "Let's Encrypt is not ready" is shown, with
 //     the email field; a malformed address is refused in the page;

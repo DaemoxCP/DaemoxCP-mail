@@ -8,41 +8,45 @@ import java.util.Map;
 import org.daemoxcp.mail.database.MailDatabase;
 
 /**
- * I record A e AAAA dei nomi del server su Cloudflare: quello della posta (senza proxy), e per un server solo IPv6 anche
- * quelli del pannello e della webmail (col proxy, che Cloudflare fa passare sulla 2096 e sulla 8443). Usati dalla guida
- * degli indirizzi (ServerAddresses).
+ * The A and AAAA records of the server's names on Cloudflare: the mail one (without proxy), and for an IPv6-only
+ * server also those of the panel and the webmail (with the proxy, which Cloudflare passes through on 2096 and 8443).
+ * Used by the addresses guide (ServerAddresses).
  *
- * La regola di AutoDns vale anche qui: non si sovrascrive mai un record che c'e'. Se il nome ha gia' un A (o AAAA) con
- * un altro indirizzo, il pannello lo dice e si ferma: puo' essere un altro server, ed e' l'amministratore a decidere.
- * Togliere toglie solo il record che punta all'indirizzo del server, mai gli altri.
+ * The AutoDns rule applies here too: an existing record is never overwritten. If the name already has an A (or AAAA)
+ * with another address, the panel says so and stops: it may be another server, and it is up to the administrator to
+ * decide. Removing removes only the record that points to the server's address, never the others.
  *
- * L'account Cloudflare: quello del dominio del pannello a cui il nome appartiene (mail.example.org -> example.org); se il
- * dominio non e' fra quelli del pannello, l'unico account che vede la zona. Se nessuno la vede, l'amministratore crea il
- * record a mano e la guida controlla nel DNS pubblico.
+ * The Cloudflare account: the one of the panel's domain the name belongs to (mail.example.org -> example.org); if the
+ * domain is not among the panel's ones, the only account that sees the zone. If none sees it, the administrator
+ * creates the record by hand and the guide checks in the public DNS.
  */
 public final class HostRecords {
 
-    /** Esito: fatto o no, chiave della lingua, valori per il testo. */
+    /** Outcome: done or not, language key, values for the text. */
     public record Outcome(boolean ok, String key, Map<String, String> args) {
         static Outcome ok(String key, Map<String, String> args) { return new Outcome(true, key, args); }
         static Outcome no(String key, Map<String, String> args) { return new Outcome(false, key, args); }
     }
 
-    /** Dove scrivere: il token dell'account, la zona. */
+    /** Where to write: the account's token, the zone. */
     record Target(String token, String zoneId, String account) {}
 
     private HostRecords() {}
 
     /**
-     * Se il DNS pubblico da' gia' quell'indirizzo per quel nome, chiesto ai server della zona (FreshDns): un record
-     * appena scritto su Cloudflare si vede subito, non quando scade il «nessun record» ricordato dal risolutore.
+     * Whether the public DNS already gives that address for that name, asked of the zone's servers (FreshDns): a
+     * record just written on Cloudflare is seen right away, not when the "no record" remembered by the resolver
+     * expires.
      */
     public static boolean published(String host, String type, String ip) {
         if (!validHost(host)) return false;
         return DnsRecordsGenerator.containsAddress(FreshDns.query(type, host), ip);
     }
 
-    /** Se il nome ha un record di quel tipo, qualunque indirizzo (FreshDns): per sapere se c'e' ancora un A da togliere. */
+    /**
+     * Whether the name has a record of that type, any address (FreshDns): to know whether there is still an A to
+     * remove.
+     */
     public static boolean hasAny(String host, String type) {
         if (!validHost(host)) return false;
         for (String l : FreshDns.query(type, host).split("\n"))
@@ -50,14 +54,14 @@ public final class HostRecords {
         return false;
     }
 
-    /** Se c'e' un account Cloudflare che vede la zona di questo nome. */
+    /** Whether there is a Cloudflare account that sees the zone of this name. */
     public static boolean canWrite(MailDatabase db, CloudflareManager cf, String host) {
         return target(db, cf, host) != null;
     }
 
     /**
-     * Se su Cloudflare il nome ha un record di quel tipo verso quell'indirizzo (per i nomi col proxy il DNS pubblico da'
-     * gli indirizzi di Cloudflare, non quello del server: si guarda nella zona). Null se nessun account vede la zona.
+     * Whether on Cloudflare the name has a record of that type pointing to that address (for proxied names the public
+     * DNS gives Cloudflare's addresses, not the server's: the zone is looked at). Null if no account sees the zone.
      */
     public static Outcome check(MailDatabase db, CloudflareManager cf, String host, String type, String ip) {
         Map<String, String> args = Map.of("h", String.valueOf(host), "t", type, "ip", String.valueOf(ip));
@@ -72,7 +76,7 @@ public final class HostRecords {
         }
     }
 
-    /** Crea il record (o lo trova gia' giusto). proxied: false per la posta, true per pannello e webmail. */
+    /** Creates the record (or finds it already correct). proxied: false for mail, true for panel and webmail. */
     public static Outcome ensure(MailDatabase db, CloudflareManager cf, String host, String type, String ip, boolean proxied) {
         Map<String, String> args = Map.of("h", String.valueOf(host), "t", type, "ip", String.valueOf(ip));
         if (!validHost(host) || ip == null) return Outcome.no("server.hr.badInput", args);
@@ -96,7 +100,7 @@ public final class HostRecords {
                 : Outcome.no("server.hr.failed", Map.of("h", host, "t", type, "ip", ip, "e", String.valueOf(op.error)));
     }
 
-    /** Toglie il record di quel tipo che punta all'indirizzo del server; gli altri restano. */
+    /** Removes the record of that type that points to the server's address; the others stay. */
     public static Outcome remove(MailDatabase db, CloudflareManager cf, String host, String type, String ip) {
         Map<String, String> args = Map.of("h", String.valueOf(host), "t", type, "ip", String.valueOf(ip));
         if (!validHost(host) || ip == null) return Outcome.no("server.hr.badInput", args);
@@ -125,7 +129,7 @@ public final class HostRecords {
         return out;
     }
 
-    /** L'account e la zona: quello del dominio del pannello a cui appartiene il nome, oppure l'unico che vede la zona. */
+    /** The account and the zone: the one of the panel's domain the name belongs to, or the only one that sees the zone. */
     static Target target(MailDatabase db, CloudflareManager cf, String host) {
         if (db == null || cf == null || !validHost(host)) return null;
         String h = host.toLowerCase(Locale.ROOT);
@@ -142,7 +146,7 @@ public final class HostRecords {
             for (MailDatabase.CloudflareAccount acct : cf.listAccounts()) {
                 CloudflareManager.ZoneLookup zl = cf.findZone(acct.apiToken, h);
                 if (!zl.found) continue;
-                if (only != null) return null;   // piu' di uno: non si sceglie a caso
+                if (only != null) return null;   // more than one: we do not pick at random
                 only = new Target(acct.apiToken, zl.zoneId, acct.label);
             }
             return only;

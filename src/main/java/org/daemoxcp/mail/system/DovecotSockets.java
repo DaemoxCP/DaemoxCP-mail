@@ -15,24 +15,26 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * I tre socket di Dovecot aperti a chiunque e che il pannello non usa, chiusi.
+ * Dovecot's three sockets that are open to anyone and that the panel does not use, closed.
  *
- * Nella 2.4 Dovecot crea in /var/run/dovecot (0755) alcuni socket con mode 0666: qualunque utente della macchina ci si
- * collega. Misurato sulla VM e sul server vero il 17/11/2026: indexer, imap-urlauth, auth-token e dns-client (gli altri
- * 0666 stanno in login/ e token-login/, cartelle 0750 di dovenull). Nessuno di quei tre serve al pannello:
- *   - indexer serve alla ricerca nel testo (fts) e a `doveadm index -q`: il pannello non configura fts. 0660 root:vmail,
- *     cosi' i processi delle caselle (vmail) lo raggiungono se un giorno la ricerca ci sara';
- *   - imap-urlauth (del servizio imap-urlauth-login, non di imap-urlauth: un nome sbagliato e Dovecot non parte, visto
- *     sulla VM) e auth-token servono a IMAP URLAUTH, spento (imap_urlauth_host vuoto). 0600 root.
- * dns-client resta com'e': fa solo ricerche DNS.
+ * In 2.4 Dovecot creates in /var/run/dovecot (0755) some sockets with mode 0666: any user on the machine can
+ * connect to them. Measured on the VM and on the production server on 2026-11-17: indexer, imap-urlauth,
+ * auth-token and dns-client (the other 0666 ones are in login/ and token-login/, 0750 folders of dovenull). None
+ * of those three is needed by the panel:
+ *   - indexer is for full-text search (fts) and for `doveadm index -q`: the panel does not configure fts. 0660
+ *     root:vmail, so that the mailbox processes (vmail) can reach it if one day there is search;
+ *   - imap-urlauth (of the imap-urlauth-login service, not of imap-urlauth: a wrong name and Dovecot does not
+ *     start, seen on the VM) and auth-token are for IMAP URLAUTH, which is off (imap_urlauth_host empty). 0600 root.
+ * dns-client stays as it is: it only does DNS lookups.
  *
- * Non danno dati a nessuno, ma un servizio della macchina preso da qualcuno (la webmail, per esempio) non deve poter
- * parlare con Dovecot dove non serve. L'installatore scrive il file per la 2.4 (DovecotConfig, conf.d/10-sockets.conf);
- * sui server installati prima lo scrive questa riparazione all'avvio, con lo stesso file. Dovecot crea i socket solo
- * quando parte: serve un riavvio, non un reload (reload non ricrea i socket, misurato). Prima si controlla che
- * l'autenticazione funzioni; dopo il riavvio che Dovecot giri, che l'autenticazione funzioni ancora, che il socket di
- * LMTP e la porta IMAP ci siano e che i tre socket abbiano i permessi nuovi. Se qualcosa non torna si toglie il file e
- * si riavvia: Dovecot torna com'era. Solo nella 2.4: nella 2.3 auth-token non e' detto che ci sia, e non si e' provata.
+ * They give data to nobody, but a service on the machine taken over by someone (the webmail, for example) must
+ * not be able to talk to Dovecot where it is not needed. The installer writes the file for 2.4 (DovecotConfig,
+ * conf.d/10-sockets.conf); on servers installed earlier this boot repair writes it, with the same file. Dovecot
+ * creates the sockets only when it starts: a restart is needed, not a reload (reload does not recreate the
+ * sockets, measured). First it checks that authentication works; after the restart, that Dovecot runs, that
+ * authentication still works, that the LMTP socket and the IMAP port are there and that the three sockets have the
+ * new permissions. If something does not add up, the file is removed and Dovecot restarts: it goes back to how it
+ * was. Only in 2.4: in 2.3 auth-token is not necessarily there, and it has not been tested.
  */
 public final class DovecotSockets {
 
@@ -42,7 +44,7 @@ public final class DovecotSockets {
     static final Path RUN = Path.of("/var/run/dovecot");
     static final Path LMTP_SOCKET = Path.of("/var/spool/postfix/private/dovecot-lmtp");
 
-    /** I socket e i permessi che devono avere (rwx dell'utente, del gruppo, degli altri). */
+    /** The sockets and the permissions they must have (rwx of the user, of the group, of others). */
     static final Map<String, String> WANTED = new LinkedHashMap<>();
     static {
         WANTED.put("indexer", "rw-rw----");
@@ -52,7 +54,7 @@ public final class DovecotSockets {
 
     private DovecotSockets() {}
 
-    /** Il contenuto del file: lo stesso per l'installatore (DovecotConfig) e per la riparazione. */
+    /** The content of the file: the same for the installer (DovecotConfig) and for the repair. */
     public static String fileContent() {
         return "# " + PanelMarker.WRITTEN + ".\n"
              + "# Sockets Dovecot creates open to everyone (0666) that the panel does not use: indexer is for full-text\n"
@@ -79,11 +81,11 @@ public final class DovecotSockets {
     enum Action { NOTHING, NOT_24, APPLY, RESTART_ONLY }
 
     /**
-     * Che cosa fare. Funzione pura, per provarla.
+     * What to do. A pure function, so that it can be tested.
      *
      * @param version    `dovecot --version`
-     * @param fileNow    il file com'e' adesso, o null se non c'e'
-     * @param wrongNow   i socket che oggi non hanno i permessi voluti
+     * @param fileNow    the file as it is now, or null if it is not there
+     * @param wrongNow   the sockets that today do not have the wanted permissions
      */
     static Action decide(String version, String fileNow, List<String> wrongNow) {
         if (version == null || !version.trim().startsWith("2.4")) return Action.NOT_24;
@@ -92,7 +94,10 @@ public final class DovecotSockets {
         return fileRight ? Action.RESTART_ONLY : Action.APPLY;
     }
 
-    /** I socket di WANTED che ci sono e non hanno i permessi voluti. Uno che manca non conta (Dovecot spento). */
+    /**
+     * The sockets of WANTED that exist and do not have the wanted permissions. A missing one does not count
+     * (Dovecot stopped).
+     */
     static List<String> wrong(Path run) {
         List<String> out = new ArrayList<>();
         for (Map.Entry<String, String> e : WANTED.entrySet()) {
@@ -123,7 +128,10 @@ public final class DovecotSockets {
         }
     }
 
-    /** Scrive il file, valida, riavvia e verifica; se la verifica non torna, rimette com'era e riavvia. */
+    /**
+     * Writes the file, validates, restarts and verifies; if the verification fails, puts it back as it was and
+     * restarts.
+     */
     static boolean apply(Path file, String content) throws Exception {
         if (!DovecotAuthWorker.running()) {
             LOGGER.info("[DovecotSockets] Dovecot is not running: sockets left as they are, retrying at the next start");
@@ -163,7 +171,10 @@ public final class DovecotSockets {
         }
     }
 
-    /** Dopo il riavvio, fino a 20 s: Dovecot gira, l'autenticazione passa, LMTP e IMAP ci sono, i permessi sono quelli. */
+    /**
+     * After the restart, up to 20 s: Dovecot runs, authentication goes through, LMTP and IMAP are there, the
+     * permissions are the right ones.
+     */
     static String verify() throws InterruptedException {
         String last = "unreachable";
         for (int i = 0; i < 40; i++) {
@@ -180,7 +191,7 @@ public final class DovecotSockets {
         return last;
     }
 
-    /** null se Dovecot gira e risponde; altrimenti che cosa manca. */
+    /** null if Dovecot runs and answers; otherwise what is missing. */
     static String verifyRunning() {
         if (!DovecotAuthWorker.running()) return "Dovecot does not run after the restart";
         int rc = DovecotAuthWorker.lookup();
@@ -210,7 +221,7 @@ public final class DovecotSockets {
         else Files.deleteIfExists(file);
         if (restart) {
             restart();
-            // Il riavvio di prima puo' aver lasciato Dovecot spento: si riprova ad accenderlo
+            // The earlier restart may have left Dovecot stopped: we try to start it again
             if (!DovecotAuthWorker.running()) Shell.run(Duration.ofSeconds(60), "service", "dovecot", "start");
         }
     }

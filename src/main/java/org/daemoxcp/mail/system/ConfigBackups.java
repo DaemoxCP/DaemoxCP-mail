@@ -18,33 +18,33 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Le copie di sicurezza che il pannello fa di un file di configurazione prima di cambiarlo: se ne tengono le ultime
- * {@link #KEEP} per file, le piu' vecchie si cancellano.
+ * The backup copies the panel makes of a configuration file before changing it: the last {@link #KEEP} per
+ * file are kept, the older ones are deleted.
  *
- * Fino alla 0.9.0 non se ne cancellava nessuna. Ogni «Applica» del firewall, ogni passaggio di PfPolicy, ogni modifica
- * di resolv.conf, di unbound o di una jail lasciava una copia in piu', per sempre: sul server vero, il 18/11/2026, 221
- * copie di /etc/pf.conf e 267 dell'anchor del firewall (trovato percorrendo tutte le funzioni del pannello). Non pesano
- * molto, ma crescono senza fine e nascondono fra centinaia di nomi quella che serve per tornare indietro.
+ * Up to 0.9.0 none were ever deleted. Every "Apply" of the firewall, every PfPolicy pass, every change to
+ * resolv.conf, to unbound or to a jail left one more copy, forever: on the production server, on 2026-11-18, 221
+ * copies of /etc/pf.conf and 267 of the firewall anchor (found by going through all the panel's functions). They do
+ * not weigh much, but they grow without end and hide, among hundreds of names, the one you need to go back.
  *
- * Le copie sono quelle che il pannello scrive, e solo quelle:
- *  - accanto all'originale, «file.bak.MILLISECONDI» (13 cifre): {@link #copy} le fa e toglie le vecchie;
- *  - nella cartella delle copie di fail2ban, «file.bak.AAAAMMGG-HHMMSS» (Fail2banManager): li' {@link #prune} prima
- *    di farne una nuova.
- * Un nome scritto a mano con un'altra forma (pf.conf.bak, pf.conf.bak.20250101, pf.conf.orig) non si tocca mai; ne'
- * un collegamento o una cartella col nome di una copia; ne' le copie una tantum di BanActionRepair («.before-pf-»).
- * Le piu' recenti si riconoscono dal momento scritto nel nome, non dalla data del file.
+ * The copies are the ones the panel writes, and only those:
+ *  - next to the original, "file.bak.MILLISECONDS" (13 digits): {@link #copy} makes them and removes the old ones;
+ *  - in the fail2ban backup folder, "file.bak.YYYYMMDD-HHMMSS" (Fail2banManager): there {@link #prune} runs before
+ *    making a new one.
+ * A name written by hand in another form (pf.conf.bak, pf.conf.bak.20250101, pf.conf.orig) is never touched; nor
+ * a link or a folder with the name of a copy; nor the one-off copies of BanActionRepair (".before-pf-").
+ * The most recent ones are recognised by the moment written in the name, not by the file's date.
  *
- * {@link #ensureAtBoot} toglie le copie in piu' gia' lasciate dalle versioni di prima, una volta, al primo avvio:
- * al secondo non trova niente e non scrive niente.
+ * {@link #ensureAtBoot} removes the extra copies already left by earlier versions, once, at the first startup:
+ * at the second it finds nothing and writes nothing.
  */
 public final class ConfigBackups {
 
     private static final Logger LOGGER = Logger.getLogger(ConfigBackups.class.getName());
 
-    /** Quante copie si tengono per ogni file: abbastanza per tornare indietro di parecchi passi. */
+    /** How many copies are kept for each file: enough to go back quite a few steps. */
     public static final int KEEP = 10;
 
-    /** I file di cui il pannello fa una copia accanto all'originale. */
+    /** The files of which the panel makes a copy next to the original. */
     static final List<Path> BESIDE = List.of(
             Path.of("/etc/pf.conf"),
             Path.of("/etc/pf.anchors/panel-fw.conf"),
@@ -56,10 +56,10 @@ public final class ConfigBackups {
             Path.of("/var/unbound/forward.conf"),
             Path.of("/usr/local/etc/rspamd/local.d/antivirus.conf"));
 
-    /** La cartella delle copie dei file di fail2ban (Fail2banManager, BanActionRepair): fuori da jail.d. */
+    /** The folder of the copies of fail2ban's files (Fail2banManager, BanActionRepair): outside jail.d. */
     public static final Path FAIL2BAN_FOLDER = Path.of(DataFolderRename.NEW, "fail2ban-backups");
 
-    /** Una copia del pannello: il nome del file, «.bak.», i millisecondi (13 cifre) o AAAAMMGG-HHMMSS. */
+    /** A copy made by the panel: the file name, ".bak.", the milliseconds (13 digits) or YYYYMMDD-HHMMSS. */
     static final Pattern COPY = Pattern.compile("(.+)\\.bak\\.([0-9]{13}|[0-9]{8}-[0-9]{6})");
 
     private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
@@ -67,8 +67,9 @@ public final class ConfigBackups {
     private ConfigBackups() {}
 
     /**
-     * Copia original accanto a se', come «original.bak.MILLISECONDI», poi toglie le copie oltre le ultime {@link #KEEP}.
-     * Torna il percorso della copia nuova. Due copie nello stesso millisecondo hanno comunque due nomi.
+     * Copies original next to itself, as "original.bak.MILLISECONDS", then removes the copies beyond the
+     * last {@link #KEEP}. Returns the path of the new copy. Two copies in the same millisecond still get
+     * two names.
      */
     public static Path copy(Path original, CopyOption... options) throws IOException {
         Path dir = original.toAbsolutePath().getParent();
@@ -82,8 +83,8 @@ public final class ConfigBackups {
     }
 
     /**
-     * In dir, le copie di name oltre le ultime keep: cancellate, dalla piu' vecchia. Torna quante. Non solleva: una
-     * copia che non si cancella si dice nel log e non ferma il lavoro che l'ha chiesta.
+     * In dir, the copies of name beyond the last keep: deleted, oldest first. Returns how many. Does not throw:
+     * a copy that cannot be deleted is reported in the log and does not stop the job that asked for it.
      */
     public static int prune(Path dir, String name, int keep) {
         int removed = 0;
@@ -98,7 +99,7 @@ public final class ConfigBackups {
         return removed;
     }
 
-    /** Le copie di name in dir, dalla piu' vecchia alla piu' recente: solo file veri, mai attraverso collegamenti. */
+    /** The copies of name in dir, from the oldest to the most recent: only real files, never through links. */
     static List<Path> copiesOf(Path dir, String name) throws IOException {
         List<Path> found = new ArrayList<>();
         if (!Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS)) return found;
@@ -112,17 +113,20 @@ public final class ConfigBackups {
         return found;
     }
 
-    /** Il momento scritto nel nome di una copia, in millisecondi. */
+    /** The moment written in the name of a copy, in milliseconds. */
     static long moment(Path copy) {
         Matcher m = COPY.matcher(copy.getFileName().toString());
         if (!m.matches()) return Long.MIN_VALUE;
         String stamp = m.group(2);
         if (stamp.length() == 13) return Long.parseLong(stamp);
-        // Fail2banManager scrive l'ora del server (LocalDateTime.now()): si legge con lo stesso fuso.
+        // Fail2banManager writes the server's time (LocalDateTime.now()): it is read with the same time zone.
         return LocalDateTime.parse(stamp, STAMP).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
     }
 
-    /** I nomi dei file che hanno copie in dir (per la cartella di fail2ban, dove ce ne sono di diversi). */
+    /**
+     * The names of the files with copies in dir (for the fail2ban folder, where there are copies of
+     * different files).
+     */
     static TreeSet<String> namesIn(Path dir) throws IOException {
         TreeSet<String> names = new TreeSet<>();
         if (!Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS)) return names;
@@ -135,7 +139,10 @@ public final class ConfigBackups {
         return names;
     }
 
-    /** Le copie in piu' dei file in beside e di quelli nella cartella folder: cosa e' stato tolto, vuoto se niente. */
+    /**
+     * The extra copies of the files in beside and of those in the folder folder: what was removed, empty if
+     * nothing.
+     */
     static String clean(List<Path> beside, Path folder) throws IOException {
         StringBuilder done = new StringBuilder();
         for (Path f : beside) note(done, f, prune(f.getParent(), f.getFileName().toString(), KEEP));

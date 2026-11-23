@@ -17,10 +17,10 @@ public final class SqlCatalog {
     public static final String MAIL_GRANT_PANEL_USER = "GRANT ALL PRIVILEGES ON daemoxcp_mail.* TO 'daemoxcp_mail'@'127.0.0.1'";
 
     /**
-     * MailDatabase.createDatabaseAndUser; MailDbUsers, dopo aver cambiato i permessi per colonna. Misurato sulla VM
-     * l'08/11/2026 col MySQL 8.4.11 dei pacchetti: una colonna tolta e ridata a un utente che ha ancora le altre della
-     * stessa tabella compare in mysql.columns_priv e in information_schema, ma MySQL continua a rifiutarla (1143)
-     * finche' non si ricaricano i permessi.
+     * MailDatabase.createDatabaseAndUser; MailDbUsers, after changing the per-column privileges. Measured on the VM
+     * on 2026-11-08 with MySQL 8.4.11 from the packages: a column revoked and granted again to a user who still has the
+     * other columns of the same table shows up in mysql.columns_priv and in information_schema, but MySQL keeps
+     * refusing it (1143) until the privileges are reloaded.
      */
     public static final String MAIL_FLUSH_PRIVILEGES = "FLUSH PRIVILEGES";
 
@@ -320,7 +320,7 @@ public final class SqlCatalog {
     /** MailDatabase.getAdminLanguage */
     public static final String MAIL_GET_ADMIN_LANGUAGE = "SELECT language FROM panel_admin WHERE username = ?";
 
-    /** MailDatabase.getPanelLanguage: la lingua della console, quella del primo amministratore attivo che ne ha scelta una. */
+    /** MailDatabase.getPanelLanguage: the console language, that of the first active administrator who has chosen one. */
     public static final String MAIL_GET_PANEL_LANGUAGE = "SELECT language FROM panel_admin WHERE language IS NOT NULL AND active = TRUE ORDER BY id LIMIT 1";
 
     /** MailDatabase.setAdminLanguage */
@@ -462,7 +462,10 @@ public final class SqlCatalog {
     public static final String MAIL_GET_DOMAIN_BY_NAME = "SELECT * FROM domains WHERE domain = ?";
 
     /** MailDatabase.getDomains */
-    /** DomainCache: i nomi dei domini ospitati, per autoconfig e MTA-STS (nella parte web la procedura pubblica list_domain_names) */
+    /**
+     * DomainCache: the names of the hosted domains, for autoconfig and MTA-STS (in the web part, the public procedure
+     * list_domain_names)
+     */
     public static final String MAIL_GET_DOMAIN_NAMES = "SELECT domain FROM domains ORDER BY domain";
 
     public static final String MAIL_GET_DOMAINS = "SELECT d.*,\n"
@@ -553,16 +556,16 @@ public final class SqlCatalog {
             + " junk_expunge_days = ?, trash_expunge_days = ? WHERE id = ?";
 
     /**
-     * MailDatabase.ensureMailboxCleanupColumns: dopo quanti giorni Dovecot svuota da solo la Junk e il Cestino della
-     * casella (mailbox_autoexpunge, dal userdb sql di DovecotQuota); 0 = mai, ed e' il predefinito: si accende solo a
-     * richiesta, dal pannello o dalla webmail.
+     * MailDatabase.ensureMailboxCleanupColumns: after how many days Dovecot empties the mailbox's Junk and Trash by
+     * itself (mailbox_autoexpunge, from the sql userdb of DovecotQuota); 0 = never, and that is the default: it is
+     * turned on only on request, from the panel or from the webmail.
      */
     public static final String MAIL_ADD_MAILBOXES_JUNK_EXPUNGE_DAYS = "ALTER TABLE mailboxes ADD COLUMN junk_expunge_days SMALLINT UNSIGNED NOT NULL DEFAULT 0";
 
     /** MailDatabase.ensureMailboxCleanupColumns */
     public static final String MAIL_ADD_MAILBOXES_TRASH_EXPUNGE_DAYS = "ALTER TABLE mailboxes ADD COLUMN trash_expunge_days SMALLINT UNSIGNED NOT NULL DEFAULT 0";
 
-    /** MailDatabase.setMailboxCleanup: la webmail (solo la root, la rotta interna di Roundcube) per la sua casella. */
+    /** MailDatabase.setMailboxCleanup: the webmail (root part only, Roundcube's internal route) for its own mailbox. */
     public static final String MAIL_UPDATE_MAILBOX_CLEANUP = "UPDATE mailboxes SET junk_expunge_days = ?, trash_expunge_days = ? WHERE email = ? AND active = 1";
 
     /** MailDatabase.ensureMailboxReceiveEnabledColumn */
@@ -673,8 +676,8 @@ public final class SqlCatalog {
             + "ORDER BY sf.priority, sf.id\n";
 
     /**
-     * MailDatabase.getSieveFilter: un filtro solo, per la finestra che lo modifica e per sapere di quale casella
-     * riscrivere le regole (quella della riga, non quella che dice la richiesta: reperto 224).
+     * MailDatabase.getSieveFilter: a single filter, for the window that edits it and to know which mailbox's rules to
+     * rewrite (the one on the row, not the one the request names: finding 224).
      */
     public static final String MAIL_GET_SIEVE_FILTER = "SELECT sf.*, m.email FROM sieve_filters sf\n"
             + "JOIN mailboxes m ON sf.mailbox_id = m.id\n"
@@ -694,7 +697,7 @@ public final class SqlCatalog {
             + "JOIN mailboxes m ON fr.mailbox_id = m.id\n"
             + "WHERE fr.mailbox_id = ?\n";
 
-    /** MailDatabase.getForwardingRule: un inoltro solo, per sapere di quale casella riscrivere le regole (reperto 224). */
+    /** MailDatabase.getForwardingRule: a single forward, to know which mailbox's rules to rewrite (finding 224). */
     public static final String MAIL_GET_FORWARDING_RULE = "SELECT fr.*, m.email FROM forwarding_rules fr\n"
             + "JOIN mailboxes m ON fr.mailbox_id = m.id\n"
             + "WHERE fr.id = ?\n";
@@ -877,7 +880,7 @@ public final class SqlCatalog {
     public static final String CONFIG_UPDATE_PANEL_CONFIG = "UPDATE config SET panel_host = ?, panel_port = ?, panel_ssl_cert = ?, panel_ssl_cert_key = ?, panel_ssl_chain = ?, panel_sessions_prefix = ? WHERE id = 1";
 
     /** dataBaseManager.update_mysql_config */
-    /** MysqlRename: il database e l'utente del pannello col nome di adesso, la password resta */
+    /** MysqlRename: the panel's database and user under the current name; the password stays */
     public static final String CONFIG_RENAME_MYSQL = "UPDATE config SET mysql_user = ?, mysql_database = ? WHERE id = 1";
 
     public static final String CONFIG_UPDATE_MYSQL_CONFIG = "UPDATE config SET mysql_host = ?, mysql_port = ?, mysql_user = ?, mysql_password = ?, mysql_database = ? WHERE id = 1";
@@ -918,13 +921,13 @@ public final class SqlCatalog {
     /** PublicSurfaceRename.moveJailState */
     public static final String RENAME_BUSY_TIMEOUT = "PRAGMA busy_timeout = 10000";
 
-    // ===== Scritte a mano dal SQL composto di prima =====
+    // ===== Written by hand from the previously composed SQL =====
 
-    /** MailDatabase.createDatabaseAndUser: la password e' un parametro, che il driver mette fra apici con l'escape giusto */
+    /** MailDatabase.createDatabaseAndUser: the password is a parameter, which the driver quotes with the right escaping */
     public static final String MAIL_CREATE_PANEL_USER = "CREATE USER IF NOT EXISTS 'daemoxcp_mail'@'127.0.0.1' IDENTIFIED BY ?";
 
 
-    /** MailDatabase.dropAllTables: le tabelle di MailDatabase.PANEL_TABLES, nello stesso ordine (lo controlla SqlCatalogTest) */
+    /** MailDatabase.dropAllTables: the tables of MailDatabase.PANEL_TABLES, in the same order (checked by SqlCatalogTest) */
     public static final String MAIL_DROP_PANEL_TABLES = "DROP TABLE IF EXISTS admin_passkeys, rspamd_training, panel_sessions, login_code_email, login_code_console, stepup_code, email_change_code, roundcube_tokens, auto_responders, sieve_filters, forwarding_rules, email_statistics, aliases, mailboxes, dkim_rotation_history, domains, cloudflare_accounts, audit_log, rate_limits, panel_settings, panel_role_permissions, installed_components, panel_admin, virtual_aliases, virtual_users, virtual_domains";
 
     /** MailDatabase.createAuthTables */
@@ -1054,7 +1057,7 @@ public final class SqlCatalog {
             + "VALUES (CURDATE(), ?, ?, ?, ?)\n"
             + "ON DUPLICATE KEY UPDATE bounced_count = bounced_count + ?, bytes_received = bytes_received + ?\n";
 
-    /** MailDatabase.incrementEmailStatOn: il giorno del messaggio (UTC), non quello in cui si conta (MailLogStats) */
+    /** MailDatabase.incrementEmailStatOn: the day of the message (UTC), not the day it is counted on (MailLogStats) */
     public static final String MAIL_ADD_STAT_SENT_ON = "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id, sent_count, bytes_sent)\n"
             + "VALUES (?, ?, ?, ?, ?)\n"
             + "ON DUPLICATE KEY UPDATE sent_count = sent_count + ?, bytes_sent = bytes_sent + ?\n";
@@ -1079,13 +1082,16 @@ public final class SqlCatalog {
             + "VALUES (?, ?, ?, ?, ?)\n"
             + "ON DUPLICATE KEY UPDATE bounced_count = bounced_count + ?, bytes_received = bytes_received + ?\n";
 
-    /** MailDatabase.deleteEmailStatsBefore: i conteggi tenuti un tempo definito (MailLogStats.KEEP_DAYS) */
+    /** MailDatabase.deleteEmailStatsBefore: the counts kept for a defined time (MailLogStats.KEEP_DAYS) */
     public static final String MAIL_DELETE_STATS_BEFORE = "DELETE FROM email_statistics WHERE stat_date < ?";
 
-    /** MailDatabase.getAuditLog: un filtro vuoto (NULL) prende tutto, invece di comporre il WHERE */
+    /** MailDatabase.getAuditLog: an empty filter (NULL) takes everything, instead of composing the WHERE */
     public static final String MAIL_GET_AUDIT_LOG = "SELECT * FROM audit_log WHERE (? IS NULL OR action = ?) AND (? IS NULL OR username = ?) AND (? IS NULL OR ip_address = ?) ORDER BY created_at DESC LIMIT ?";
 
-    /** AuthStore: le colonne di un amministratore. Un pezzo, non un'istruzione: privata, la guardia non la accetta da sola */
+    /**
+     * AuthStore: the columns of an administrator. A fragment, not a statement: private, the guard does not accept it on
+     * its own
+     */
     private static final String AUTH_ADMIN_SELECT = "SELECT id, username, role, active, email_enc, user_handle, created_at, last_login FROM panel_admin ";
 
     /** AuthStore.admins */
@@ -1103,7 +1109,7 @@ public final class SqlCatalog {
     /** AuthStore.adminByUserHandle */
     public static final String AUTH_ADMIN_BY_USER_HANDLE = AUTH_ADMIN_SELECT + "WHERE user_handle = ? AND active = TRUE";
 
-    /** AuthStore: le colonne di una passkey. Un pezzo, privato come AUTH_ADMIN_SELECT */
+    /** AuthStore: the columns of a passkey. A fragment, private like AUTH_ADMIN_SELECT */
     private static final String AUTH_PASSKEY_SELECT = "SELECT id, admin_id, credential_id, public_key_cose, sign_count, name, created_at, last_used, user_handle FROM admin_passkeys ";
 
     /** AuthStore.passkeysOf */
@@ -1196,13 +1202,13 @@ public final class SqlCatalog {
     /** AuthStore.CodeFlow.EMAIL_CHANGE */
     public static final String AUTH_CODE_EMAIL_CHANGE_PURGE = "DELETE FROM email_change_code WHERE expires_at < ?";
 
-    /** dataBaseManager: la colonna del segreto, vuota dopo lo spostamento nel file */
+    /** dataBaseManager: the secret's column, empty after the move into the file */
     public static final String CONFIG_GET_MYSQL_PASSWORD = "SELECT mysql_password FROM config WHERE id = 1";
 
     /** dataBaseManager.migrateSecrets */
     public static final String CONFIG_CLEAR_MYSQL_PASSWORD = "UPDATE config SET mysql_password = '' WHERE id = 1";
 
-    /** dataBaseManager: la colonna del segreto, vuota dopo lo spostamento nel file */
+    /** dataBaseManager: the secret's column, empty after the move into the file */
     public static final String CONFIG_GET_PANEL_TLS_KEY = "SELECT panel_ssl_cert_key FROM config WHERE id = 1";
 
     /** dataBaseManager.migrateSecrets */
@@ -1241,10 +1247,10 @@ public final class SqlCatalog {
     /** dataBaseManager.setServiceInstalled */
     public static final String CONFIG_SET_ROUNDCUBE_INSTALLED = "UPDATE config SET roundcube_installed = ? WHERE id = 1";
 
-    /** database: lo stesso valore di database.BUSY_TIMEOUT_MS (lo controlla SqlCatalogTest) */
+    /** database: the same value as database.BUSY_TIMEOUT_MS (checked by SqlCatalogTest) */
     public static final String CONFIG_DB_BUSY_TIMEOUT = "PRAGMA busy_timeout = 15000";
 
-    /** database.columnExists: le colonne di config, invece di provare a leggerne una per nome */
+    /** database.columnExists: the columns of config, instead of trying to read one by name */
     public static final String CONFIG_DB_COLUMNS = "PRAGMA table_info(config)";
 
     /** database.create_tables */
@@ -1274,11 +1280,14 @@ public final class SqlCatalog {
             + "    roundcube_ssl_chain TEXT DEFAULT ''\n"
             + ")\n";
 
-    /** database: le colonne aggiunte dopo la prima versione */
+    /** database: the columns added after the first version */
     public static final String CONFIG_DB_ADD_MAIL_HOSTNAME = "ALTER TABLE config ADD COLUMN mail_hostname TEXT DEFAULT ''";
 
-    /** database: le colonne aggiunte dopo la prima versione */
-    /** database: le colonne della configurazione col nome di prima del prodotto (17/11/2026); un nome di colonna non e' un parametro */
+    /** database: the columns added after the first version */
+    /**
+     * database: the configuration columns under the product's previous name (2026-11-17); a column name is not a
+     * parameter
+     */
     public static final String CONFIG_DB_RENAME_MAIL_PANEL_SSL_CERT_KEY = "ALTER TABLE config RENAME COLUMN mail_panel_ssl_cert_key TO panel_ssl_cert_key";
     public static final String CONFIG_DB_RENAME_MAIL_PANEL_SSL_CHAIN = "ALTER TABLE config RENAME COLUMN mail_panel_ssl_chain TO panel_ssl_chain";
     public static final String CONFIG_DB_RENAME_MAIL_PANEL_SSL_CERT = "ALTER TABLE config RENAME COLUMN mail_panel_ssl_cert TO panel_ssl_cert";
@@ -1288,28 +1297,28 @@ public final class SqlCatalog {
 
     public static final String CONFIG_DB_ADD_PANEL_SSL_CHAIN = "ALTER TABLE config ADD COLUMN panel_ssl_chain TEXT DEFAULT ''";
 
-    /** database: le colonne aggiunte dopo la prima versione */
+    /** database: the columns added after the first version */
     public static final String CONFIG_DB_ADD_ROUNDCUBE_DOMAIN = "ALTER TABLE config ADD COLUMN roundcube_domain TEXT DEFAULT 'webmail.example.com'";
 
-    /** database: le colonne aggiunte dopo la prima versione */
+    /** database: the columns added after the first version */
     public static final String CONFIG_DB_ADD_ROUNDCUBE_PORT = "ALTER TABLE config ADD COLUMN roundcube_port TEXT DEFAULT '8443'";
 
-    /** database: le colonne aggiunte dopo la prima versione */
+    /** database: the columns added after the first version */
     public static final String CONFIG_DB_ADD_ROUNDCUBE_SSL_CERT = "ALTER TABLE config ADD COLUMN roundcube_ssl_cert TEXT DEFAULT ''";
 
-    /** database: le colonne aggiunte dopo la prima versione */
+    /** database: the columns added after the first version */
     public static final String CONFIG_DB_ADD_ROUNDCUBE_SSL_KEY = "ALTER TABLE config ADD COLUMN roundcube_ssl_key TEXT DEFAULT ''";
 
-    /** database: le colonne aggiunte dopo la prima versione */
+    /** database: the columns added after the first version */
     public static final String CONFIG_DB_ADD_ROUNDCUBE_SSL_CHAIN = "ALTER TABLE config ADD COLUMN roundcube_ssl_chain TEXT DEFAULT ''";
 
-    /** database: le colonne aggiunte dopo la prima versione */
+    /** database: the columns added after the first version */
     public static final String CONFIG_DB_ADD_POSTFIX_INSTALLED = "ALTER TABLE config ADD COLUMN postfix_installed INTEGER DEFAULT 0";
 
     /** database.ensurePostfixColumn */
     public static final String CONFIG_DB_COPY_OPENSMTPD_INSTALLED = "UPDATE config SET postfix_installed = opensmtpd_installed";
 
-    /** PublicSurfaceRename.moveJailState, nel database di fail2ban (server/database.py) */
+    /** PublicSurfaceRename.moveJailState, in fail2ban's database (server/database.py) */
     public static final String RENAME_ADD_JAIL = "INSERT OR IGNORE INTO jails(name, enabled) VALUES (?, 0)";
 
     /** PublicSurfaceRename.moveJailState */
@@ -1321,12 +1330,12 @@ public final class SqlCatalog {
     /** PublicSurfaceRename.moveJailState */
     public static final String RENAME_MOVE_JAIL_LOGS = "UPDATE OR IGNORE logs SET jail = ?, path = ? WHERE jail = ? AND path = ?";
 
-    // ========== I permessi dei ruoli e gli utenti MySQL della parte web (WebDbAccess) ==========
+    // ========== The role permissions and the MySQL users of the web part (WebDbAccess) ==========
 
     /**
-     * WebDbAccess: i permessi di ogni ruolo, per le procedure della parte web. Li scrive la root a ogni avvio dai
-     * permessi del Java (AuthStore): la tabella e' una copia, la web non la scrive e non la legge. ASCII, come il
-     * parametro con cui la si confronta (web_session_admin): stesso ordinamento, qualunque sia quello del database.
+     * WebDbAccess: the permissions of each role, for the procedures of the web part. The root part writes them at every
+     * boot from the Java permissions (AuthStore): the table is a copy, the web part neither writes nor reads it. ASCII,
+     * like the parameter it is compared with (web_session_admin): same collation, whatever the database's one is.
      */
     public static final String ROLES_CREATE_TABLE = "CREATE TABLE IF NOT EXISTS panel_role_permissions (\n"
             + "    role VARCHAR(16) CHARACTER SET ascii NOT NULL,\n"
@@ -1343,12 +1352,12 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String ROLES_ADD = "INSERT INTO panel_role_permissions (role, permission) VALUES (?, ?)";
 
-    /** WebDbAccess, come root di MySQL: i due utenti nuovi, se ci sono e se sono bloccati */
+    /** WebDbAccess, as MySQL root: the two new users, whether they exist and whether they are locked */
     public static final String WEB_DB_USERS = "SELECT user, host, account_locked FROM mysql.user WHERE user IN ('daemoxcp_mail_routines', 'daemoxcp_mail_web')";
 
     /**
-     * WebDbAccess: chi possiede le procedure. Bloccato (nessuno entra con lui), e con una password che non e'
-     * scritta da nessuna parte: se qualcuno lo sbloccasse, non saprebbe comunque con cosa entrare.
+     * WebDbAccess: who owns the procedures. Locked (nobody logs in as it), and with a password that is not written
+     * anywhere: if someone unlocked it, they still would not know what to log in with.
      */
     public static final String WEB_DB_CREATE_ROUTINES_USER = "CREATE USER IF NOT EXISTS 'daemoxcp_mail_routines'@'localhost' IDENTIFIED BY ? ACCOUNT LOCK";
 
@@ -1356,11 +1365,11 @@ public final class SqlCatalog {
     public static final String WEB_DB_LOCK_ROUTINES_USER = "ALTER USER 'daemoxcp_mail_routines'@'localhost' ACCOUNT LOCK";
 
     /**
-     * WebDbAccess: i permessi di daemoxcp_mail_routines, quelli che servono alle procedure e niente di piu', nel
-     * database del pannello (quello della connessione). EXECUTE sul database: MySQL lo chiede anche a chi ha
-     * definito una procedura, per farla girare (e per web_session_admin, che le altre chiamano). Le UPDATE solo
-     * sulle colonne che le procedure cambiano; la SELECT anche dove si scrive, perche' MySQL la chiede per le
-     * colonne del WHERE.
+     * WebDbAccess: the permissions of daemoxcp_mail_routines, the ones the procedures need and nothing more, in the
+     * panel's database (the one of the connection). EXECUTE on the database: MySQL requires it even from whoever
+     * defined a procedure, to run it (and for web_session_admin, which the others call). The UPDATEs only on the
+     * columns the procedures change; SELECT also where they write, because MySQL requires it for the columns of the
+     * WHERE.
      */
     public static final String WEB_DB_GRANT_ROUTINES_EXECUTE = "GRANT EXECUTE ON * TO 'daemoxcp_mail_routines'@'localhost'";
 
@@ -1409,16 +1418,19 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_DB_GRANT_ROUTINES_WEBMAIL_TOKENS = "GRANT INSERT ON roundcube_tokens TO 'daemoxcp_mail_routines'@'localhost'";
 
-    /** WebDbAccess: le procedure del database del pannello, col loro commento (l'impronta del testo) e chi le ha definite */
+    /**
+     * WebDbAccess: the procedures of the panel's database, with their comment (the fingerprint of the text) and who
+     * defined them
+     */
     public static final String WEB_DB_ROUTINES = "SELECT routine_name, routine_comment, definer, security_type FROM information_schema.routines WHERE routine_schema = DATABASE() AND routine_type = 'PROCEDURE'";
 
-    /** WebDbAccess: l'utente della parte web, coi due nomi con cui entra in MySQL (come l'utente del pannello) */
+    /** WebDbAccess: the user of the web part, with the two names it logs into MySQL with (like the panel's user) */
     public static final String WEB_DB_CREATE_WEB_USER = "CREATE USER IF NOT EXISTS 'daemoxcp_mail_web'@'localhost' IDENTIFIED BY ?, 'daemoxcp_mail_web'@'127.0.0.1' IDENTIFIED BY ?";
 
     /** WebDbAccess */
     public static final String WEB_DB_SET_WEB_PASSWORD = "ALTER USER 'daemoxcp_mail_web'@'localhost' IDENTIFIED BY ?, 'daemoxcp_mail_web'@'127.0.0.1' IDENTIFIED BY ?";
 
-    /** WebDbAccess: i permessi dell'utente della web che non sono l'EXECUTE di una procedura (ce ne devono essere zero) */
+    /** WebDbAccess: the web user's permissions that are not the EXECUTE of a procedure (there must be zero of them) */
     public static final String WEB_DB_WEB_OTHER_PRIVILEGES = "SELECT privilege_type FROM information_schema.user_privileges WHERE grantee IN (?, ?) AND privilege_type <> 'USAGE'\n"
             + "UNION ALL SELECT privilege_type FROM information_schema.schema_privileges WHERE grantee IN (?, ?)\n"
             + "UNION ALL SELECT privilege_type FROM information_schema.table_privileges WHERE grantee IN (?, ?)\n"
@@ -1426,138 +1438,141 @@ public final class SqlCatalog {
             + "UNION ALL SELECT priv FROM mysql.global_grants WHERE user = 'daemoxcp_mail_web'\n"
             + "UNION ALL SELECT from_user FROM mysql.role_edges WHERE to_user = 'daemoxcp_mail_web'";
 
-    /** WebDbAccess: le procedure su cui l'utente della web ha un permesso, in quale database e quale */
+    /** WebDbAccess: the procedures on which the web user has a permission, in which database, and which permission */
     public static final String WEB_DB_WEB_ROUTINE_PRIVILEGES = "SELECT host, db, routine_name, routine_type, proc_priv FROM mysql.procs_priv WHERE user = 'daemoxcp_mail_web'";
 
-    /** WebDbAccess: se l'utente della web avesse altro, gli si toglie tutto e gli si ridanno solo le procedure */
+    /** WebDbAccess: if the web user had anything else, everything is revoked and only the procedures are granted again */
     public static final String WEB_DB_REVOKE_WEB = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'daemoxcp_mail_web'@'localhost', 'daemoxcp_mail_web'@'127.0.0.1'";
 
-    // ========== La root di MySQL e le domande degli aggiornamenti (MysqlRoot, MysqlListen, UpdateManager) ==========
+    // ========== MySQL root and the queries of the updates (MysqlRoot, MysqlListen, UpdateManager) ==========
     //
-    // MysqlRoot.query manda al client mysql (root dal socket, con la password del file dei segreti) solo queste
-    // istruzioni fisse, senza valori: lo controlla CatalogGuard.allowed. Le domande con un valore passano da JDBC,
-    // col valore come parametro.
+    // MysqlRoot.query sends to the mysql client (root over the socket, with the password from the secrets file) only
+    // these fixed statements, without values: CatalogGuard.allowed checks this. Queries with a value go through JDBC,
+    // with the value as a parameter.
 
-    /** MysqlRoot, MysqlListen, UpdateManager: root risponde? */
+    /** MysqlRoot, MysqlListen, UpdateManager: does root answer? */
     public static final String MYSQL_ROOT_PING = "SELECT 1";
 
-    /** MysqlRoot: gli account root senza password (solo l'host, nessun dato) */
+    /** MysqlRoot: the root accounts without a password (host only, no data) */
     public static final String MYSQL_ROOT_EMPTY_HOSTS = "SELECT host FROM mysql.user WHERE user = 'root' AND authentication_string = '' ORDER BY host";
 
-    /** MysqlRoot, da JDBC come root: la password di un account root, host e password come parametri */
+    /** MysqlRoot, via JDBC as root: the password of a root account, host and password as parameters */
     public static final String MYSQL_ROOT_SET_PASSWORD = "ALTER USER 'root'@? IDENTIFIED BY ?";
 
-    /** UpdateManager: una casella attiva, per le prove dopo un aggiornamento */
+    /** UpdateManager: an active mailbox, for the tests after an update */
     public static final String UM_FIRST_ACTIVE_MAILBOX = "SELECT email FROM mailboxes WHERE active = 1 LIMIT 1";
 
-    /** UpdateManager: la stessa condizione della password_query di Dovecot, senza leggere la password */
+    /** UpdateManager: the same condition as Dovecot's password_query, without reading the password */
     public static final String UM_ACTIVE_MAILBOX_COUNT = "SELECT COUNT(*) FROM mailboxes WHERE email = ? AND active = 1";
 
-    /** UpdateManager: chi chiede puo' leggere la tabella degli account? */
+    /** UpdateManager: can whoever is asking read the accounts table? */
     public static final String UM_CAN_READ_ACCOUNTS = "SELECT 1 FROM mysql.user LIMIT 1";
 
-    /** UpdateManager: gli account con mysql_native_password, che MySQL 8.4 non carica piu' */
+    /** UpdateManager: the accounts with mysql_native_password, which MySQL 8.4 no longer loads */
     public static final String UM_NATIVE_PASSWORD_ACCOUNTS = "SELECT CONCAT(user, '@', host) FROM mysql.user WHERE plugin = 'mysql_native_password'";
 
-    /** UpdateManager: i plugin di autenticazione in uso, con quanti account ciascuno */
+    /** UpdateManager: the authentication plugins in use, with how many accounts each */
     public static final String UM_AUTH_PLUGINS = "SELECT CONCAT(plugin, ' ', COUNT(*)) FROM mysql.user GROUP BY plugin";
 
-    /** UpdateManager: quanti database, prima e dopo la migrazione di MySQL */
+    /** UpdateManager: how many databases, before and after the MySQL migration */
     public static final String UM_COUNT_SCHEMATA = "SELECT COUNT(*) FROM information_schema.schemata";
 
-    /** UpdateManager: quante tabelle fuori da quelle di sistema, prima e dopo la migrazione di MySQL */
+    /** UpdateManager: how many tables outside the system ones, before and after the MySQL migration */
     public static final String UM_COUNT_USER_TABLES = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys')";
 
-    /** UpdateManager: quante caselle, prima e dopo la migrazione di MySQL */
+    /** UpdateManager: how many mailboxes, before and after the MySQL migration */
     public static final String UM_COUNT_MAILBOXES = "SELECT COUNT(*) FROM mailboxes";
 
-    /** UpdateManager, con l'utente di Roundcube: le tabelle del suo database, prima e dopo l'aggiornamento */
+    /** UpdateManager, with the Roundcube user: the tables of its database, before and after the update */
     public static final String UM_COUNT_SCHEMA_TABLES = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ?";
 
-    /** UpdateManager, come root: perche' mysqldump chiede un FLUSH */
+    /** UpdateManager, as root: because mysqldump asks for a FLUSH */
     public static final String UM_GTID_STATE = "SELECT CONCAT('gtid_mode=', @@gtid_mode, '  log_bin=', @@log_bin, '  enforce_gtid_consistency=', @@enforce_gtid_consistency)";
 
-    // ========== Il database di pkg, nella COPIA del piano (PackagePlan) ==========
+    // ========== The pkg database, in the plan's COPY (PackagePlan) ==========
     //
-    // Solo sulla copia di /var/db/pkg fatta per calcolare un piano, mai sul database vero: un pacchetto che il lavoro
-    // togliera' (pkg delete, anche -f) si dimentica nella copia, righe e non file, e poi si chiede a pkg con -n che
-    // cosa installerebbe. Le righe che dipendono dal pacchetto (file, dipendenze, opzioni) se ne vanno con lui: le
-    // tabelle di pkg hanno ON DELETE CASCADE, che SQLite applica solo con le chiavi esterne accese.
+    // Only on the copy of /var/db/pkg made to compute a plan, never on the real database: a package that the job
+    // will remove (pkg delete, even -f) is forgotten in the copy, rows and not files, and then pkg is asked with -n
+    // what it would install. The rows that depend on the package (files, dependencies, options) go away with it:
+    // pkg's tables have ON DELETE CASCADE, which SQLite applies only with foreign keys turned on.
 
-    /** PackagePlan, sulla copia del database di pkg */
+    /** PackagePlan, on the copy of the pkg database */
     public static final String PKGDB_FOREIGN_KEYS_ON = "PRAGMA foreign_keys = ON";
 
-    /** PackagePlan, sulla copia del database di pkg: un pacchetto dimenticato */
+    /** PackagePlan, on the copy of the pkg database: a forgotten package */
     public static final String PKGDB_FORGET_PACKAGE = "DELETE FROM packages WHERE name = ?";
 
-    // ========== La webmail col suo utente MySQL (RoundcubeDbUser) ==========
+    // ========== The webmail with its own MySQL user (RoundcubeDbUser) ==========
     //
-    // Da JDBC, come root o con l'utente della webmail e del pannello: i nomi degli account e le password come
-    // parametri (Connector/J li mette fra apici, e la sintassi degli account li accetta cosi'). Le istruzioni con
-    // "ON *" valgono per il database della connessione: quello della webmail, nell'URL. Quello che MySQL stampa
-    // (SHOW GRANTS) si legge e basta, non si riesegue.
+    // Via JDBC, as root or with the user of the webmail and of the panel: the account names and the passwords as
+    // parameters (Connector/J quotes them, and the account syntax accepts them that way). The statements with
+    // "ON *" apply to the connection's database: the webmail's one, in the URL. What MySQL prints
+    // (SHOW GRANTS) is only read, never re-executed.
 
-    /** RoundcubeDbUser: l'account della webmail su quell'host c'e'? */
+    /** RoundcubeDbUser: does the webmail account exist on that host? */
     public static final String RC_ACCOUNT_EXISTS = "SELECT COUNT(*) FROM mysql.user WHERE user = 'roundcube' AND host = ?";
 
-    /** RoundcubeDbUser: i privilegi di un account, utente e host come parametri; si leggono, non si rieseguono */
+    /** RoundcubeDbUser: the privileges of an account, user and host as parameters; they are read, not re-executed */
     public static final String RC_SHOW_GRANTS = "SHOW GRANTS FOR ?@?";
 
-    /** RoundcubeDbUser: gli host dell'utente del pannello */
+    /** RoundcubeDbUser: the hosts of the panel's user */
     public static final String RC_PANEL_HOSTS = "SELECT host FROM mysql.user WHERE user = ? ORDER BY host";
 
-    // PanelDbPassword (reperto 232): la password dell'utente del pannello cambiata una volta, con la doppia password di
-    // MySQL (8.0.14 e successivi). Utente e host come parametri, nell'ordine di ALTER USER ?@?.
+    // PanelDbPassword (finding 232): the password of the panel's user changed once, with MySQL's dual password
+    // (8.0.14 and later). User and host as parameters, in the order of ALTER USER ?@?.
 
-    /** PanelDbPassword: gli account dell'utente del pannello, e se hanno gia' una seconda password */
+    /** PanelDbPassword: the accounts of the panel's user, and whether they already have a second password */
     public static final String PDP_ACCOUNTS = "SELECT host, JSON_EXTRACT(User_attributes, '$.additional_password') IS NOT NULL FROM mysql.user WHERE user = ? ORDER BY host";
 
-    /** PanelDbPassword: la password nuova; quella di adesso resta valida accanto */
+    /** PanelDbPassword: the new password; the current one stays valid alongside it */
     public static final String PDP_RETAIN = "ALTER USER ?@? IDENTIFIED BY ? RETAIN CURRENT PASSWORD";
 
-    /** PanelDbPassword: per tornare indietro, la password di prima di nuovo principale (la seconda resta) */
+    /** PanelDbPassword: to go back, the previous password made primary again (the second one stays) */
     public static final String PDP_SET = "ALTER USER ?@? IDENTIFIED BY ?";
 
-    /** PanelDbPassword: la seconda password tolta */
+    /** PanelDbPassword: the second password removed */
     public static final String PDP_DISCARD = "ALTER USER ?@? DISCARD OLD PASSWORD";
 
     /** RoundcubeDbUser */
     public static final String RC_CREATE_USER = "CREATE USER IF NOT EXISTS 'roundcube'@? IDENTIFIED BY ?";
 
-    /** RoundcubeDbUser: la password nuova, o per tornare indietro quella che la webmail usava */
+    /** RoundcubeDbUser: the new password, or, to go back, the one the webmail was using */
     public static final String RC_SET_PASSWORD = "ALTER USER 'roundcube'@? IDENTIFIED BY ?";
 
-    /** RoundcubeDbUser, sul database della webmail: tutto quel database, e solo quello, alla webmail */
+    /** RoundcubeDbUser, on the webmail's database: all of that database, and only that, to the webmail */
     public static final String RC_GRANT_DATABASE = "GRANT ALL PRIVILEGES ON * TO 'roundcube'@?";
 
-    /** RoundcubeDbUser: per tornare indietro, se l'account prima non c'era */
+    /** RoundcubeDbUser: to go back, if the account did not exist before */
     public static final String RC_DROP_USER = "DROP USER IF EXISTS 'roundcube'@?";
 
-    /** RoundcubeDbUser, sul database della webmail: il database della webmail tolto all'utente del pannello */
+    /** RoundcubeDbUser, on the webmail's database: the webmail's database taken away from the panel's user */
     public static final String RC_REVOKE_PANEL = "REVOKE IF EXISTS ALL PRIVILEGES ON * FROM ?@? IGNORE UNKNOWN USER";
 
-    /** RoundcubeDbUser, sul database della webmail: per tornare indietro, ridato all'utente del pannello come lo da' l'installatore */
+    /** RoundcubeDbUser, on the webmail's database: to go back, given back to the panel's user as the installer gives it */
     public static final String RC_GRANT_PANEL = "GRANT ALL PRIVILEGES ON * TO ?@?";
 
-    /** RoundcubeDbUser, sul database della webmail: la sessione aperta dalla pagina d'accesso e' arrivata? */
+    /** RoundcubeDbUser, on the webmail's database: has the session opened by the login page arrived? */
     public static final String RC_SESSION_EXISTS = "SELECT COUNT(*) FROM session WHERE sess_id = ?";
 
-    /** RoundcubeDbUser, con l'utente della webmail: legge le sue sessioni? */
+    /** RoundcubeDbUser, with the webmail's user: can it read its sessions? */
     public static final String RC_SESSIONS_READABLE = "SELECT COUNT(*) FROM session";
 
-    /** RoundcubeDbUser: le connessioni della webmail viste da MySQL; -1 se performance_schema e' spento */
+    /** RoundcubeDbUser: the webmail's connections as seen by MySQL; -1 if performance_schema is off */
     public static final String RC_CONNECTIONS = "SELECT IF(@@performance_schema, (SELECT COALESCE(SUM(TOTAL_CONNECTIONS), 0) FROM performance_schema.accounts WHERE USER = 'roundcube'), -1)";
 
-    /** RoundcubeDbUser, sul database della webmail: le caselle gia' entrate con l'SSO del pannello ("casella*admin") */
+    /**
+     * RoundcubeDbUser, on the webmail's database: the mailboxes that have already logged in with the panel's SSO
+     * ("mailbox*admin")
+     */
     public static final String RC_SSO_USERS = "SELECT username FROM users WHERE username LIKE ?";
 
-    // ========== Gli utenti MySQL di Postfix e Dovecot (MailDbUsers) ==========
+    // ========== The MySQL users of Postfix and Dovecot (MailDbUsers) ==========
     //
-    // Postfix e Dovecot leggono soltanto, ognuno le sue colonne: Postfix domini, caselle e alias, mai le password;
-    // Dovecot indirizzo, hash della password e stato delle caselle. Prima entravano con l'utente del pannello, che
-    // nel database puo' tutto. I nomi sono fissi, i due host come per l'utente del pannello.
+    // Postfix and Dovecot only read, each one its own columns: Postfix domains, mailboxes and aliases, never the
+    // passwords; Dovecot address, password hash and state of the mailboxes. Before, they logged in with the panel's
+    // user, which can do anything in the database. The names are fixed, the two hosts as for the panel's user.
 
-    /** MailDbUsers, come root di MySQL: i due utenti, se ci sono */
+    /** MailDbUsers, as MySQL root: the two users, if they exist */
     public static final String MAILDB_USERS = "SELECT user, host FROM mysql.user WHERE user IN ('daemoxcp_mail_postfix', 'daemoxcp_mail_dovecot')";
 
     /** MailDbUsers */
@@ -1572,19 +1587,19 @@ public final class SqlCatalog {
     /** MailDbUsers */
     public static final String MAILDB_SET_DOVECOT_PASSWORD = "ALTER USER 'daemoxcp_mail_dovecot'@'localhost' IDENTIFIED BY ?, 'daemoxcp_mail_dovecot'@'127.0.0.1' IDENTIFIED BY ?";
 
-    /** MailDbUsers: Postfix, i domini (virtual_mailbox_domains) */
+    /** MailDbUsers: Postfix, the domains (virtual_mailbox_domains) */
     public static final String MAILDB_GRANT_POSTFIX_DOMAINS = "GRANT SELECT (domain, active) ON domains TO 'daemoxcp_mail_postfix'@'localhost', 'daemoxcp_mail_postfix'@'127.0.0.1'";
 
-    /** MailDbUsers: Postfix, le caselle (virtual_mailbox_maps): niente password */
+    /** MailDbUsers: Postfix, the mailboxes (virtual_mailbox_maps): no passwords */
     public static final String MAILDB_GRANT_POSTFIX_MAILBOXES = "GRANT SELECT (email, active, receive_enabled) ON mailboxes TO 'daemoxcp_mail_postfix'@'localhost', 'daemoxcp_mail_postfix'@'127.0.0.1'";
 
-    /** MailDbUsers: Postfix, gli alias (virtual_alias_maps) */
+    /** MailDbUsers: Postfix, the aliases (virtual_alias_maps) */
     public static final String MAILDB_GRANT_POSTFIX_ALIASES = "GRANT SELECT (source, destination, active) ON aliases TO 'daemoxcp_mail_postfix'@'localhost', 'daemoxcp_mail_postfix'@'127.0.0.1'";
 
-    /** MailDbUsers: Dovecot, l'accesso alle caselle (passdb) e il loro limite (userdb sql, DovecotQuota) */
+    /** MailDbUsers: Dovecot, the access to the mailboxes (passdb) and their limit (sql userdb, DovecotQuota) */
     public static final String MAILDB_GRANT_DOVECOT_MAILBOXES = "GRANT SELECT (email, password, active, quota_mb, junk_expunge_days, trash_expunge_days) ON mailboxes TO 'daemoxcp_mail_dovecot'@'localhost', 'daemoxcp_mail_dovecot'@'127.0.0.1'";
 
-    /** MailDbUsers: i permessi di un utente che non sono quelli per colonna (ce ne devono essere zero) */
+    /** MailDbUsers: a user's permissions that are not per-column ones (there must be zero of them) */
     public static final String MAILDB_OTHER_PRIVILEGES = "SELECT privilege_type FROM information_schema.user_privileges WHERE grantee IN (?, ?) AND privilege_type <> 'USAGE'\n"
             + "UNION ALL SELECT privilege_type FROM information_schema.schema_privileges WHERE grantee IN (?, ?)\n"
             + "UNION ALL SELECT privilege_type FROM information_schema.table_privileges WHERE grantee IN (?, ?)\n"
@@ -1592,7 +1607,7 @@ public final class SqlCatalog {
             + "UNION ALL SELECT from_user FROM mysql.role_edges WHERE to_user = ?\n"
             + "UNION ALL SELECT routine_name FROM mysql.procs_priv WHERE user = ?";
 
-    /** MailDbUsers: i permessi per colonna di un utente, con il database, la tabella e la colonna */
+    /** MailDbUsers: a user's per-column permissions, with the database, the table and the column */
     public static final String MAILDB_COLUMN_PRIVILEGES = "SELECT grantee, table_schema, table_name, column_name, privilege_type FROM information_schema.column_privileges WHERE grantee IN (?, ?)";
 
     /** MailDbUsers */
@@ -1601,74 +1616,78 @@ public final class SqlCatalog {
     /** MailDbUsers */
     public static final String MAILDB_REVOKE_DOVECOT = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'daemoxcp_mail_dovecot'@'localhost', 'daemoxcp_mail_dovecot'@'127.0.0.1'";
 
-    /** MailDbUsers, come root di MySQL: le connessioni aperte adesso da un utente (Dovecot tiene la sua) */
+    /** MailDbUsers, as MySQL root: the connections a user has open right now (Dovecot keeps its own open) */
     public static final String MAILDB_CONNECTIONS = "SELECT COUNT(*) FROM information_schema.processlist WHERE user = ?";
 
-    /** MailDbUsers, da utente di Postfix: la domanda di mysql-virtual-domains.cf */
+    /** MailDbUsers, as Postfix's user: the query of mysql-virtual-domains.cf */
     public static final String MAILDB_POSTFIX_DOMAIN_LOOKUP = "SELECT domain FROM domains WHERE domain = ? AND active = 1";
 
-    /** MailDbUsers, da utente di Postfix: la domanda di mysql-virtual-mailboxes.cf */
+    /** MailDbUsers, as Postfix's user: the query of mysql-virtual-mailboxes.cf */
     public static final String MAILDB_POSTFIX_MAILBOX_LOOKUP = "SELECT CONCAT(SUBSTRING_INDEX(email, '@', -1), '/', SUBSTRING_INDEX(email, '@', 1), '/') FROM mailboxes WHERE email = ? AND active = 1 AND receive_enabled = 1";
 
-    /** MailDbUsers, da utente di Postfix: la domanda di mysql-virtual-aliases.cf */
+    /** MailDbUsers, as Postfix's user: the query of mysql-virtual-aliases.cf */
     public static final String MAILDB_POSTFIX_ALIAS_LOOKUP = "SELECT destination FROM aliases WHERE source = ? AND active = 1";
 
-    /** MailDbUsers, da utente di Postfix: la domanda di mysql-virtual-mailbox-addresses.cf (MailboxAddressMap) */
+    /** MailDbUsers, as Postfix's user: the query of mysql-virtual-mailbox-addresses.cf (MailboxAddressMap) */
     public static final String MAILDB_POSTFIX_ADDRESS_LOOKUP = "SELECT email FROM mailboxes WHERE email = ? AND active = 1 AND receive_enabled = 1";
 
-    /** MailDbUsers, da utente di Postfix: la domanda di mysql-sender-login-maps.cf (SenderLoginMap) */
+    /** MailDbUsers, as Postfix's user: the query of mysql-sender-login-maps.cf (SenderLoginMap) */
     public static final String MAILDB_POSTFIX_SENDER_LOOKUP = "SELECT email FROM mailboxes WHERE email = ? AND active = 1 UNION SELECT destination FROM aliases WHERE source = ? AND active = 1";
 
-    /** MailDbUsers, da utente di Postfix: la password di una casella, che deve essere rifiutata */
+    /** MailDbUsers, as Postfix's user: the password of a mailbox, which must be refused */
     public static final String MAILDB_POSTFIX_PASSWORD_REFUSED = "SELECT password FROM mailboxes WHERE email = ?";
 
-    /** MailDbUsers, da utente di Dovecot: la domanda di passdb */
+    /** MailDbUsers, as Dovecot's user: the passdb query */
     public static final String MAILDB_DOVECOT_PASSWORD_LOOKUP = "SELECT email AS user, password FROM mailboxes WHERE email = ? AND active = 1";
 
-    /** MailDbUsers, da utente di Dovecot: la domanda del userdb delle quote (DovecotConfig.QUOTA_USERDB) */
+    /** MailDbUsers, as Dovecot's user: the query of the quota userdb (DovecotConfig.QUOTA_USERDB) */
     public static final String MAILDB_DOVECOT_QUOTA_LOOKUP = "SELECT CONCAT(quota_mb, 'M') AS quota_storage_size,"
             + " IF(junk_expunge_days > 0, CONCAT(junk_expunge_days, 'd'), NULL) AS 'namespace/inbox/mailbox/Junk/mailbox_autoexpunge',"
             + " IF(trash_expunge_days > 0, CONCAT(trash_expunge_days, 'd'), NULL) AS 'namespace/inbox/mailbox/Trash/mailbox_autoexpunge'"
             + " FROM mailboxes WHERE email = ? AND active = 1";
 
-    /** MailDbUsers, da utente di Dovecot: un alias, che deve essere rifiutato */
+    /** MailDbUsers, as Dovecot's user: an alias, which must be refused */
     public static final String MAILDB_DOVECOT_ALIAS_REFUSED = "SELECT destination FROM aliases WHERE source = ?";
 
-    // ========== Le procedure della parte web ==========
+    // ========== The procedures of the web part ==========
     //
-    // Ogni istruzione MySQL della parte web ha la sua procedura: la connessione della web (CatalogGuard,
-    // routines) chiama questa invece di mandare l'istruzione, con l'impronta della sessione della richiesta
-    // davanti agli stessi parametri. Le procedure sono di daemoxcp_mail_routines, bloccato, e girano coi suoi
-    // permessi; l'utente MySQL della web ha solo EXECUTE su queste (WebDbAccess). Ognuna ha quattro testi:
-    // la chiamata, la creazione (con il commento come parametro: l'impronta del testo stesso), la
-    // cancellazione e il permesso.
+    // Every MySQL statement of the web part has its own procedure: the web connection (CatalogGuard,
+    // routines) calls it instead of sending the statement, with the fingerprint of the request's session
+    // in front of the same parameters. The procedures belong to daemoxcp_mail_routines, locked, and run with its
+    // permissions; the web part's MySQL user has only EXECUTE on them (WebDbAccess). Each one has four texts:
+    // the call, the creation (with the comment as a parameter: the fingerprint of the text itself), the
+    // drop and the grant.
 
-    /** L'inizio di ogni procedura della web: di daemoxcp_mail_routines. */
+    /** The start of every procedure of the web part: owned by daemoxcp_mail_routines. */
     private static final String WEB_CREATE = "CREATE DEFINER = 'daemoxcp_mail_routines'@'localhost' PROCEDURE ";
-    /** Dopo i parametri: il commento (l'impronta del testo, WebDbAccess) e i permessi di chi l'ha definita. */
+    /**
+     * After the parameters: the comment (the fingerprint of the text, WebDbAccess) and the permissions of whoever
+     * defined it.
+     */
     private static final String WEB_BEGIN = " COMMENT ? SQL SECURITY DEFINER\nBEGIN\n";
     /**
-     * Il primo parametro di ogni procedura: l'impronta del token della sessione della richiesta, o NULL.
+     * The first parameter of every procedure: the fingerprint of the token of the request's session, or NULL.
      *
-     * <p>I parametri che si confrontano con una colonna (impronte, nomi, indirizzi, chiavi, permessi) sono
-     * CHARACTER SET ascii. Senza, prenderebbero l'ordinamento del database (utf8mb4_unicode_ci, come lo crea
-     * l'installatore), diverso da quello delle tabelle (utf8mb4_0900_ai_ci), e MySQL rifiuta il confronto
-     * (Illegal mix of collations, visto sulla VM l'08/11/2026). Con un lato ASCII vince la colonna Unicode.
+     * <p>The parameters compared with a column (fingerprints, names, addresses, keys, permissions) are
+     * CHARACTER SET ascii. Without it, they would take the database's collation (utf8mb4_unicode_ci, as the
+     * installer creates it), different from the tables' one (utf8mb4_0900_ai_ci), and MySQL refuses the comparison
+     * (Illegal mix of collations, seen on the VM on 2026-11-08). With one side in ASCII, the Unicode column wins.
      */
     private static final String WEB_SESSION = "IN p_session CHAR(64) CHARACTER SET ascii";
-    /** Chi le puo' chiamare: l'utente della parte web, da tutti e due i nomi con cui entra. */
+    /** Who can call them: the user of the web part, under both names it logs in with. */
     private static final String WEB_TO = " TO 'daemoxcp_mail_web'@'localhost', 'daemoxcp_mail_web'@'127.0.0.1'";
     /**
-     * La sessione s della richiesta: c'e', non e' scaduta e non e' ferma da piu' di 30 minuti
-     * (WebSessions.IDLE_SECONDS, lo controlla SqlCatalogTest), con l'ora del database.
+     * The request's session s: it exists, has not expired and has not been idle for more than 30 minutes
+     * (WebSessions.IDLE_SECONDS, checked by SqlCatalogTest), by the database's clock.
      */
     private static final String WEB_SESSION_VALID = "s.token_hash = p_session AND s.expires_at > UTC_TIMESTAMP()"
             + " AND s.last_seen_at > UTC_TIMESTAMP() - INTERVAL 1800 SECOND";
 
     /**
-     * WebDbAccess: l'amministratore della sessione della richiesta, se la sessione e' valida, lui e' attivo e il
-     * suo ruolo ha uno dei permessi (nomi separati da virgole; vuoto: basta la sessione). Altrimenti ferma la
-     * procedura che la chiama. I ruoli li scrive la root a ogni avvio (panel_role_permissions). Non e' della web.
+     * WebDbAccess: the administrator of the request's session, if the session is valid, the administrator is active
+     * and their role has one of the permissions (names separated by commas; empty: the session is enough). Otherwise
+     * it stops the procedure that calls it. The roles are written by the root part at every boot
+     * (panel_role_permissions). It does not belong to the web part.
      */
     public static final String WEB_CREATE_SESSION_ADMIN = WEB_CREATE + "web_session_admin(" + WEB_SESSION
             + ", IN p_permissions VARCHAR(255) CHARACTER SET ascii, OUT p_admin INT)" + WEB_BEGIN
@@ -1686,12 +1705,12 @@ public final class SqlCatalog {
     public static final String WEB_DROP_SESSION_ADMIN = "DROP PROCEDURE IF EXISTS web_session_admin";
 
     /**
-     * SESSION_CHECK nella parte web, pubblica: la sessione dell'impronta di un token, il controllo stesso: con
-     * l'ora del database, non quella che arriva.
+     * SESSION_CHECK in the web part, public: the session of a token's fingerprint, the check itself: by the
+     * database's clock, not the time that comes in.
      */
     public static final String WEB_CALL_CHECK_SESSION = "CALL check_session(?, ?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_CHECK_SESSION. */
+    /** WebDbAccess: the procedure of WEB_CALL_CHECK_SESSION. */
     public static final String WEB_CREATE_CHECK_SESSION = WEB_CREATE + "check_session(" + WEB_SESSION
             + ", IN p_token_hash CHAR(64) CHARACTER SET ascii, IN p_now DATETIME"
             + ", IN p_idle_since DATETIME)" + WEB_BEGIN
@@ -1707,12 +1726,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_CHECK_SESSION = "GRANT EXECUTE ON PROCEDURE check_session" + WEB_TO;
 
     /**
-     * SESSION_TOUCH nella parte web, solo per la sessione della richiesta: la sua ultima attivita', con l'ora del
-     * database.
+     * SESSION_TOUCH in the web part, only for the request's session: its last activity, by the database's
+     * clock.
      */
     public static final String WEB_CALL_TOUCH_SESSION = "CALL touch_session(?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_TOUCH_SESSION. */
+    /** WebDbAccess: the procedure of WEB_CALL_TOUCH_SESSION. */
     public static final String WEB_CREATE_TOUCH_SESSION = WEB_CREATE + "touch_session(" + WEB_SESSION
             + ", IN p_time DATETIME, IN p_id BIGINT)" + WEB_BEGIN
             + "    UPDATE panel_sessions s SET s.last_seen_at = UTC_TIMESTAMP() WHERE s.id = p_id AND " + WEB_SESSION_VALID + ";\n"
@@ -1726,12 +1745,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_TOUCH_SESSION = "GRANT EXECUTE ON PROCEDURE touch_session" + WEB_TO;
 
     /**
-     * AUTH_ADMIN_BY_ID nella parte web, solo per la sessione della richiesta: il suo amministratore, e nessun
-     * altro (vuoto se l'id non e' il suo).
+     * AUTH_ADMIN_BY_ID in the web part, only for the request's session: its administrator, and nobody
+     * else (empty if the id is not its own).
      */
     public static final String WEB_CALL_GET_SESSION_ADMIN = "CALL get_session_admin(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_GET_SESSION_ADMIN. */
+    /** WebDbAccess: the procedure of WEB_CALL_GET_SESSION_ADMIN. */
     public static final String WEB_CREATE_GET_SESSION_ADMIN = WEB_CREATE + "get_session_admin(" + WEB_SESSION
             + ", IN p_id INT)" + WEB_BEGIN
             + "    SELECT a.id, a.username, a.role, a.active, a.email_enc, a.user_handle, a.created_at, a.last_login\n"
@@ -1745,10 +1764,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_GET_SESSION_ADMIN = "GRANT EXECUTE ON PROCEDURE get_session_admin" + WEB_TO;
 
-    /** MAIL_GET_ADMIN_LANGUAGE nella parte web, solo per la sessione della richiesta: la sua lingua. */
+    /** MAIL_GET_ADMIN_LANGUAGE in the web part, only for the request's session: its language. */
     public static final String WEB_CALL_GET_ADMIN_LANGUAGE = "CALL get_admin_language(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_GET_ADMIN_LANGUAGE. */
+    /** WebDbAccess: the procedure of WEB_CALL_GET_ADMIN_LANGUAGE. */
     public static final String WEB_CREATE_GET_ADMIN_LANGUAGE = WEB_CREATE + "get_admin_language(" + WEB_SESSION
             + ", IN p_username VARCHAR(50) CHARACTER SET ascii)" + WEB_BEGIN
             + "    SELECT a.language FROM panel_admin a JOIN panel_sessions s ON s.admin_id = a.id\n"
@@ -1762,14 +1781,14 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_GET_ADMIN_LANGUAGE = "GRANT EXECUTE ON PROCEDURE get_admin_language" + WEB_TO;
 
     /**
-     * MAIL_SET_ADMIN_LANGUAGE nella parte web, solo per l'amministratore della sessione: la sua lingua, solo una
-     * delle lingue del pannello. L'elenco e' scritto qui, perche' il catalogo e' solo testo: una lingua nuova (un file
-     * in lang/) va aggiunta anche qui, e I18nTest fallisce finche' l'elenco non e' uguale a I18n.LANGUAGES. Il testo
-     * cambiato fa ricreare la procedura da sola al primo avvio (WebDbAccess confronta l'impronta).
+     * MAIL_SET_ADMIN_LANGUAGE in the web part, only for the session's administrator: their language, only one
+     * of the panel's languages. The list is written here, because the catalog is only text: a new language (a file
+     * in lang/) must be added here too, and I18nTest fails until the list equals I18n.LANGUAGES. The changed
+     * text makes the procedure get recreated by itself at the first boot (WebDbAccess compares the fingerprint).
      */
     public static final String WEB_CALL_SET_ADMIN_LANGUAGE = "CALL set_admin_language(?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_SET_ADMIN_LANGUAGE. */
+    /** WebDbAccess: the procedure of WEB_CALL_SET_ADMIN_LANGUAGE. */
     public static final String WEB_CREATE_SET_ADMIN_LANGUAGE = WEB_CREATE + "set_admin_language(" + WEB_SESSION
             + ", IN p_language VARCHAR(5), IN p_username VARCHAR(50) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -1787,10 +1806,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_SET_ADMIN_LANGUAGE = "GRANT EXECUTE ON PROCEDURE set_admin_language" + WEB_TO;
 
-    /** MAIL_GET_ADMIN_THEME nella parte web, solo per la sessione della richiesta: il suo tema. */
+    /** MAIL_GET_ADMIN_THEME in the web part, only for the request's session: its theme. */
     public static final String WEB_CALL_GET_ADMIN_THEME = "CALL get_admin_theme(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_GET_ADMIN_THEME. */
+    /** WebDbAccess: the procedure of WEB_CALL_GET_ADMIN_THEME. */
     public static final String WEB_CREATE_GET_ADMIN_THEME = WEB_CREATE + "get_admin_theme(" + WEB_SESSION
             + ", IN p_username VARCHAR(50) CHARACTER SET ascii)" + WEB_BEGIN
             + "    SELECT a.theme FROM panel_admin a JOIN panel_sessions s ON s.admin_id = a.id\n"
@@ -1804,12 +1823,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_GET_ADMIN_THEME = "GRANT EXECUTE ON PROCEDURE get_admin_theme" + WEB_TO;
 
     /**
-     * MAIL_SET_ADMIN_THEME nella parte web, solo per l'amministratore della sessione: il suo tema, solo auto,
-     * light o dark.
+     * MAIL_SET_ADMIN_THEME in the web part, only for the session's administrator: their theme, only auto,
+     * light or dark.
      */
     public static final String WEB_CALL_SET_ADMIN_THEME = "CALL set_admin_theme(?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_SET_ADMIN_THEME. */
+    /** WebDbAccess: the procedure of WEB_CALL_SET_ADMIN_THEME. */
     public static final String WEB_CREATE_SET_ADMIN_THEME = WEB_CREATE + "set_admin_theme(" + WEB_SESSION
             + ", IN p_theme VARCHAR(10), IN p_username VARCHAR(50) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -1828,12 +1847,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_SET_ADMIN_THEME = "GRANT EXECUTE ON PROCEDURE set_admin_theme" + WEB_TO;
 
     /**
-     * MAIL_HAS_ADMIN_USER nella parte web, pubblica: c'e' gia' un amministratore? Pubblica: la pagina di accesso
-     * lo deve sapere.
+     * MAIL_HAS_ADMIN_USER in the web part, public: is there already an administrator? Public: the login page
+     * needs to know.
      */
     public static final String WEB_CALL_HAS_ADMIN = "CALL has_admin(?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_HAS_ADMIN. */
+    /** WebDbAccess: the procedure of WEB_CALL_HAS_ADMIN. */
     public static final String WEB_CREATE_HAS_ADMIN = WEB_CREATE + "has_admin(" + WEB_SESSION + ")" + WEB_BEGIN
             + "    SELECT 1 FROM panel_admin WHERE active = TRUE LIMIT 1;\n"
             + "END";
@@ -1845,12 +1864,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_HAS_ADMIN = "GRANT EXECUTE ON PROCEDURE has_admin" + WEB_TO;
 
     /**
-     * MAIL_GET_SETTING nella parte web, pubblica: un'impostazione, solo di quelle che la web legge: mai il token
-     * di Cloudflare o le sfide DNS.
+     * MAIL_GET_SETTING in the web part, public: a setting, only among those the web part reads: never the
+     * Cloudflare token or the DNS challenges.
      */
     public static final String WEB_CALL_GET_SETTING = "CALL get_setting(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_GET_SETTING. */
+    /** WebDbAccess: the procedure of WEB_CALL_GET_SETTING. */
     public static final String WEB_CREATE_GET_SETTING = WEB_CREATE + "get_setting(" + WEB_SESSION
             + ", IN p_key VARCHAR(64) CHARACTER SET ascii)" + WEB_BEGIN
             + "    SELECT setting_value FROM panel_settings\n"
@@ -1864,12 +1883,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_GET_SETTING = "GRANT EXECUTE ON PROCEDURE get_setting" + WEB_TO;
 
     /**
-     * MAIL_LOG_AUDIT_EVENT nella parte web, pubblica: una riga nel registro di controllo: pubblica, la web
-     * registra anche chi non ha fatto l'accesso.
+     * MAIL_LOG_AUDIT_EVENT in the web part, public: a row in the audit log: public, the web part also
+     * logs those who have not logged in.
      */
     public static final String WEB_CALL_LOG_AUDIT_EVENT = "CALL log_audit_event(?, ?, ?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_LOG_AUDIT_EVENT. */
+    /** WebDbAccess: the procedure of WEB_CALL_LOG_AUDIT_EVENT. */
     public static final String WEB_CREATE_LOG_AUDIT_EVENT = WEB_CREATE + "log_audit_event(" + WEB_SESSION
             + ", IN p_action VARCHAR(100), IN p_username VARCHAR(255), IN p_ip VARCHAR(45)"
             + ", IN p_details TEXT)" + WEB_BEGIN
@@ -1884,12 +1903,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_LOG_AUDIT_EVENT = "GRANT EXECUTE ON PROCEDURE log_audit_event" + WEB_TO;
 
     /**
-     * MAIL_GET_DOMAIN_NAMES nella parte web, pubblica: i nomi dei domini ospitati, per autoconfig e MTA-STS:
-     * pubblica, sono gia' nel DNS.
+     * MAIL_GET_DOMAIN_NAMES in the web part, public: the names of the hosted domains, for autoconfig and MTA-STS:
+     * public, they are already in the DNS.
      */
     public static final String WEB_CALL_LIST_DOMAIN_NAMES = "CALL list_domain_names(?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_LIST_DOMAIN_NAMES. */
+    /** WebDbAccess: the procedure of WEB_CALL_LIST_DOMAIN_NAMES. */
     public static final String WEB_CREATE_LIST_DOMAIN_NAMES = WEB_CREATE + "list_domain_names(" + WEB_SESSION + ")" + WEB_BEGIN
             + "    SELECT domain FROM domains ORDER BY domain;\n"
             + "END";
@@ -1901,12 +1920,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_LIST_DOMAIN_NAMES = "GRANT EXECUTE ON PROCEDURE list_domain_names" + WEB_TO;
 
     /**
-     * MAIL_GET_DOMAINS nella parte web, con mail.view o security.view: i domini, senza le chiavi DKIM private
-     * (has_dkim dice se c'e').
+     * MAIL_GET_DOMAINS in the web part, with mail.view or security.view: the domains, without the private DKIM keys
+     * (has_dkim says whether there is one).
      */
     public static final String WEB_CALL_LIST_DOMAINS = "CALL list_domains(?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_LIST_DOMAINS. */
+    /** WebDbAccess: the procedure of WEB_CALL_LIST_DOMAINS. */
     public static final String WEB_CREATE_LIST_DOMAINS = WEB_CREATE + "list_domains(" + WEB_SESSION + ")" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mail.view,security.view', v_admin);\n"
@@ -1927,10 +1946,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_LIST_DOMAINS = "GRANT EXECUTE ON PROCEDURE list_domains" + WEB_TO;
 
-    /** MAIL_GET_DOMAIN_BY_NAME nella parte web, con mail.view: un dominio per nome, senza le chiavi DKIM private. */
+    /** MAIL_GET_DOMAIN_BY_NAME in the web part, with mail.view: a domain by name, without the private DKIM keys. */
     public static final String WEB_CALL_GET_DOMAIN_BY_NAME = "CALL get_domain_by_name(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_GET_DOMAIN_BY_NAME. */
+    /** WebDbAccess: the procedure of WEB_CALL_GET_DOMAIN_BY_NAME. */
     public static final String WEB_CREATE_GET_DOMAIN_BY_NAME = WEB_CREATE + "get_domain_by_name(" + WEB_SESSION
             + ", IN p_domain VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -1950,10 +1969,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_GET_DOMAIN_BY_NAME = "GRANT EXECUTE ON PROCEDURE get_domain_by_name" + WEB_TO;
 
-    /** MAIL_ADD_DOMAIN nella parte web, con domains.manage: un dominio nuovo. */
+    /** MAIL_ADD_DOMAIN in the web part, with domains.manage: a new domain. */
     public static final String WEB_CALL_ADD_DOMAIN = "CALL add_domain(?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_ADD_DOMAIN. */
+    /** WebDbAccess: the procedure of WEB_CALL_ADD_DOMAIN. */
     public static final String WEB_CREATE_ADD_DOMAIN = WEB_CREATE + "add_domain(" + WEB_SESSION
             + ", IN p_domain VARCHAR(255), IN p_description TEXT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -1968,10 +1987,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_ADD_DOMAIN = "GRANT EXECUTE ON PROCEDURE add_domain" + WEB_TO;
 
-    /** MAIL_UPDATE_DOMAIN_DESCRIPTION nella parte web, con domains.manage: la descrizione di un dominio. */
+    /** MAIL_UPDATE_DOMAIN_DESCRIPTION in the web part, with domains.manage: the description of a domain. */
     public static final String WEB_CALL_SET_DOMAIN_DESCRIPTION = "CALL set_domain_description(?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_SET_DOMAIN_DESCRIPTION. */
+    /** WebDbAccess: the procedure of WEB_CALL_SET_DOMAIN_DESCRIPTION. */
     public static final String WEB_CREATE_SET_DOMAIN_DESCRIPTION = WEB_CREATE + "set_domain_description(" + WEB_SESSION
             + ", IN p_description TEXT, IN p_id INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -1986,10 +2005,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_SET_DOMAIN_DESCRIPTION = "GRANT EXECUTE ON PROCEDURE set_domain_description" + WEB_TO;
 
-    /** MAIL_DELETE_DOMAIN nella parte web, con domains.manage: un dominio, e per le chiavi esterne quello che ha. */
+    /** MAIL_DELETE_DOMAIN in the web part, with domains.manage: a domain, and, through the foreign keys, what it has. */
     public static final String WEB_CALL_DELETE_DOMAIN = "CALL delete_domain(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_DELETE_DOMAIN. */
+    /** WebDbAccess: the procedure of WEB_CALL_DELETE_DOMAIN. */
     public static final String WEB_CREATE_DELETE_DOMAIN = WEB_CREATE + "delete_domain(" + WEB_SESSION
             + ", IN p_id INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2005,12 +2024,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_DELETE_DOMAIN = "GRANT EXECUTE ON PROCEDURE delete_domain" + WEB_TO;
 
     /**
-     * MAIL_GET_MAILBOXES nella parte web, con mail.view: le caselle di un dominio, senza hash e copie delle
-     * password.
+     * MAIL_GET_MAILBOXES in the web part, with mail.view: the mailboxes of a domain, without the hashes and copies of
+     * the passwords.
      */
     public static final String WEB_CALL_LIST_DOMAIN_MAILBOXES = "CALL list_domain_mailboxes(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_LIST_DOMAIN_MAILBOXES. */
+    /** WebDbAccess: the procedure of WEB_CALL_LIST_DOMAIN_MAILBOXES. */
     public static final String WEB_CREATE_LIST_DOMAIN_MAILBOXES = WEB_CREATE + "list_domain_mailboxes(" + WEB_SESSION
             + ", IN p_domain_id INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2026,10 +2045,13 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_LIST_DOMAIN_MAILBOXES = "GRANT EXECUTE ON PROCEDURE list_domain_mailboxes" + WEB_TO;
 
-    /** MAIL_GET_ALL_MAILBOXES nella parte web, con mail.view: tutte le caselle, senza hash e copie delle password. */
+    /**
+     * MAIL_GET_ALL_MAILBOXES in the web part, with mail.view: all the mailboxes, without the hashes and copies of the
+     * passwords.
+     */
     public static final String WEB_CALL_LIST_MAILBOXES = "CALL list_mailboxes(?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_LIST_MAILBOXES. */
+    /** WebDbAccess: the procedure of WEB_CALL_LIST_MAILBOXES. */
     public static final String WEB_CREATE_LIST_MAILBOXES = WEB_CREATE + "list_mailboxes(" + WEB_SESSION + ")" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
@@ -2047,10 +2069,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_LIST_MAILBOXES = "GRANT EXECUTE ON PROCEDURE list_mailboxes" + WEB_TO;
 
-    /** MAIL_GET_MAILBOX nella parte web, con mail.view: una casella per id. */
+    /** MAIL_GET_MAILBOX in the web part, with mail.view: a mailbox by id. */
     public static final String WEB_CALL_GET_MAILBOX = "CALL get_mailbox(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_GET_MAILBOX. */
+    /** WebDbAccess: the procedure of WEB_CALL_GET_MAILBOX. */
     public static final String WEB_CREATE_GET_MAILBOX = WEB_CREATE + "get_mailbox(" + WEB_SESSION
             + ", IN p_id INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2066,10 +2088,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_GET_MAILBOX = "GRANT EXECUTE ON PROCEDURE get_mailbox" + WEB_TO;
 
-    /** MAIL_GET_MAILBOX_BY_EMAIL nella parte web, con mail.view: una casella per indirizzo. */
+    /** MAIL_GET_MAILBOX_BY_EMAIL in the web part, with mail.view: a mailbox by address. */
     public static final String WEB_CALL_GET_MAILBOX_BY_EMAIL = "CALL get_mailbox_by_email(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_GET_MAILBOX_BY_EMAIL. */
+    /** WebDbAccess: the procedure of WEB_CALL_GET_MAILBOX_BY_EMAIL. */
     public static final String WEB_CREATE_GET_MAILBOX_BY_EMAIL = WEB_CREATE + "get_mailbox_by_email(" + WEB_SESSION
             + ", IN p_email VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2085,10 +2107,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_GET_MAILBOX_BY_EMAIL = "GRANT EXECUTE ON PROCEDURE get_mailbox_by_email" + WEB_TO;
 
-    /** MAIL_INSERT_MAILBOX nella parte web, con mailboxes.manage: una casella nuova. */
+    /** MAIL_INSERT_MAILBOX in the web part, with mailboxes.manage: a new mailbox. */
     public static final String WEB_CALL_ADD_MAILBOX = "CALL add_mailbox(?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_ADD_MAILBOX. */
+    /** WebDbAccess: the procedure of WEB_CALL_ADD_MAILBOX. */
     public static final String WEB_CREATE_ADD_MAILBOX = WEB_CREATE + "add_mailbox(" + WEB_SESSION
             + ", IN p_domain_id INT, IN p_email VARCHAR(255), IN p_password VARCHAR(255)"
             + ", IN p_password_encrypted TEXT, IN p_password_encrypted_at DATETIME"
@@ -2106,10 +2128,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_ADD_MAILBOX = "GRANT EXECUTE ON PROCEDURE add_mailbox" + WEB_TO;
 
-    /** MAIL_UPDATE_MAILBOX nella parte web, con mailboxes.manage: nome, spazio e stato di una casella. */
+    /** MAIL_UPDATE_MAILBOX in the web part, with mailboxes.manage: name, space and state of a mailbox. */
     public static final String WEB_CALL_UPDATE_MAILBOX = "CALL update_mailbox(?, ?, ?, ?, ?, ?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_UPDATE_MAILBOX. */
+    /** WebDbAccess: the procedure of WEB_CALL_UPDATE_MAILBOX. */
     public static final String WEB_CREATE_UPDATE_MAILBOX = WEB_CREATE + "update_mailbox(" + WEB_SESSION
             + ", IN p_name VARCHAR(255), IN p_quota_mb INT, IN p_active BOOLEAN"
             + ", IN p_receive_enabled BOOLEAN, IN p_junk_expunge_days SMALLINT UNSIGNED, IN p_trash_expunge_days SMALLINT UNSIGNED"
@@ -2128,12 +2150,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_UPDATE_MAILBOX = "GRANT EXECUTE ON PROCEDURE update_mailbox" + WEB_TO;
 
     /**
-     * MAIL_UPDATE_MAILBOX_PASSWORD nella parte web, con mailboxes.manage: la password di una casella: l'hash e la
-     * copia insieme.
+     * MAIL_UPDATE_MAILBOX_PASSWORD in the web part, with mailboxes.manage: the password of a mailbox: the hash and
+     * the copy together.
      */
     public static final String WEB_CALL_SET_MAILBOX_PASSWORD = "CALL set_mailbox_password(?, ?, ?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_SET_MAILBOX_PASSWORD. */
+    /** WebDbAccess: the procedure of WEB_CALL_SET_MAILBOX_PASSWORD. */
     public static final String WEB_CREATE_SET_MAILBOX_PASSWORD = WEB_CREATE + "set_mailbox_password(" + WEB_SESSION
             + ", IN p_password VARCHAR(255), IN p_password_encrypted TEXT"
             + ", IN p_password_encrypted_at DATETIME, IN p_id INT)" + WEB_BEGIN
@@ -2150,10 +2172,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_SET_MAILBOX_PASSWORD = "GRANT EXECUTE ON PROCEDURE set_mailbox_password" + WEB_TO;
 
-    /** MAIL_DELETE_MAILBOX nella parte web, con mailboxes.manage: una casella. */
+    /** MAIL_DELETE_MAILBOX in the web part, with mailboxes.manage: a mailbox. */
     public static final String WEB_CALL_DELETE_MAILBOX = "CALL delete_mailbox(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_DELETE_MAILBOX. */
+    /** WebDbAccess: the procedure of WEB_CALL_DELETE_MAILBOX. */
     public static final String WEB_CREATE_DELETE_MAILBOX = WEB_CREATE + "delete_mailbox(" + WEB_SESSION
             + ", IN p_id INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2169,12 +2191,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_DELETE_MAILBOX = "GRANT EXECUTE ON PROCEDURE delete_mailbox" + WEB_TO;
 
     /**
-     * MAIL_MAILBOX_HAS_ENCRYPTED_PASSWORD nella parte web, con mail.view: se una casella ha la copia della
+     * MAIL_MAILBOX_HAS_ENCRYPTED_PASSWORD in the web part, with mail.view: whether a mailbox has the copy of the
      * password.
      */
     public static final String WEB_CALL_MAILBOX_HAS_VAULT_COPY = "CALL mailbox_has_vault_copy(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_MAILBOX_HAS_VAULT_COPY. */
+    /** WebDbAccess: the procedure of WEB_CALL_MAILBOX_HAS_VAULT_COPY. */
     public static final String WEB_CREATE_MAILBOX_HAS_VAULT_COPY = WEB_CREATE + "mailbox_has_vault_copy(" + WEB_SESSION
             + ", IN p_id INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2188,10 +2210,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_MAILBOX_HAS_VAULT_COPY = "GRANT EXECUTE ON PROCEDURE mailbox_has_vault_copy" + WEB_TO;
 
-    /** MAIL_GET_ALIASES_BY_SOURCE nella parte web, con mail.view: gli alias con questa sorgente. */
+    /** MAIL_GET_ALIASES_BY_SOURCE in the web part, with mail.view: the aliases with this source. */
     public static final String WEB_CALL_LIST_ALIASES_BY_SOURCE = "CALL list_aliases_by_source(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_LIST_ALIASES_BY_SOURCE. */
+    /** WebDbAccess: the procedure of WEB_CALL_LIST_ALIASES_BY_SOURCE. */
     public static final String WEB_CREATE_LIST_ALIASES_BY_SOURCE = WEB_CREATE + "list_aliases_by_source(" + WEB_SESSION
             + ", IN p_source VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2206,10 +2228,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_LIST_ALIASES_BY_SOURCE = "GRANT EXECUTE ON PROCEDURE list_aliases_by_source" + WEB_TO;
 
-    /** MAIL_GET_ALIASES_BY_DESTINATION nella parte web, con mail.view: gli alias verso questo indirizzo. */
+    /** MAIL_GET_ALIASES_BY_DESTINATION in the web part, with mail.view: the aliases towards this address. */
     public static final String WEB_CALL_LIST_ALIASES_BY_DESTINATION = "CALL list_aliases_by_destination(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_LIST_ALIASES_BY_DESTINATION. */
+    /** WebDbAccess: the procedure of WEB_CALL_LIST_ALIASES_BY_DESTINATION. */
     public static final String WEB_CREATE_LIST_ALIASES_BY_DESTINATION = WEB_CREATE + "list_aliases_by_destination(" + WEB_SESSION
             + ", IN p_destination VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2224,10 +2246,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_LIST_ALIASES_BY_DESTINATION = "GRANT EXECUTE ON PROCEDURE list_aliases_by_destination" + WEB_TO;
 
-    /** MAIL_GET_AUTO_RESPONDER nella parte web, con mail.view: la risposta automatica di una casella. */
+    /** MAIL_GET_AUTO_RESPONDER in the web part, with mail.view: the auto-reply of a mailbox. */
     public static final String WEB_CALL_GET_AUTO_RESPONDER = "CALL get_auto_responder(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_GET_AUTO_RESPONDER. */
+    /** WebDbAccess: the procedure of WEB_CALL_GET_AUTO_RESPONDER. */
     public static final String WEB_CREATE_GET_AUTO_RESPONDER = WEB_CREATE + "get_auto_responder(" + WEB_SESSION
             + ", IN p_mailbox_id INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2242,10 +2264,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_GET_AUTO_RESPONDER = "GRANT EXECUTE ON PROCEDURE get_auto_responder" + WEB_TO;
 
-    /** MAIL_GET_FORWARDING_RULES nella parte web, con mail.view: gli inoltri di una casella. */
+    /** MAIL_GET_FORWARDING_RULES in the web part, with mail.view: the forwards of a mailbox. */
     public static final String WEB_CALL_LIST_FORWARDING_RULES = "CALL list_forwarding_rules(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_LIST_FORWARDING_RULES. */
+    /** WebDbAccess: the procedure of WEB_CALL_LIST_FORWARDING_RULES. */
     public static final String WEB_CREATE_LIST_FORWARDING_RULES = WEB_CREATE + "list_forwarding_rules(" + WEB_SESSION
             + ", IN p_mailbox_id INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2260,10 +2282,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_LIST_FORWARDING_RULES = "GRANT EXECUTE ON PROCEDURE list_forwarding_rules" + WEB_TO;
 
-    /** MAIL_GET_SIEVE_FILTERS nella parte web, con mail.view: i filtri di una casella. */
+    /** MAIL_GET_SIEVE_FILTERS in the web part, with mail.view: the filters of a mailbox. */
     public static final String WEB_CALL_LIST_SIEVE_FILTERS = "CALL list_sieve_filters(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_LIST_SIEVE_FILTERS. */
+    /** WebDbAccess: the procedure of WEB_CALL_LIST_SIEVE_FILTERS. */
     public static final String WEB_CREATE_LIST_SIEVE_FILTERS = WEB_CREATE + "list_sieve_filters(" + WEB_SESSION
             + ", IN p_mailbox_id INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2279,12 +2301,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_LIST_SIEVE_FILTERS = "GRANT EXECUTE ON PROCEDURE list_sieve_filters" + WEB_TO;
 
     /**
-     * MAIL_TRANSFORM_MAILBOX_TO_ALIAS nella parte web, con mailboxes.manage: un alias (una casella che diventa
-     * alias).
+     * MAIL_TRANSFORM_MAILBOX_TO_ALIAS in the web part, with mailboxes.manage: an alias (a mailbox that becomes
+     * an alias).
      */
     public static final String WEB_CALL_DELETE_ALIAS = "CALL delete_alias(?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_DELETE_ALIAS. */
+    /** WebDbAccess: the procedure of WEB_CALL_DELETE_ALIAS. */
     public static final String WEB_CREATE_DELETE_ALIAS = WEB_CREATE + "delete_alias(" + WEB_SESSION
             + ", IN p_source VARCHAR(255) CHARACTER SET ascii"
             + ", IN p_destination VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
@@ -2301,12 +2323,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_DELETE_ALIAS = "GRANT EXECUTE ON PROCEDURE delete_alias" + WEB_TO;
 
     /**
-     * MAIL_TRANSFORM_MAILBOX_TO_ALIAS_2 nella parte web, con mailboxes.manage: il limite di invio di una casella
-     * (una casella che diventa alias).
+     * MAIL_TRANSFORM_MAILBOX_TO_ALIAS_2 in the web part, with mailboxes.manage: the sending limit of a mailbox
+     * (a mailbox that becomes an alias).
      */
     public static final String WEB_CALL_DELETE_MAILBOX_RATE_LIMIT = "CALL delete_mailbox_rate_limit(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_DELETE_MAILBOX_RATE_LIMIT. */
+    /** WebDbAccess: the procedure of WEB_CALL_DELETE_MAILBOX_RATE_LIMIT. */
     public static final String WEB_CREATE_DELETE_MAILBOX_RATE_LIMIT = WEB_CREATE + "delete_mailbox_rate_limit(" + WEB_SESSION
             + ", IN p_mailbox_id INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2322,12 +2344,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_DELETE_MAILBOX_RATE_LIMIT = "GRANT EXECUTE ON PROCEDURE delete_mailbox_rate_limit" + WEB_TO;
 
     /**
-     * MAIL_TRANSFORM_MAILBOX_TO_ALIAS_3 nella parte web, con mailboxes.manage: una casella con questo id e questo
-     * indirizzo (una casella che diventa alias).
+     * MAIL_TRANSFORM_MAILBOX_TO_ALIAS_3 in the web part, with mailboxes.manage: a mailbox with this id and this
+     * address (a mailbox that becomes an alias).
      */
     public static final String WEB_CALL_DELETE_MAILBOX_BY_ADDRESS = "CALL delete_mailbox_by_address(?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_DELETE_MAILBOX_BY_ADDRESS. */
+    /** WebDbAccess: the procedure of WEB_CALL_DELETE_MAILBOX_BY_ADDRESS. */
     public static final String WEB_CREATE_DELETE_MAILBOX_BY_ADDRESS = WEB_CREATE + "delete_mailbox_by_address(" + WEB_SESSION
             + ", IN p_id INT, IN p_email VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2343,12 +2365,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_DELETE_MAILBOX_BY_ADDRESS = "GRANT EXECUTE ON PROCEDURE delete_mailbox_by_address" + WEB_TO;
 
     /**
-     * MAIL_TRANSFORM_ALIAS_TO_MAILBOX nella parte web, con mailboxes.manage: un alias attivo (una casella che
-     * diventa alias).
+     * MAIL_TRANSFORM_ALIAS_TO_MAILBOX in the web part, with mailboxes.manage: an active alias (a mailbox that
+     * becomes an alias).
      */
     public static final String WEB_CALL_ADD_ALIAS = "CALL add_alias(?, ?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_ADD_ALIAS. */
+    /** WebDbAccess: the procedure of WEB_CALL_ADD_ALIAS. */
     public static final String WEB_CREATE_ADD_ALIAS = WEB_CREATE + "add_alias(" + WEB_SESSION
             + ", IN p_domain_id INT, IN p_source VARCHAR(255), IN p_destination VARCHAR(255))" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2365,12 +2387,12 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_ADD_ALIAS = "GRANT EXECUTE ON PROCEDURE add_alias" + WEB_TO;
 
     /**
-     * MAIL_CREATE_AUTO_LOGIN_TOKEN nella parte web, con mailboxes.manage: il gettone di accesso alla webmail di
-     * una casella.
+     * MAIL_CREATE_AUTO_LOGIN_TOKEN in the web part, with mailboxes.manage: the login token for the webmail of
+     * a mailbox.
      */
     public static final String WEB_CALL_CREATE_WEBMAIL_TOKEN = "CALL create_webmail_token(?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_CREATE_WEBMAIL_TOKEN. */
+    /** WebDbAccess: the procedure of WEB_CALL_CREATE_WEBMAIL_TOKEN. */
     public static final String WEB_CREATE_CREATE_WEBMAIL_TOKEN = WEB_CREATE + "create_webmail_token(" + WEB_SESSION
             + ", IN p_token VARCHAR(64), IN p_mailbox_id INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2385,10 +2407,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_CREATE_WEBMAIL_TOKEN = "GRANT EXECUTE ON PROCEDURE create_webmail_token" + WEB_TO;
 
-    /** MAIL_GET_EMAIL_STATISTICS nella parte web, con mail.view: le statistiche degli ultimi giorni. */
+    /** MAIL_GET_EMAIL_STATISTICS in the web part, with mail.view: the statistics of the last few days. */
     public static final String WEB_CALL_LIST_EMAIL_STATISTICS = "CALL list_email_statistics(?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_LIST_EMAIL_STATISTICS. */
+    /** WebDbAccess: the procedure of WEB_CALL_LIST_EMAIL_STATISTICS. */
     public static final String WEB_CREATE_LIST_EMAIL_STATISTICS = WEB_CREATE + "list_email_statistics(" + WEB_SESSION
             + ", IN p_days INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2406,10 +2428,10 @@ public final class SqlCatalog {
     /** WebDbAccess */
     public static final String WEB_GRANT_LIST_EMAIL_STATISTICS = "GRANT EXECUTE ON PROCEDURE list_email_statistics" + WEB_TO;
 
-    /** MAIL_GET_TRAINING_COUNT nella parte web, con mail.view: quanti messaggi rspamd ha imparato. */
+    /** MAIL_GET_TRAINING_COUNT in the web part, with mail.view: how many messages rspamd has learned. */
     public static final String WEB_CALL_COUNT_TRAINING = "CALL count_training(?, ?, ?)";
 
-    /** WebDbAccess: la procedura di WEB_CALL_COUNT_TRAINING. */
+    /** WebDbAccess: the procedure of WEB_CALL_COUNT_TRAINING. */
     public static final String WEB_CREATE_COUNT_TRAINING = WEB_CREATE + "count_training(" + WEB_SESSION
             + ", IN p_trained_as VARCHAR(4) CHARACTER SET ascii, IN p_days INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
@@ -2424,192 +2446,196 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_COUNT_TRAINING = "GRANT EXECUTE ON PROCEDURE count_training" + WEB_TO;
 
     /**
-     * WebDbAccess: le procedure che la web non ha piu' e che si tolgono dove ci sono, col loro permesso. Le copie
-     * delle password e i loro hash (Mostra password): dal vault a chiave asimmetrica le legge solo la root.
-     *
+     * WebDbAccess: the procedures the web part no longer has, which are dropped where they exist, with their grant.
+     * The copies of the passwords and their hashes ("Show password"): from the asymmetric-key vault only the root
+     * part reads them.
      */
     public static final String WEB_DROP_RETIRED_GET_MAILBOX_VAULT_COPY = "DROP PROCEDURE IF EXISTS get_mailbox_vault_copy";
 
-    /** WebDbAccess: vedi WEB_DROP_RETIRED_GET_MAILBOX_VAULT_COPY. */
+    /** WebDbAccess: see WEB_DROP_RETIRED_GET_MAILBOX_VAULT_COPY. */
     public static final String WEB_DROP_RETIRED_GET_MAILBOX_PASSWORD_HASH = "DROP PROCEDURE IF EXISTS get_mailbox_password_hash";
 
-    // ===================== MysqlRename: il database e gli utenti col nome di DaemoxCP Mail (17/11/2026) =====================
-    // In SQL un identificatore non e' un parametro: i nomi di prima degli utenti stanno qui, nel testo delle istruzioni, e
-    // sono gli unici nomi di prima nel codice (le altre migrazioni li leggono da legacy-names.json). Il database di prima
-    // non c'e': le tabelle si spostano con la connessione aperta su di lui (RENAME TABLE tabella TO daemoxcp_mail.tabella).
+    // =============== MysqlRename: the database and the users under the DaemoxCP Mail name (2026-11-17) ===============
+    // In SQL an identifier is not a parameter: the users' previous names are here, in the text of the statements, and
+    // they are the only previous names in the code (the other migrations read them from legacy-names.json). The
+    // previous database's name is not here: the tables are moved with the connection opened on it
+    // (RENAME TABLE tabella TO daemoxcp_mail.tabella).
 
-    /** MysqlRename: i due database, se ci sono, con set di caratteri e ordinamento */
+    /** MysqlRename: the two databases, if they exist, with character set and collation */
     public static final String RENAME_SCHEMAS = "SELECT schema_name, default_character_set_name, default_collation_name FROM information_schema.schemata WHERE schema_name IN (?, ?)";
 
-    /** MysqlRename: le tabelle e le viste di un database */
+    /** MysqlRename: the tables and views of a database */
     public static final String RENAME_TABLES_OF = "SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = ?";
 
-    /** MysqlRename: trigger ed eventi di un database (non si sanno spostare: con uno di loro non si sposta niente) */
+    /** MysqlRename: triggers and events of a database (they cannot be moved: with one of them, nothing is moved) */
     public static final String RENAME_OTHER_OBJECTS_OF = "SELECT (SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema = ?) + (SELECT COUNT(*) FROM information_schema.events WHERE event_schema = ?)";
 
-    /** MysqlRename: le procedure e le funzioni di un database */
+    /** MysqlRename: the procedures and functions of a database */
     public static final String RENAME_ROUTINES_OF = "SELECT routine_name FROM information_schema.routines WHERE routine_schema = ?";
 
-    /** MysqlRename: gli utenti del pannello, coi nomi di prima e con quelli di adesso */
+    /** MysqlRename: the panel's users, with the previous names and with the current ones */
     public static final String RENAME_USERS = "SELECT user, host FROM mysql.user WHERE user IN ('mailpanel', 'daemoxcp_mail', 'mailpanel_web', 'daemoxcp_mail_web', 'mailpanel_routines', 'daemoxcp_mail_routines', 'mailpanel_postfix', 'daemoxcp_mail_postfix', 'mailpanel_dovecot', 'daemoxcp_mail_dovecot')";
 
-    /** MysqlRename: il database col nome di adesso, come lo crea l'installatore */
+    /** MysqlRename: the database with the current name, as the installer creates it */
     public static final String RENAME_CREATE_DATABASE = "CREATE DATABASE daemoxcp_mail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
 
-    /** MysqlRename, per tornare indietro: il database nuovo, se e' rimasto vuoto */
+    /** MysqlRename, to go back: the new database, if it has been left empty */
     public static final String RENAME_DROP_NEW_DATABASE = "DROP DATABASE daemoxcp_mail";
 
-    /** MysqlRename: il database di prima col nome dell'installatore, quando e' rimasto vuoto */
+    /** MysqlRename: the previous database, under the installer's name, when it has been left empty */
     public static final String RENAME_DROP_OLD_DEFAULT_DATABASE = "DROP DATABASE mailserver";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_ADMIN_PASSKEYS = "RENAME TABLE admin_passkeys TO daemoxcp_mail.admin_passkeys";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_ADMIN_PASSKEYS = "RENAME TABLE daemoxcp_mail.admin_passkeys TO admin_passkeys";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_RSPAMD_TRAINING = "RENAME TABLE rspamd_training TO daemoxcp_mail.rspamd_training";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_RSPAMD_TRAINING = "RENAME TABLE daemoxcp_mail.rspamd_training TO rspamd_training";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_PANEL_SESSIONS = "RENAME TABLE panel_sessions TO daemoxcp_mail.panel_sessions";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_PANEL_SESSIONS = "RENAME TABLE daemoxcp_mail.panel_sessions TO panel_sessions";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_LOGIN_CODE_EMAIL = "RENAME TABLE login_code_email TO daemoxcp_mail.login_code_email";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_LOGIN_CODE_EMAIL = "RENAME TABLE daemoxcp_mail.login_code_email TO login_code_email";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_LOGIN_CODE_CONSOLE = "RENAME TABLE login_code_console TO daemoxcp_mail.login_code_console";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_LOGIN_CODE_CONSOLE = "RENAME TABLE daemoxcp_mail.login_code_console TO login_code_console";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_STEPUP_CODE = "RENAME TABLE stepup_code TO daemoxcp_mail.stepup_code";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_STEPUP_CODE = "RENAME TABLE daemoxcp_mail.stepup_code TO stepup_code";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_EMAIL_CHANGE_CODE = "RENAME TABLE email_change_code TO daemoxcp_mail.email_change_code";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_EMAIL_CHANGE_CODE = "RENAME TABLE daemoxcp_mail.email_change_code TO email_change_code";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_ROUNDCUBE_TOKENS = "RENAME TABLE roundcube_tokens TO daemoxcp_mail.roundcube_tokens";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_ROUNDCUBE_TOKENS = "RENAME TABLE daemoxcp_mail.roundcube_tokens TO roundcube_tokens";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_AUTO_RESPONDERS = "RENAME TABLE auto_responders TO daemoxcp_mail.auto_responders";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_AUTO_RESPONDERS = "RENAME TABLE daemoxcp_mail.auto_responders TO auto_responders";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_SIEVE_FILTERS = "RENAME TABLE sieve_filters TO daemoxcp_mail.sieve_filters";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_SIEVE_FILTERS = "RENAME TABLE daemoxcp_mail.sieve_filters TO sieve_filters";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_FORWARDING_RULES = "RENAME TABLE forwarding_rules TO daemoxcp_mail.forwarding_rules";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_FORWARDING_RULES = "RENAME TABLE daemoxcp_mail.forwarding_rules TO forwarding_rules";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_EMAIL_STATISTICS = "RENAME TABLE email_statistics TO daemoxcp_mail.email_statistics";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_EMAIL_STATISTICS = "RENAME TABLE daemoxcp_mail.email_statistics TO email_statistics";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_ALIASES = "RENAME TABLE aliases TO daemoxcp_mail.aliases";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_ALIASES = "RENAME TABLE daemoxcp_mail.aliases TO aliases";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_MAILBOXES = "RENAME TABLE mailboxes TO daemoxcp_mail.mailboxes";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_MAILBOXES = "RENAME TABLE daemoxcp_mail.mailboxes TO mailboxes";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_DKIM_ROTATION_HISTORY = "RENAME TABLE dkim_rotation_history TO daemoxcp_mail.dkim_rotation_history";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_DKIM_ROTATION_HISTORY = "RENAME TABLE daemoxcp_mail.dkim_rotation_history TO dkim_rotation_history";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_DOMAINS = "RENAME TABLE domains TO daemoxcp_mail.domains";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_DOMAINS = "RENAME TABLE daemoxcp_mail.domains TO domains";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_CLOUDFLARE_ACCOUNTS = "RENAME TABLE cloudflare_accounts TO daemoxcp_mail.cloudflare_accounts";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_CLOUDFLARE_ACCOUNTS = "RENAME TABLE daemoxcp_mail.cloudflare_accounts TO cloudflare_accounts";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_AUDIT_LOG = "RENAME TABLE audit_log TO daemoxcp_mail.audit_log";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_AUDIT_LOG = "RENAME TABLE daemoxcp_mail.audit_log TO audit_log";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_RATE_LIMITS = "RENAME TABLE rate_limits TO daemoxcp_mail.rate_limits";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_RATE_LIMITS = "RENAME TABLE daemoxcp_mail.rate_limits TO rate_limits";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_PANEL_SETTINGS = "RENAME TABLE panel_settings TO daemoxcp_mail.panel_settings";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_PANEL_SETTINGS = "RENAME TABLE daemoxcp_mail.panel_settings TO panel_settings";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_PANEL_ROLE_PERMISSIONS = "RENAME TABLE panel_role_permissions TO daemoxcp_mail.panel_role_permissions";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_PANEL_ROLE_PERMISSIONS = "RENAME TABLE daemoxcp_mail.panel_role_permissions TO panel_role_permissions";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_INSTALLED_COMPONENTS = "RENAME TABLE installed_components TO daemoxcp_mail.installed_components";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_INSTALLED_COMPONENTS = "RENAME TABLE daemoxcp_mail.installed_components TO installed_components";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_PANEL_ADMIN = "RENAME TABLE panel_admin TO daemoxcp_mail.panel_admin";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_PANEL_ADMIN = "RENAME TABLE daemoxcp_mail.panel_admin TO panel_admin";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_VIRTUAL_ALIASES = "RENAME TABLE virtual_aliases TO daemoxcp_mail.virtual_aliases";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_VIRTUAL_ALIASES = "RENAME TABLE daemoxcp_mail.virtual_aliases TO virtual_aliases";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_VIRTUAL_USERS = "RENAME TABLE virtual_users TO daemoxcp_mail.virtual_users";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_VIRTUAL_USERS = "RENAME TABLE daemoxcp_mail.virtual_users TO virtual_users";
-    /** MysqlRename (connessione sul database di prima) */
+    /** MysqlRename (connection on the previous database) */
     public static final String RENAME_TABLE_VIRTUAL_DOMAINS = "RENAME TABLE virtual_domains TO daemoxcp_mail.virtual_domains";
-    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    /** MysqlRename, to go back (connection on the previous database) */
     public static final String RENAME_BACK_TABLE_VIRTUAL_DOMAINS = "RENAME TABLE daemoxcp_mail.virtual_domains TO virtual_domains";
     /** MysqlRename */
     public static final String RENAME_USER_MAILPANEL_LOCALHOST = "RENAME USER 'mailpanel'@'localhost' TO 'daemoxcp_mail'@'localhost'";
-    /** MysqlRename, per tornare indietro */
+    /** MysqlRename, for the way back */
     public static final String RENAME_BACK_USER_MAILPANEL_LOCALHOST = "RENAME USER 'daemoxcp_mail'@'localhost' TO 'mailpanel'@'localhost'";
     /** MysqlRename */
     public static final String RENAME_USER_MAILPANEL_LOOPBACK = "RENAME USER 'mailpanel'@'127.0.0.1' TO 'daemoxcp_mail'@'127.0.0.1'";
-    /** MysqlRename, per tornare indietro */
+    /** MysqlRename, for the way back */
     public static final String RENAME_BACK_USER_MAILPANEL_LOOPBACK = "RENAME USER 'daemoxcp_mail'@'127.0.0.1' TO 'mailpanel'@'127.0.0.1'";
     /** MysqlRename */
     public static final String RENAME_USER_MAILPANEL_WEB_LOCALHOST = "RENAME USER 'mailpanel_web'@'localhost' TO 'daemoxcp_mail_web'@'localhost'";
-    /** MysqlRename, per tornare indietro */
+    /** MysqlRename, for the way back */
     public static final String RENAME_BACK_USER_MAILPANEL_WEB_LOCALHOST = "RENAME USER 'daemoxcp_mail_web'@'localhost' TO 'mailpanel_web'@'localhost'";
     /** MysqlRename */
     public static final String RENAME_USER_MAILPANEL_WEB_LOOPBACK = "RENAME USER 'mailpanel_web'@'127.0.0.1' TO 'daemoxcp_mail_web'@'127.0.0.1'";
-    /** MysqlRename, per tornare indietro */
+    /** MysqlRename, for the way back */
     public static final String RENAME_BACK_USER_MAILPANEL_WEB_LOOPBACK = "RENAME USER 'daemoxcp_mail_web'@'127.0.0.1' TO 'mailpanel_web'@'127.0.0.1'";
     /** MysqlRename */
     public static final String RENAME_USER_MAILPANEL_ROUTINES_LOCALHOST = "RENAME USER 'mailpanel_routines'@'localhost' TO 'daemoxcp_mail_routines'@'localhost'";
-    /** MysqlRename, per tornare indietro */
+    /** MysqlRename, for the way back */
     public static final String RENAME_BACK_USER_MAILPANEL_ROUTINES_LOCALHOST = "RENAME USER 'daemoxcp_mail_routines'@'localhost' TO 'mailpanel_routines'@'localhost'";
     /** MysqlRename */
     public static final String RENAME_USER_MAILPANEL_POSTFIX_LOCALHOST = "RENAME USER 'mailpanel_postfix'@'localhost' TO 'daemoxcp_mail_postfix'@'localhost'";
-    /** MysqlRename, per tornare indietro */
+    /** MysqlRename, for the way back */
     public static final String RENAME_BACK_USER_MAILPANEL_POSTFIX_LOCALHOST = "RENAME USER 'daemoxcp_mail_postfix'@'localhost' TO 'mailpanel_postfix'@'localhost'";
     /** MysqlRename */
     public static final String RENAME_USER_MAILPANEL_POSTFIX_LOOPBACK = "RENAME USER 'mailpanel_postfix'@'127.0.0.1' TO 'daemoxcp_mail_postfix'@'127.0.0.1'";
-    /** MysqlRename, per tornare indietro */
+    /** MysqlRename, for the way back */
     public static final String RENAME_BACK_USER_MAILPANEL_POSTFIX_LOOPBACK = "RENAME USER 'daemoxcp_mail_postfix'@'127.0.0.1' TO 'mailpanel_postfix'@'127.0.0.1'";
     /** MysqlRename */
     public static final String RENAME_USER_MAILPANEL_DOVECOT_LOCALHOST = "RENAME USER 'mailpanel_dovecot'@'localhost' TO 'daemoxcp_mail_dovecot'@'localhost'";
-    /** MysqlRename, per tornare indietro */
+    /** MysqlRename, for the way back */
     public static final String RENAME_BACK_USER_MAILPANEL_DOVECOT_LOCALHOST = "RENAME USER 'daemoxcp_mail_dovecot'@'localhost' TO 'mailpanel_dovecot'@'localhost'";
     /** MysqlRename */
     public static final String RENAME_USER_MAILPANEL_DOVECOT_LOOPBACK = "RENAME USER 'mailpanel_dovecot'@'127.0.0.1' TO 'daemoxcp_mail_dovecot'@'127.0.0.1'";
-    /** MysqlRename, per tornare indietro */
+    /** MysqlRename, for the way back */
     public static final String RENAME_BACK_USER_MAILPANEL_DOVECOT_LOOPBACK = "RENAME USER 'daemoxcp_mail_dovecot'@'127.0.0.1' TO 'mailpanel_dovecot'@'127.0.0.1'";
-    /** MysqlRename: l'utente del pannello, tutto sul database col nome di adesso (come l'installatore) */
+    /** MysqlRename: the panel's user, everything on the database with the current name (as the installer does) */
     public static final String RENAME_GRANT_PANEL_LOCALHOST = "GRANT ALL PRIVILEGES ON daemoxcp_mail.* TO 'daemoxcp_mail'@'localhost'";
 
-    /** MysqlRename: i permessi rimasti sul database di prima, col nome dell'installatore */
+    /** MysqlRename: the permissions left on the previous database, under the installer's name */
     public static final String RENAME_REVOKE_OLD_DEFAULT_LOCALHOST = "REVOKE ALL PRIVILEGES ON mailserver.* FROM 'daemoxcp_mail'@'localhost'";
 
     /** MysqlRename */
     public static final String RENAME_REVOKE_OLD_DEFAULT_LOOPBACK = "REVOKE ALL PRIVILEGES ON mailserver.* FROM 'daemoxcp_mail'@'127.0.0.1'";
 
-    /** MysqlRename: i permessi del proprietario delle procedure sulle tabelle di prima (WebDbAccess li ridà su quelle nuove) */
+    /**
+     * MysqlRename: the permissions of the procedures' owner on the previous tables (WebDbAccess grants them again on
+     * the new ones)
+     */
     public static final String RENAME_REVOKE_ROUTINES = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'daemoxcp_mail_routines'@'localhost'";
 }

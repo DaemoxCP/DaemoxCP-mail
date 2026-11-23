@@ -16,23 +16,25 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * MySQL ascolta solo da questa macchina, e senza il protocollo X.
+ * MySQL accepts connections only from this machine, and without the X protocol.
  *
- * Misurato il 07/11/2026 sul server vero (MySQL 8.4.11, my.cnf uguale a my.cnf.sample del pacchetto):
- * la 3306 su 127.0.0.1, ma la 33060 del protocollo X su tutti gli indirizzi, perche' il file del
- * pacchetto non la nomina e il suo predefinito e' "*". Il pannello, Postfix, Dovecot e Roundcube usano
- * solo il protocollo classico. Sulla VM my.cnf non c'era affatto: anche la 3306 su tutti gli
- * indirizzi.
+ * Measured on 2026-11-07 on the production server (MySQL 8.4.11, my.cnf equal to the
+ * package's my.cnf.sample): 3306 on 127.0.0.1, but 33060 of the X protocol on all addresses,
+ * because the package's file does not mention it and its default is "*". The panel, Postfix,
+ * Dovecot and Roundcube use only the classic protocol. On the VM there was no my.cnf at all:
+ * 3306 too was on all addresses.
  *
- * Il manuale di MySQL 8.4 (x-plugin-disabling, x-plugin-options-system-variables): il plugin X si
- * spegne all'avvio con mysqlx=0 (o OFF), e mysqlx_bind_address si legge solo all'avvio. Quindi qui:
- * nella sezione [mysqld] si aggiungono, solo se mancano, bind-address = 127.0.0.1 e mysqlx = OFF; una
- * scelta gia' scritta da qualcuno non si tocca. Se my.cnf non c'e' se ne scrive uno con quelle due
- * righe e basta: copiare il file del pacchetto cambierebbe anche log binari, memoria e cartelle.
+ * The MySQL 8.4 manual (x-plugin-disabling, x-plugin-options-system-variables): the X plugin
+ * is turned off at startup with mysqlx=0 (or OFF), and mysqlx_bind_address is read only at
+ * startup. So here: in the [mysqld] section, bind-address = 127.0.0.1 and mysqlx = OFF are
+ * added, only if missing; a choice already written by someone is not touched. If my.cnf is
+ * not there, one is written with just those two lines: copying the package's file would also
+ * change binary logs, memory and folders.
  *
- * Poi: `mysqld --validate-config` come l'utente mysql, il riavvio, e i controlli (MySQL risponde,
- * ascolta solo su 127.0.0.1 e niente 33060, Dovecot e Postfix trovano ancora le caselle). Se uno non
- * torna, my.cnf torna com'era e MySQL si riavvia di nuovo. Al secondo avvio non c'e' niente da fare.
+ * Then: `mysqld --validate-config` as the mysql user, the restart, and the checks (MySQL
+ * answers, listens only on 127.0.0.1 and not on 33060, Dovecot and Postfix still find the
+ * mailboxes). If one does not match, my.cnf goes back as it was and MySQL is restarted again.
+ * At the second startup there is nothing to do.
  */
 public final class MysqlListen {
 
@@ -49,15 +51,15 @@ public final class MysqlListen {
 
     private MysqlListen() {}
 
-    /** Il nome di un'opzione come lo intende MySQL: minuscolo, con '-' al posto di '_'. */
+    /** The name of an option as MySQL understands it: lowercase, with '-' instead of '_'. */
     static String key(String option) {
         return option.toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
     /**
-     * Il my.cnf con le due righe che mancano, o null se non manca niente. Funzione pura.
+     * The my.cnf with the two missing lines, or null if nothing is missing. Pure function.
      *
-     * @param text il my.cnf di adesso, o null se non c'e'
+     * @param text the current my.cnf, or null if it is not there
      */
     static String harden(String text) {
         if (text == null) return "[mysqld]\n" + COMMENT + "\nbind-address = 127.0.0.1\nmysqlx = OFF\n";
@@ -135,7 +137,10 @@ public final class MysqlListen {
         return true;
     }
 
-    /** Dopo il riavvio: MySQL risponde, ascolta solo in locale, e le ricerche di posta tornano come prima. */
+    /**
+     * After the restart: MySQL answers, listens only locally, and the mail lookups give the same results as
+     * before.
+     */
     static String verify(String lookupsBefore) throws InterruptedException {
         if (!waitForMysql()) return "MySQL does not answer after the restart";
         List<String> open = new ArrayList<>();
@@ -147,9 +152,9 @@ public final class MysqlListen {
             }
         }
         if (!open.isEmpty()) return "MySQL still listens on " + open;
-        // Dovecot e Postfix tengono una connessione a MySQL: dopo il riavvio la prima domanda trova la
-        // connessione caduta e risponde "riprova" (Dovecot 75), la seguente si ricollega. Misurato sulla VM
-        // il 07/11/2026 nella prova del passaggio: si aspetta che si ricolleghino, fino a 30 secondi.
+        // Dovecot and Postfix keep a connection to MySQL: after the restart the first query finds the
+        // connection dropped and answers "try again" (Dovecot 75), the next one reconnects. Measured on the
+        // VM on 2026-11-07 in the test of the change: it waits for them to reconnect, up to 30 seconds.
         String lookupsAfter = "";
         for (int i = 0; i < 30; i++) {
             lookupsAfter = lookups();
@@ -168,9 +173,9 @@ public final class MysqlListen {
     }
 
     /**
-     * Le ricerche che il server di posta fa in MySQL, con un indirizzo che non esiste: Dovecot (passdb sql)
-     * e Postfix (la mappa delle caselle). Si confrontano prima e dopo: un errore di connessione cambia
-     * l'uscita, "non trovato" no.
+     * The lookups the mail server makes in MySQL, with an address that does not exist: Dovecot (passdb sql)
+     * and Postfix (the mailbox map). They are compared before and after: a connection error changes the
+     * output, "not found" does not.
      */
     static String lookups() {
         StringBuilder b = new StringBuilder();

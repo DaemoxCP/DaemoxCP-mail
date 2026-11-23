@@ -8,34 +8,34 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * La cornice di ogni pagina: la barra laterale a sezioni e la barra in alto, come nel pannello web.
+ * The frame of every page: the sidebar with sections and the top bar, as in the web panel.
  *
- * Le pagine mettono {{LAYOUT:pagina}} dove va la cornice (lo scrive getHead) e il server la
- * completa a ogni richiesta con expand(): la pagina in cui ti trovi e' evidenziata, e i testi
- * restano {{t:chiave}} per il passo della lingua. Da 992px la barra laterale e' fissa a sinistra;
- * sotto si apre dal pulsante in alto (offcanvas di Bootstrap, che chiude con Esc e tiene il fuoco
- * dentro finche' e' aperta).
+ * The pages put {{LAYOUT:page}} where the frame goes (getHead writes it) and the server
+ * completes it at every request with expand(): the page you are on is highlighted, and the texts
+ * stay {{t:key}} for the language step. From 992px the sidebar is fixed on the left;
+ * below that it opens from the button at the top (Bootstrap's offcanvas, which closes with Esc and keeps
+ * the focus inside while it is open).
  *
- * Prima il menu era una riga in alto con tredici voci, che sotto i 1700px non ci stavano piu' e
- * restavano solo icone; e quattro pagine (coda, limiti di invio, statistiche, amministratori) non
- * erano raggiungibili da nessun link.
+ * Before, the menu was a row at the top with thirteen items, which below 1700px no longer fit and
+ * were left as icons only; and four pages (queue, sending limits, statistics, administrators) were
+ * not reachable from any link.
  *
- * Ogni voce dice quale permesso serve per vederla e quale per cambiare qualcosa (gli stessi della
- * sua rotta in SSLMailServer.setupRoutes): il menu mostra solo le voci che il ruolo di chi guarda
- * puo' aprire, e nella barra in alto una pagina che il ruolo puo' solo guardare porta "Sola lettura".
+ * Every item says which permission is needed to see it and which to change something (the same as
+ * its route in SSLMailServer.setupRoutes): the menu shows only the items the viewer's role
+ * can open, and in the top bar a page that the role can only view carries "Read-only".
  *
- * Per aggiungere una pagina al menu: una riga in MENU, nella sezione giusta, con la chiave del
- * nome in lang/it.json e lang/en.json.
+ * To add a page to the menu: a line in MENU, in the right section, with the key of the
+ * name in lang/it.json and lang/en.json.
  */
 public final class Layout {
 
     /**
-     * Una voce: la pagina (quella che passa a getHead), l'indirizzo, l'icona, la chiave del nome, il
-     * permesso per vederla e quello per cambiare (o null se la pagina non cambia niente).
+     * An item: the page (the one passed to getHead), the address, the icon, the name key, the
+     * permission to see it and the one to change things (or null if the page changes nothing).
      */
     public record Item(String page, String href, String icon, String key, String view, String manage) {}
 
-    /** Chi guarda la pagina: il nome, il ruolo e i permessi del ruolo. */
+    /** Who is viewing the page: the name, the role and the role's permissions. */
     public record Viewer(String username, String role, Set<String> permissions) {
         public static final Viewer NOBODY = new Viewer(null, null, Set.of());
 
@@ -44,7 +44,7 @@ public final class Layout {
         }
     }
 
-    /** Una sezione del menu, con la chiave del titolo (null: le voci stanno in cima, senza titolo). */
+    /** A section of the menu, with the title key (null: the items are at the top, without a title). */
     public record Section(String key, List<Item> items) {}
 
     public static final List<Section> MENU = List.of(
@@ -73,33 +73,33 @@ public final class Layout {
             new Item("settings", "/settings", "fas fa-gear", "nav.settings", "settings.manage", "settings.manage")))
     );
 
-    /** Le pagine fuori dal menu che hanno comunque un nome nella barra in alto. */
+    /** The pages outside the menu that still have a name in the top bar. */
     private static final List<Item> OTHER_PAGES = List.of(
         new Item("account", "/account", "fas fa-user-gear", "nav.account", "account.self", null),
         new Item("forbidden", "/home", "fas fa-ban", "access.title", null, null));
 
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{LAYOUT:([a-z_]{0,40})\\}\\}");
-    /** Le pagine senza cornice (accesso e installazione) mettono qui solo i pulsanti della lingua. */
+    /** The pages without a frame (login and installation) put only the language buttons here. */
     public static final String LANGUAGE_SWITCH = "{{LANGUAGE_SWITCH}}";
 
     private Layout() {}
 
     /**
-     * I due script della cornice sono file registrati quando questa classe si carica: chi scrive i
-     * file (PanelContent.generateAllContent) la fa caricare prima, chiamando questo metodo.
+     * The two frame scripts are files registered when this class loads: whoever writes the
+     * files (PanelContent.generateAllContent) makes it load first, by calling this method.
      */
     static void registerAssets() {
-        // Basta il riferimento: i campi statici sono gia' inizializzati.
+        // The reference is enough: the static fields are already initialised.
         if (LANGUAGE_SCRIPT.isEmpty() || SIDEBAR_SCRIPT.isEmpty() || REBOOT_SCRIPT.isEmpty() || CONFIRM_SCRIPT.isEmpty())
             throw new IllegalStateException();
     }
 
-    /** Il segnaposto che una pagina mette al posto della cornice. */
+    /** The placeholder that a page puts in place of the frame. */
     public static String placeholder(String page) {
         return "{{LAYOUT:" + page + "}}";
     }
 
-    /** La cornice al posto del segnaposto, per chi guarda e nella lingua di questa richiesta. */
+    /** The frame in place of the placeholder, for the viewer and in the language of this request. */
     public static String expand(String html, String lang, Viewer viewer) {
         if (html.contains(LANGUAGE_SWITCH)) html = html.replace(LANGUAGE_SWITCH, languageSwitch(lang) + LANGUAGE_SCRIPT);
         Matcher m = PLACEHOLDER.matcher(html);
@@ -108,21 +108,22 @@ public final class Layout {
         return html.substring(0, m.start()) + frame + html.substring(m.end());
     }
 
-    /** Un testo nell'HTML: niente tag e niente {{ che il passo della lingua leggerebbe come una chiave. */
+    /** A text in the HTML: no tags and no {{ that the language step would read as a key. */
     private static String text(String s) {
         return I18n.escapeHtml(s == null ? "" : s).replace("{", "&#123;").replace("}", "&#125;");
     }
 
-    /** Il selettore della lingua con le lingue del pannello. */
+    /** The language selector with the panel's languages. */
     static String languageSwitch(String lang) {
         return languageSwitch(lang, I18n.LANGUAGES);
     }
 
     /**
-     * Il selettore della lingua. Con due lingue i pulsanti IT/EN, con premuto quello della lingua attuale: con due
-     * scelte sono i piu' veloci e stanno in poco spazio. Con tre o piu' un menu (un select nativo, accessibile con la
-     * tastiera e dagli screen reader, stretto anche a 375 px), con ogni lingua scritta nella lingua stessa. Il nome
-     * della lingua (title e opzioni) e' sempre nella sua lingua, con lang= perche' lo screen reader lo pronunci bene.
+     * The language selector. With two languages the IT/EN buttons, with the current language's one pressed: with
+     * two choices they are the fastest and take little space. With three or more a menu (a native select,
+     * accessible with the keyboard and by screen readers, narrow even at 375 px), with each language written in
+     * the language itself. The name of the language (title and options) is always in its own language, with
+     * lang= so that the screen reader pronounces it right.
      */
     public static String languageSwitch(String lang, java.util.List<String> languages) {
         if (languages.size() <= 2) {
@@ -146,9 +147,9 @@ public final class Layout {
     }
 
     /**
-     * Il cambio di lingua: si salva (nell'account e in un cookie di questo browser) e si ricarica
-     * la pagina, che il server rimanda gia' tradotta. Il token CSRF e' quello della pagina: della
-     * sessione, o prima di entrare quello della pagina di accesso.
+     * The language change: it is saved (in the account and in a cookie of this browser) and the page
+     * is reloaded, which the server sends back already translated. The CSRF token is the page's: the
+     * session's, or before logging in the login page's.
      */
     private static final String LANGUAGE_SCRIPT = PageAssets.script("""
 function panelSetLanguage(lang) {
@@ -226,13 +227,13 @@ document.querySelectorAll('[data-set-lang-select]').forEach(function (select) {
         String where = (section == null ? "" : "<span class=\"topbar-section\">{{t:" + section + "}}</span> "
                 + "<span class=\"topbar-sep\" aria-hidden=\"true\">&rsaquo;</span> ")
                 + (current == null ? "" : "<span class=\"topbar-page\">{{t:" + current.key() + "}}</span>");
-        // La pagina si vede ma non si cambia: si dice subito, invece di far scoprire il divieto a ogni pulsante.
+        // The page can be viewed but not changed: it is said at once, instead of letting each button reveal the ban.
         if (current != null && current.manage() != null && viewer.may(current.view()) && !viewer.may(current.manage())) {
             where += " <span class=\"badge rounded-pill text-bg-secondary topbar-readonly\" title=\"{{t:layout.readOnlyHint}}\">"
                     + "<i class=\"fas fa-eye me-1\" aria-hidden=\"true\"></i>{{t:layout.readOnly}}</span>";
         }
         boolean account = page.equals("account");
-        // Chi e' collegato e con che ruolo, sul pulsante del proprio account.
+        // Who is logged in and with which role, on the button of one's own account.
         String who = viewer.username() == null ? "{{t:nav.account}}" : text(viewer.username());
         String role = viewer.role() == null || !org.daemoxcp.mail.security.AuthStore.ROLES.contains(viewer.role()) ? ""
                 : "<span class=\"badge role-badge " + viewer.role() + " ms-1 d-none d-lg-inline-block\">{{t:adm.r"
@@ -257,9 +258,9 @@ document.querySelectorAll('[data-set-lang-select]').forEach(function (select) {
     }
 
     /**
-     * La finestra della conferma per le operazioni pericolose, in ogni pagina:
-     * la apre panel-confirm.js quando il server la chiede. Le strade sono quelle dell'account: passkey o codice via
-     * email per chi ha una passkey, solo il codice per chi non ne ha.
+     * The confirmation window for dangerous operations, on every page:
+     * panel-confirm.js opens it when the server asks for it. The roads are the account's: passkey or code via
+     * email for whoever has a passkey, only the code for whoever has none.
      */
     private static final String CONFIRM_TEMPLATE = """
 <template id="panelConfirmTemplate">
@@ -306,15 +307,15 @@ document.querySelectorAll('[data-set-lang-select]').forEach(function (select) {
 </template>
 """;
 
-    /** Lo script della finestra, con le funzioni WebAuthn delle pagine d'accesso, chiuso in una funzione sua. */
+    /** The window's script, with the WebAuthn functions of the login pages, enclosed in a function of its own. */
     private static final String CONFIRM_SCRIPT = PageAssets.script("(function () {\n" + PanelContent.getWebAuthnScript()
             + readPage("pages/panel-confirm.js") + "})();\n", false);
 
     /**
-     * La striscia "il server va riavviato" sotto la barra in alto di ogni pagina, la finestra del
-     * riavvio e quella di conferma (reperto 185). La striscia a chi vede il sistema; il pulsante e le
-     * finestre a chi puo' cambiarlo. Lo script chiede lo stato al server (reboot_state, letture leggere)
-     * e la mostra solo se serve.
+     * The "the server needs a restart" strip under the top bar of every page, the restart window
+     * and the confirmation one (finding 185). The strip for whoever sees the system; the button and the
+     * windows for whoever can change it. The script asks the server for the state (reboot_state, light reads)
+     * and shows it only if needed.
      */
     static String rebootFrame(Viewer viewer) {
         if (!viewer.may("system.view")) return "";
@@ -381,8 +382,8 @@ document.querySelectorAll('[data-set-lang-select]').forEach(function (select) {
     }
 
     /**
-     * La voce della pagina in cui ti trovi sempre a vista, anche in fondo a un menu lungo. Come
-     * file, non in linea: la Content-Security-Policy non ha 'unsafe-inline' (reperto 178).
+     * The item of the page you are on always in view, even at the bottom of a long menu. As a
+     * file, not inline: the Content-Security-Policy has no 'unsafe-inline' (finding 178).
      */
     private static final String SIDEBAR_SCRIPT = PageAssets.script("""
 (function () {

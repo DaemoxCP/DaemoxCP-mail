@@ -1,7 +1,7 @@
-        // ---------- rapporto periodico via email ----------
-        // Sta nelle IMPOSTAZIONI perche' destinatario, mittente e frequenza sono scelte, non
-        // diagnosi. Il contenuto del rapporto lo raccoglie la pagina Aggiornamenti, ma
-        // deciderlo e' un'altra cosa dal leggerlo.
+        // ---------- periodic report by email ----------
+        // It is in the SETTINGS because recipient, sender and frequency are choices, not
+        // diagnosis. The content of the report is gathered by the Updates page, but
+        // deciding it is a different thing from reading it.
         async function repApi(actionItem, extra) {
             const bodyText = Object.assign({ action: actionItem }, extra || {});
             const r = await fetch('/api/report', {
@@ -12,8 +12,8 @@
             return await r.json();
         }
 
-        // La conferma: la finestra del pannello (reperto 198), non il prompt del browser con la parola da scrivere. Al
-        // server la parola va comunque, nel codice di chi chiama.
+        // The confirmation: the panel's window (finding 198), not the browser's prompt with the word to type. The
+        // word still goes to the server, in the caller's code.
         function repConfirm(textValue) {
             return panelConfirm(textValue);
         }
@@ -24,10 +24,10 @@
             return d.innerHTML;
         }
 
-        // Il mittente NON e' un campo libero: le scelte valide le conosce il pannello, quindi
-        // le offre. Un campo di testo permetterebbe di scriverci un dominio di un sito, che e'
-        // l'errore gia' fatto una volta. Se sul dominio del pannello non c'e' nessuna casella,
-        // l'elenco lo dice invece di restare vuoto e misterioso.
+        // The sender is NOT a free field: the panel knows the valid choices, so it
+        // offers them. A text field would allow typing a website's domain into it, which is
+        // the mistake already made once. If there is no mailbox on the panel's domain,
+        // the list says so instead of staying empty and mysterious.
         function chosenSender(s, id) {
             const choices = (id && id.availableMailboxes) || [];
             const dom = (id && id.panelDomain) || '';
@@ -51,7 +51,7 @@
             const [s, id] = await Promise.all([repApi('status'), repApi('identity')]);
             if (!s.success) { el.innerHTML = '<span class="text-danger">' + repEsc(s.error) + '</span>'; return; }
 
-            // --- identita' del pannello ---
+            // --- the panel's identity ---
             let h = '<h6 class="mb-1">' + escHtml(t('rep.identity')) + '</h6>';
             if (!id.success) {
                 h += '<div class="alert alert-warning py-2 small mb-2">' + repEsc(id.error) + '</div>';
@@ -59,8 +59,8 @@
                 const cls = id.exists ? 'success' : (id.managedDomain ? 'warning' : 'danger');
                 h += '<div class="alert alert-' + cls + ' py-2 small mb-2">'
                    + '<code>' + repEsc(id.sender || t('rep.toSet')) + '</code><br>' + repEsc(id.note) + '</div>';
-                // Il pulsante per creare compare SOLO se l'indirizzo e' libero davvero:
-                // ne' casella ne' alias. Prima guardava solo le caselle.
+                // The button to create appears ONLY if the address is really free:
+                // neither a mailbox nor an alias. Before, it looked only at mailboxes.
                 if (id.creatable && !id.exists && id.sender) {
                     h += '<button class="btn btn-sm btn-outline-success mb-2" data-address="' + escHtml(id.sender) + '" data-on-click="repCreateIdentity(this.dataset.address)">'
                        + '<i class="fas fa-user-plus me-1" aria-hidden="true"></i>' + escHtml(t('rep.createMailbox', { address: id.sender })) + '</button>';
@@ -69,8 +69,8 @@
                 if (dm.length) h += '<div class="small text-muted mb-2">' + escHtml(t('rep.managedDomains', { domains: dm.join(', ') })) + '</div>';
             }
 
-            // --- impostazioni ---
-            // I valori restano quelli del server; il nome si mostra nella lingua della pagina.
+            // --- settings ---
+            // The values remain the server's; the name is shown in the page's language.
             const freq = [['daily', t('rep.daily')], ['weekly', t('rep.weekly')], ['monthly', t('rep.monthly')]];
             h += '<div id="rep-outcome-identity"></div>'
                + '<hr><h6 class="mb-2">' + escHtml(t('rep.whenWho')) + '</h6>'
@@ -134,8 +134,8 @@
             const el = document.getElementById('rep-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('rep.sending')) + '';
             const r = await repApi('send', { confirm: 'SEND', recipient: a });
-            // Giallo quando Postfix l'ha preso ma non e' ancora arrivato, o non si sa: non e'
-            // un errore, ma nemmeno la conferma che il verde prometterebbe.
+            // Yellow when Postfix has accepted it but it has not arrived yet, or it is unknown: it is not
+            // an error, but not the confirmation that green would promise either.
             const cls = !r.success ? 'danger' : (r.warning ? 'warning' : 'success');
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-1">'
                   + repEsc(r.note || r.error) + '</div>';
@@ -149,7 +149,7 @@
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('rep.composing')) + '';
             const r = await repApi('preview');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + repEsc(r.error) + '</span>'; return; }
-            // Mittente e oggetto come li vedra' chi riceve: sono la prima cosa che legge.
+            // Sender and subject as the recipient will see them: they are the first thing they read.
             el.innerHTML = '<div class="alert alert-info py-2 small">' + escHtml(t('rep.previewNote')) + '</div>'
                          + '<div class="small text-muted">' + escHtml(t('rep.previewFrom')) + ' <code>' + repEsc(r.from) + '</code></div>'
                          + '<div class="small text-muted mb-2">' + escHtml(t('rep.subject')) + ' <code>' + repEsc(r.subject) + '</code></div>'

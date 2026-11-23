@@ -7,29 +7,29 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * Verifica se un IP è in blacklist DNS (DNSBL) e se un dominio è in
- * RHSBL (Right-Hand-Side blacklist, per i domini).
+ * Checks whether an IP is on a DNS blacklist (DNSBL) and whether a domain is on an
+ * RHSBL (Right-Hand-Side blacklist, for domains).
  *
- * Tutte le query sono DNS-based — gratis, veloci, no auth richiesta.
- * Massimo 3 secondi per blacklist, parallelo con thread pool.
+ * All queries are DNS-based: free, fast, no auth required.
+ * At most 3 seconds per blacklist, in parallel with a thread pool.
  *
- * Liste utilizzate (le più rilevanti per reputation email):
- *  - Spamhaus ZEN: combina SBL + XBL + PBL (la più importante)
- *  - SpamCop: feedback loop dei principali ISP
- *  - Barracuda BRBL: usato da molti gateway antispam
- *  - SORBS, UCEPROTECT, Mailspike, PSBL: altri secondari
+ * Lists used (the most relevant for email reputation):
+ *  - Spamhaus ZEN: combines SBL + XBL + PBL (the most important)
+ *  - SpamCop: feedback loop of the main ISPs
+ *  - Barracuda BRBL: used by many antispam gateways
+ *  - SORBS, UCEPROTECT, Mailspike, PSBL: other, secondary ones
  *
- * Quando un IP è "listed", il response code (127.0.0.X) indica il motivo
- * specifico — è documentato sul sito di ogni blacklist.
+ * When an IP is "listed", the response code (127.0.0.X) indicates the specific
+ * reason; it is documented on the site of each blacklist.
  */
 public class BlacklistChecker {
 
     /**
-     * DNSBL per IP — risposta {@code 127.0.0.X} = listed.
+     * DNSBL for IPs -- answer {@code 127.0.0.X} = listed.
      */
-    // NOTA: SpamCop (bl.spamcop.net) è marcato come WEB-ONLY perché il loro NS
-    // restituisce timeout cronico via DNS query da molte reti.
-    // Il check via DNS è skippato; viene proposto il link per la verifica manuale.
+    // NOTE: SpamCop (bl.spamcop.net) is marked as WEB-ONLY because their NS
+    // chronically times out on DNS queries from many networks.
+    // The DNS check is skipped; the link for manual verification is offered instead.
     private static final List<DnsblEntry> IP_BLACKLISTS = Arrays.asList(
         new DnsblEntry("zen.spamhaus.org",            "Spamhaus ZEN",      "https://check.spamhaus.org/"),
         new DnsblEntry("bl.spamcop.net",              "SpamCop",           "https://www.spamcop.net/w3m?action=checkblock&ip=", /*webOnly=*/ true,
@@ -47,7 +47,7 @@ public class BlacklistChecker {
     );
 
     /**
-     * RHSBL per domini — risposta {@code 127.0.0.X} = listed.
+     * RHSBL for domains -- answer {@code 127.0.0.X} = listed.
      */
     private static final List<DnsblEntry> DOMAIN_BLACKLISTS = Arrays.asList(
         new DnsblEntry("dbl.spamhaus.org",   "Spamhaus DBL",    "https://check.spamhaus.org/"),
@@ -59,9 +59,9 @@ public class BlacklistChecker {
         public final String zone;
         public final String name;
         public final String lookupUrl;
-        /** Se true, il check via DNS viene skippato e si invita l'utente a verificare via browser. */
+        /** If true, the DNS check is skipped and the user is invited to check via browser. */
         public final boolean webOnly;
-        /** Messaggio mostrato quando webOnly=true. */
+        /** Message shown when webOnly=true. */
         public final String webOnlyMessage;
 
         public DnsblEntry(String zone, String name, String lookupUrl) {
@@ -82,14 +82,14 @@ public class BlacklistChecker {
         public String blacklistZone;
         public String lookupUrl;
         public boolean listed;
-        public String responseCode;   // 127.0.0.X se listed
+        public String responseCode;   // 127.0.0.X if listed
         public String message;
-        public boolean error;          // true se timeout o errore tecnico
-        public boolean webOnly;        // true se il check è solo via web
+        public boolean error;          // true on timeout or technical error
+        public boolean webOnly;        // true if the check is web-only
     }
 
     public static class BlacklistReport {
-        public String target;          // IP o dominio
+        public String target;          // IP or domain
         public String type;            // "IP" o "DOMAIN"
         public List<CheckResult> results = new ArrayList<>();
         public int listedCount;
@@ -100,8 +100,8 @@ public class BlacklistChecker {
     }
 
     /**
-     * Verifica un IP contro tutte le DNSBL note.
-     * Esegue in parallelo, max 3 sec per blacklist.
+     * Checks an IP against all the known DNSBLs.
+     * Runs in parallel, max 3 sec per blacklist.
      */
     public BlacklistReport checkIp(String ip) {
         BlacklistReport report = new BlacklistReport();
@@ -119,14 +119,14 @@ public class BlacklistChecker {
 
         for (DnsblEntry bl : IP_BLACKLISTS) {
             if (bl.webOnly) {
-                // Genera direttamente un risultato "web-only" senza eseguire query DNS
+                // Directly produces a "web-only" result without running DNS queries
                 final DnsblEntry blFinal = bl;
                 final String ipFinal = ip;
                 futures.add(pool.submit(I18n.withCurrentCallable(() -> {
                     CheckResult cr = new CheckResult();
                     cr.blacklistName = blFinal.name;
                     cr.blacklistZone = blFinal.zone;
-                    // L'URL di SpamCop accetta il parametro ip in fondo, se manca lo concateno
+                    // The SpamCop URL accepts the ip parameter at the end; if it is missing I append it
                     cr.lookupUrl = blFinal.lookupUrl + (blFinal.lookupUrl.endsWith("=") ? ipFinal : "");
                     cr.webOnly = true;
                     cr.message = blFinal.webOnlyMessage != null
@@ -140,7 +140,7 @@ public class BlacklistChecker {
         }
         for (Future<CheckResult> f : futures) {
             try {
-                CheckResult r = f.get(35, TimeUnit.SECONDS); // copre 2 retry (max ~28s)
+                CheckResult r = f.get(35, TimeUnit.SECONDS); // covers 2 retries (max ~28s)
                 report.results.add(r);
                 if (r.webOnly) report.webOnlyCount++;
                 else if (r.error) report.errorCount++;
@@ -152,9 +152,9 @@ public class BlacklistChecker {
         }
         pool.shutdownNow();
         report.elapsedMs = System.currentTimeMillis() - start;
-        // Ordina: prima i listed (urgenti), poi gli error, poi i clean
+        // Sort: first the listed (urgent), then the errors, then the clean
         report.results.sort((a, b) -> {
-            // Ordine: listed → error → clean → webOnly (in fondo, sono informational)
+            // Order: listed -> error -> clean -> webOnly (at the bottom, they are informational)
             int sa = a.listed ? 0 : (a.error ? 1 : (a.webOnly ? 3 : 2));
             int sb = b.listed ? 0 : (b.error ? 1 : (b.webOnly ? 3 : 2));
             return Integer.compare(sa, sb);
@@ -162,7 +162,7 @@ public class BlacklistChecker {
         return report;
     }
 
-    /** Verifica un dominio contro le RHSBL. */
+    /** Checks a domain against the RHSBLs. */
     public BlacklistReport checkDomain(String domain) {
         BlacklistReport report = new BlacklistReport();
         report.target = domain;
@@ -180,7 +180,7 @@ public class BlacklistChecker {
         }
         for (Future<CheckResult> f : futures) {
             try {
-                CheckResult r = f.get(35, TimeUnit.SECONDS); // copre 2 retry (max ~28s)
+                CheckResult r = f.get(35, TimeUnit.SECONDS); // covers 2 retries (max ~28s)
                 report.results.add(r);
                 if (r.webOnly) report.webOnlyCount++;
                 else if (r.error) report.errorCount++;
@@ -193,7 +193,7 @@ public class BlacklistChecker {
         pool.shutdownNow();
         report.elapsedMs = System.currentTimeMillis() - start;
         report.results.sort((a, b) -> {
-            // Ordine: listed → error → clean → webOnly (in fondo, sono informational)
+            // Order: listed -> error -> clean -> webOnly (at the bottom, they are informational)
             int sa = a.listed ? 0 : (a.error ? 1 : (a.webOnly ? 3 : 2));
             int sb = b.listed ? 0 : (b.error ? 1 : (b.webOnly ? 3 : 2));
             return Integer.compare(sa, sb);
@@ -202,20 +202,20 @@ public class BlacklistChecker {
     }
 
     /**
-     * Esegue una query DNS A contro {@code queryHost}. Se la risposta inizia con
-     * 127.0.0.X = listed. Vuoto o NXDOMAIN = clean.
-     * Con auto-retry: se primo tentativo va in timeout, retry con timeout più ampio.
+     * Runs a DNS A query against {@code queryHost}. If the answer starts with
+     * 127.0.0.X = listed. Empty or NXDOMAIN = clean.
+     * With auto-retry: if the first attempt times out, retry with a longer timeout.
      */
     private CheckResult queryDnsbl(String queryHost, DnsblEntry bl) {
         CheckResult r = queryDnsblOnce(queryHost, bl, 5, 2);
-        // Auto-retry su timeout: alcune blacklist (SpamCop, UCEPROTECT) hanno
-        // NS server lenti o intermittenti dalla nostra rete
+        // Auto-retry on timeout: some blacklists (SpamCop, UCEPROTECT) have
+        // NS servers that are slow or intermittent from our network
         if (r.error && r.message != null && r.message.toLowerCase().contains("timeout")) {
             CheckResult retry = queryDnsblOnce(queryHost, bl, 8, 3);
             if (!retry.error || (retry.message != null && retry.message.equals(I18n.tr("server.bl.clean")))) {
                 return retry;
             }
-            // Se anche il secondo tentativo fallisce, aggiorna il messaggio
+            // If the second attempt fails too, update the message
             r.message = I18n.tr("server.bl.timeout2");
         }
         return r;
@@ -232,7 +232,7 @@ public class BlacklistChecker {
             ProcessBuilder pb = new ProcessBuilder("dig", "+short",
                 "+time=" + timeSeconds, "+tries=" + tries, "A", queryHost);
             org.daemoxcp.mail.util.Shell.applyPath(pb);
-            // Merge stderr in stdout: dig stampa errori di rete su stderr con prefisso ';;'
+            // Merge stderr into stdout: dig prints network errors on stderr with the ';;' prefix
             pb.redirectErrorStream(true);
             Process p = pb.start();
             StringBuilder out = new StringBuilder();
@@ -249,18 +249,18 @@ public class BlacklistChecker {
             }
             String response = out.toString().trim();
 
-            // Filtra righe di errore di dig (cominciano con ';;') e righe vuote.
-            // Tieni solo le risposte effettive (IP o nulla).
+            // Filter out dig error lines (they start with ';;') and empty lines.
+            // Keep only the actual answers (IP or nothing).
             StringBuilder filtered = new StringBuilder();
             String digError = null;
             for (String line : response.split("\n")) {
                 String t = line.trim();
                 if (t.isEmpty()) continue;
                 if (t.startsWith(";;")) {
-                    // Salva l'errore dig (es. "communications error", "connection refused")
+                    // Save the dig error (e.g. "communications error", "connection refused")
                     if (digError == null) {
                         digError = t.replaceFirst(";;\\s*", "");
-                        // taglia se troppo lungo
+                        // truncate if too long
                         if (digError.length() > 120) digError = digError.substring(0, 120) + "...";
                     }
                     continue;
@@ -286,15 +286,15 @@ public class BlacklistChecker {
                 return r;
             }
 
-            // Prima riga = response IP (es. 127.0.0.2)
+            // First line = response IP (e.g. 127.0.0.2)
             String firstLine = cleaned.split("\n")[0].trim();
 
-            // Codici di ERRORE di Spamhaus (non sono "listed"):
+            // Spamhaus ERROR codes (they are not "listed"):
             //   127.255.255.252 = TYPHON (Spamhaus internal)
             //   127.255.255.253 = QUERY type prohibited
             //   127.255.255.254 = Query via OPEN/PUBLIC RESOLVER not allowed
             //   127.255.255.255 = Excessive queries / rate limited
-            // Altri DNSBL possono usare 127.0.0.1 come "errore" o 127.X come info.
+            // Other DNSBLs may use 127.0.0.1 as an "error" or 127.X as info.
             if (firstLine.startsWith("127.255.255.")) {
                 r.error = true;
                 r.responseCode = firstLine;
@@ -311,7 +311,7 @@ public class BlacklistChecker {
                 r.responseCode = firstLine;
                 r.message = I18n.tr("server.bl.listed", java.util.Map.of("c", String.valueOf(firstLine)));
             } else {
-                // Risposta inattesa
+                // Unexpected answer
                 r.error = true;
                 r.message = I18n.tr("server.bl.unexpected", java.util.Map.of("c", String.valueOf(firstLine)));
             }
@@ -322,7 +322,7 @@ public class BlacklistChecker {
         return r;
     }
 
-    /** Inverte un IPv4 in ottetti per query DNSBL. Es: 1.2.3.4 → 4.3.2.1 */
+    /** Reverses an IPv4 by octets for DNSBL queries. E.g.: 1.2.3.4 -> 4.3.2.1 */
     private static String reverseIpv4(String ip) {
         String[] parts = ip.split("\\.");
         if (parts.length != 4) return ip;

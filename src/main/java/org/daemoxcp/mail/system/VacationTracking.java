@@ -14,43 +14,45 @@ import java.util.function.Predicate;
 import java.util.logging.Logger;
 
 /**
- * La memoria delle risposte automatiche di una casella, e come si azzera senza rompere niente (reperto 219).
+ * The memory of a mailbox's automatic replies, and how to reset it without breaking anything (finding 219).
  *
- * <p>Pigeonhole ricorda a chi ha gia' risposto nel database dei duplicati di Dovecot, il file .dovecot.lda-dupes nella
- * home della casella. La documentazione di Pigeonhole (2.3, «Sieve Usage», sulla risposta automatica): «List of
- * autoreplied senders is stored in '.dovecot.lda-dupes' file in user's home directory», e per provare di nuovo «try
- * deleting this file». Per azzerarla basta togliere quel file:
+ * <p>Pigeonhole remembers whom it has already answered in Dovecot's duplicate database, the .dovecot.lda-dupes file in
+ * the mailbox home. The Pigeonhole documentation (2.3, "Sieve Usage", on the automatic reply): "List of
+ * autoreplied senders is stored in '.dovecot.lda-dupes' file in user's home directory", and to try again "try
+ * deleting this file". To reset it, removing that file is enough:
  * <ul>
- *   <li>il compilato .dovecot.svbin accanto alle regole del pannello e' il codice dello script, non sa niente delle
- *       risposte date. Fino al 10/11/2026 il reset lo toglieva «per forzare la ricompilazione», ma la cartella e' di
- *       root (reperto 214) e Dovecot, che consegna come vmail, non lo puo' salvare: da li' in poi ogni consegna a quella
- *       casella ricompilava le regole e scriveva nel maillog «Error: sieve: binary ...: save: failed to create temporary
- *       file ... Permission denied (euid=5000(vmail))», finche' il pannello non risalvava le regole (misurato sulla VM il
- *       10/11/2026). Le regole non cambiano: ricompilarle non serve;</li>
- *   <li>Dovecot non tiene la memoria in memoria: LMTP la rilegge dal file a ogni consegna. Il reset faceva {@code
- *       service dovecot restart}, che ferma e riavvia tutto Dovecot (processo principale, autenticazione, LMTP, l'ascolto
- *       di IMAP), e non serviva: subito dopo il reset, senza riavvio, la consegna seguente riceve di nuovo la risposta
- *       (misurato). Una sessione IMAP gia' entrata al riavvio sopravviveva (Dovecot 2.3.21, misurato);</li>
- *   <li>.dovecot.sieve.db, che il reset toglieva in /var/mail/sieve, non lo scrive e non lo legge nessuno: nessuna
- *       libreria di Dovecot 2.3.21 e Pigeonhole 0.5.21 contiene quel nome (misurato), .dovecot.lda-dupes si'.</li>
+ *   <li>the compiled .dovecot.svbin next to the panel's rules is the script's code, it knows nothing about the
+ *       replies sent. Until 2026-11-10 the reset removed it "to force recompilation", but the folder belongs to
+ *       root (finding 214) and Dovecot, which delivers as vmail, cannot save it: from then on every delivery to that
+ *       mailbox recompiled the rules and wrote to the maillog "Error: sieve: binary ...: save: failed to create
+ *       temporary file ... Permission denied (euid=5000(vmail))", until the panel saved the rules again (measured on
+ *       the VM on 2026-11-10). The rules do not change: recompiling them is pointless;</li>
+ *   <li>Dovecot does not keep the memory in memory: LMTP rereads it from the file at every delivery. The reset ran
+ *       {@code service dovecot restart}, which stops and restarts all of Dovecot (main process, authentication, LMTP,
+ *       the IMAP listener), and it was not needed: right after the reset, without a restart, the next delivery gets
+ *       the reply again (measured). An IMAP session already logged in at the restart survived (Dovecot 2.3.21,
+ *       measured);</li>
+ *   <li>.dovecot.sieve.db, which the reset removed in /var/mail/sieve, is neither written nor read by anyone: no
+ *       library of Dovecot 2.3.21 and Pigeonhole 0.5.21 contains that name (measured), .dovecot.lda-dupes does.</li>
  * </ul>
  *
- * <p>La casella viene da MySQL, dove col pannello separato scrive anche la parte web, e root ne fa un percorso: deve
- * avere la forma di un indirizzo, e il file restare sotto /var/vmail (come in SieveGenerator.saveSieveScript).
+ * <p>The mailbox comes from MySQL, where the web part of the separated panel also writes, and root turns it into a
+ * path: it must have the shape of an address, and the file must stay under /var/vmail (as in
+ * SieveGenerator.saveSieveScript).
  *
- * <p>All'avvio {@link #ensureAtBoot()} rimette il compilato alle regole del pannello che non l'hanno, o l'hanno piu'
- * vecchio dello script: e' quello che lasciava il reset di prima.
+ * <p>At boot {@link #ensureAtBoot()} restores the compiled file for the panel's rules that lack it, or whose compiled
+ * file is older than the script: that is what the previous reset left behind.
  */
 public final class VacationTracking {
 
     private static final Logger LOGGER = Logger.getLogger(VacationTracking.class.getName());
 
     /**
-     * La radice delle caselle. La home di Dovecot di ognuna e' la sua cartella home/ (home=/var/vmail/%d/%n/home,
-     * reperto 217, DovecotHome); prima era la radice stessa.
+     * The root of the mailboxes. The Dovecot home of each one is its home/ folder (home=/var/vmail/%d/%n/home,
+     * finding 217, DovecotHome); before, it was the root itself.
      */
     static final Path HOMES = Path.of("/var/vmail");
-    /** Il database dei duplicati di Dovecot, dove Pigeonhole ricorda le risposte automatiche date. */
+    /** Dovecot's duplicate database, where Pigeonhole remembers the automatic replies it has sent. */
     public static final String DUPLICATES = ".dovecot.lda-dupes";
 
     static final Path PANEL_RULES = Path.of("/var/mail/sieve");
@@ -59,9 +61,9 @@ public final class VacationTracking {
     private VacationTracking() {}
 
     /**
-     * Azzera la memoria delle risposte automatiche della casella: la prossima consegna da un mittente gia' servito
-     * riceve di nuovo la risposta. Non tocca le regole ne' il compilato, e non riavvia Dovecot. Falso se l'indirizzo
-     * non ha la forma di un indirizzo.
+     * Resets the memory of the mailbox's automatic replies: the next delivery from a sender already answered
+     * gets the reply again. It does not touch the rules or the compiled file, and does not restart Dovecot. False if
+     * the address does not have the shape of an address.
      */
     public static boolean reset(String email) throws IOException {
         return reset(HOMES, email);
@@ -71,22 +73,22 @@ public final class VacationTracking {
         Path duplicates = duplicatesOf(homes, email);
         if (duplicates == null) return false;
         Files.deleteIfExists(duplicates);
-        // Prima del reperto 217 la memoria stava nella radice della casella: se DovecotHome non l'ha ancora portata nella
-        // home (o Dovecot l'ha riscritta li' prima della migrazione), si toglie anche quella.
+        // Before finding 217 the memory was in the mailbox root: if DovecotHome has not moved it into the
+        // home yet (or Dovecot rewrote it there before the migration), that one is removed too.
         Files.deleteIfExists(duplicates.getParent().resolveSibling(DUPLICATES));
         return true;
     }
 
-    /** homes/dominio/nome/home/.dovecot.lda-dupes, o null se l'indirizzo non e' un indirizzo. Pura. */
+    /** homes/domain/name/home/.dovecot.lda-dupes, or null if the address is not an address. Pure. */
     static Path duplicatesOf(Path homes, String email) {
         if (!SafeNames.address(email)) return null;
         int at = email.indexOf('@');
         return SafeNames.under(homes, email.substring(at + 1), email.substring(0, at), DovecotHome.DIR, DUPLICATES);
     }
 
-    // ===================== All'avvio: il compilato che il reset di prima toglieva =====================
+    // ===================== At boot: the compiled file that the previous reset removed =====================
 
-    /** Vero se accanto allo script non c'e' un compilato vero strettamente piu' nuovo, come Pigeonhole lo vuole. */
+    /** True if next to the script there is no real compiled file that is strictly newer, as Pigeonhole wants it. */
     static boolean stale(Path script) throws IOException {
         Path binary = script.resolveSibling(BINARY);
         if (!Files.isRegularFile(binary, LinkOption.NOFOLLOW_LINKS)) return true;
@@ -95,12 +97,12 @@ public final class VacationTracking {
         return b.compareTo(s) <= 0;
     }
 
-    /** Il risultato di un giro: gli script ricompilati, e quelli che non si sono potuti ricompilare. */
+    /** The result of a run: the scripts recompiled, and those that could not be recompiled. */
     record Outcome(List<Path> compiled, List<Path> notCompiled) {}
 
     /**
-     * Ricompila con compile (vero se il compilato e' al suo posto) ogni regola del pannello sotto root senza un compilato
-     * piu' nuovo. Le altre non si toccano: al secondo giro non c'e' niente da fare.
+     * Recompiles with compile (true if the compiled file is in place) every panel rule under root without a newer
+     * compiled file. The others are not touched: on the second run there is nothing to do.
      */
     static Outcome repair(Path root, Predicate<Path> compile) throws IOException {
         List<Path> compiled = new ArrayList<>(), notCompiled = new ArrayList<>();
@@ -112,7 +114,7 @@ public final class VacationTracking {
         return new Outcome(compiled, notCompiled);
     }
 
-    /** All'avvio della parte root, dopo SieveForcedKeep (che ricompila gia' quello che cambia). */
+    /** At the boot of the root part, after SieveForcedKeep (which already recompiles what changes). */
     public static void ensureAtBoot() {
         try {
             if (SieveCompiler.sievec() == null) return;

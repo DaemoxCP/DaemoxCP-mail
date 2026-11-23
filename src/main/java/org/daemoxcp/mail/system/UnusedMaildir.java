@@ -11,21 +11,23 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Le cartelle Maildir/ vuote che le versioni di prima creavano in ogni casella, tolte.
+ * The empty Maildir/ folders that earlier versions created in every mailbox, removed.
  *
- * Dopo «Add mailbox» lo script del pannello (ConfigRegeneratorScript) creava /var/vmail/dominio/nome/Maildir/{cur,new,
- * tmp}, ma Dovecot tiene la posta nella radice della casella (mail_location maildir:/var/vmail/%d/%n): quella cartella
- * non la usava nessuno. Trovata installando dal README sulla VM il 20/11/2026; sul server vero c'era in 12 caselle su 12,
- * vuota in tutte. Adesso lo script crea la casella come la legge Dovecot; qui, all'avvio, si tolgono quelle vecchie.
+ * After "Add mailbox" the panel's script (ConfigRegeneratorScript) created
+ * /var/vmail/domain/name/Maildir/{cur,new,tmp}, but Dovecot keeps the mail in the root of the mailbox (mail_location
+ * maildir:/var/vmail/%d/%n): nobody used that folder. Found while installing from the README on the VM on
+ * 2026-11-20; on the production server it was in 12 mailboxes out of 12, empty in all of them. Now the script
+ * creates the mailbox the way Dovecot reads it; here, at boot, the old ones are removed.
  *
- * Lo script le creava con /bin/sh, che su FreeBSD non espande le graffe: dentro Maildir/ non c'erano cur, new e tmp, ma
- * una cartella sola che si chiama proprio {cur,new,tmp}. Cosi' era sul server vero (12 su 12, visto al passaggio del
- * 20/11/2026, quando questa riparazione le ha lasciate tutte): quel nome vale come cur, new e tmp, alle stesse condizioni.
+ * The script created them with /bin/sh, which on FreeBSD does not expand braces: inside Maildir/ there were no cur,
+ * new and tmp, but one single folder literally named {cur,new,tmp}. That was the case on the production server (12
+ * out of 12, seen during the upgrade of 2026-11-20, when this repair left them all in place): that name counts as
+ * cur, new and tmp, under the same conditions.
  *
- * Solo con rmdir, come vmail: rmdir toglie una cartella solo se e' vuota, quindi una Maildir/ con dentro anche un solo
- * file (o un collegamento) resta com'e', e il registro lo dice. E solo se Dovecot non tiene la posta proprio in una
- * cartella che si chiama Maildir: allora sarebbe la sua, anche vuota. Al secondo avvio non trova niente da fare (una
- * Maildir/ non vuota resta, e ogni avvio la ricorda in una riga del registro).
+ * Only with rmdir, as vmail: rmdir removes a folder only if it is empty, so a Maildir/ with even a single file
+ * inside (or a link) stays as it is, and the log says so. And only if Dovecot does not keep the mail precisely in a
+ * folder called Maildir: then it would be its own, even if empty. On the second start it finds nothing to do (a
+ * non-empty Maildir/ stays, and every start mentions it in one line of the log).
  */
 public final class UnusedMaildir {
 
@@ -34,9 +36,9 @@ public final class UnusedMaildir {
     static Path vmail = Path.of("/var/vmail");
 
     /**
-     * Il lavoro come vmail: per ogni casella, la sua Maildir/ solo se dentro ha al piu' cur, new e tmp vuote (o
-     * {cur,new,tmp} vuota), e con rmdir,
-     * che comunque non toglie niente che non sia vuoto.
+     * The job as vmail: for each mailbox, its Maildir/ only if inside it has at most empty cur, new and tmp (or an
+     * empty {cur,new,tmp}), and with rmdir,
+     * which in any case removes nothing that is not empty.
      */
     static final String SCRIPT = """
             PATH=/bin:/usr/bin; export PATH
@@ -65,12 +67,12 @@ public final class UnusedMaildir {
 
     private UnusedMaildir() {}
 
-    /** Il percorso della posta di Dovecot finisce in una cartella Maildir: allora quella cartella e' sua. Funzione pura. */
+    /** The Dovecot mail path ends in a Maildir folder: then that folder is its own. Pure function. */
     static boolean dovecotUsesMaildirFolder(String mailPath) {
         return mailPath != null && mailPath.contains("/Maildir");
     }
 
-    /** Le righe del lavoro, divise per esito. */
+    /** The lines of the job, split by outcome. */
     record Outcome(List<String> removed, List<String> kept) {
         static Outcome of(String output) {
             List<String> removed = new ArrayList<>(), kept = new ArrayList<>();
@@ -82,7 +84,7 @@ public final class UnusedMaildir {
         }
     }
 
-    /** Lo script su una cartella qualsiasi, con l'utente che gira: per le prove. */
+    /** The script on any folder, with the user that is running: for the tests. */
     static Outcome run(Path root) {
         return Outcome.of(Shell.run(Duration.ofSeconds(120), "sh", "-c", SCRIPT, "sh", root.toString()).output());
     }

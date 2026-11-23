@@ -49,7 +49,7 @@ public class ConfigSecretsTest {
                     .directory(dir.toFile()).inheritIO().start();
             int code = child.waitFor();
             // Inside are a test database and a test secrets file: in /tmp, outside the boot
-            // environments, they stayed after every run (reperto 162).
+            // environments, they stayed after every run (finding 162).
             try (var walk = Files.walk(dir)) {
                 for (Path q : walk.sorted((x, y) -> y.compareTo(x)).toList()) Files.deleteIfExists(q);   // children first
             }

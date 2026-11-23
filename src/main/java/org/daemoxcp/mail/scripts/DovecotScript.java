@@ -18,24 +18,25 @@ public class DovecotScript {
     private final String data;
 
     /**
-     * La cartella delle regole Sieve del pannello (risposta automatica, inoltro, filtri:
-     * /var/mail/sieve/dominio/nome/.dovecot.sieve) e quella degli script globali di sieve_global_dir: di root, e
-     * nessuno oltre root ci scrive (reperto 220).
+     * The folder of the panel's Sieve rules (auto-reply, forward, filters:
+     * /var/mail/sieve/domain/name/.dovecot.sieve) and that of the global scripts of sieve_global_dir: owned by root,
+     * and nobody but root writes in them (finding 220).
      *
-     * <p>Prima questo script dava tutto a vmail (chown -R vmail:vmail /var/mail/sieve). Dal reperto 214 le regole del
-     * pannello sono di root apposta: vmail, che consegna, le legge e le esegue ma non le deve poter riscrivere. Con la
-     * cartella di vmail pero' bastava rinominare quella di un dominio (di root) e farne una propria accanto, con regole
-     * proprie: misurato sulla VM il 10/11/2026, «mv» e «mkdir» da vmail riusciti. La documentazione di Pigeonhole 2.3
-     * (Sieve Usage) dice lo stesso degli script globali: non devono essere scrivibili dall'utente, e li precompila
-     * l'amministratore con sievec (dal reperto 218 l'utente sievec, poi root li mette a posto).
+     * <p>Before, this script gave everything to vmail (chown -R vmail:vmail /var/mail/sieve). Since finding 214 the
+     * panel's rules belong to root on purpose: vmail, which delivers, reads and runs them but must not be able to
+     * rewrite them. With the folder owned by vmail, however, it was enough to rename a domain's folder (owned by
+     * root) and make one's own next to it, with one's own rules: measured on the VM on 2026-11-10, "mv" and "mkdir"
+     * as vmail succeeded. Pigeonhole 2.3's documentation (Sieve Usage) says the same of the global scripts: they
+     * must not be writable by the user, and the administrator precompiles them with sievec (since finding 218 the
+     * sievec user, then root puts them in place).
      *
-     * <p>root:mail come le crea il pannello: /var/mail e' root:mail, e su FreeBSD una cartella nuova prende il gruppo
-     * di quella che la contiene. -R senza -H non segue i collegamenti (quelli di ManageSieve restano com'erano), e
-     * go-w toglie solo la scrittura: lo script resta 0644, le cartelle 0755, e vmail li legge come prima.
+     * <p>root:mail as the panel creates them: /var/mail is root:mail, and on FreeBSD a new folder takes the group
+     * of the one that contains it. -R without -H does not follow links (those of ManageSieve stay as they were), and
+     * go-w removes only writing: the script stays 0644, the folders 0755, and vmail reads them as before.
      *
-     * <p>Lo script di questa classe oggi non lo lancia nessuno: la rotta /api/install non c'e' dal primo commit
-     * (30/12/2025), e install_dovecot.sh e' fra gli script messi da parte (InstallScripts.RETIRED). Il chown a vmail e'
-     * arrivato il 31/12/2025: nessun server l'ha mai eseguito, quindi nessuna migrazione all'avvio.
+     * <p>Nobody runs this class's script today: the /api/install route has not existed since the first commit
+     * (2025-12-30), and install_dovecot.sh is among the scripts set aside (InstallScripts.RETIRED). The chown to
+     * vmail arrived on 2025-12-31: no server ever ran it, so no boot migration.
      */
     static final String PANEL_SIEVE_FOLDER = """
             # The panel's Sieve rules: root's, and only root writes there (vmail reads and runs them)
@@ -110,21 +111,22 @@ public class DovecotScript {
 
             mkdir -p /var/vmail
             """
-            // Le cartelle della posta a vmail senza dargli file di altri: niente hard link, niente collegamenti (reperto 252)
+            // The mail folders to vmail without giving it other people's files: no hard links, no symbolic links
+            // (finding 252)
             + org.daemoxcp.mail.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail") + """
             chmod 700 /var/vmail
 
             # Configure Dovecot
             echo "[3/7] Configuring Dovecot..."
             """
-            // Sorgente UNICA della configurazione: prima ogni script aveva la sua copia,
-            // e due delle tre scrivevano un nome di database cablato e sbagliato.
+            // SINGLE source of the configuration: before, every script had its own copy,
+            // and two of the three wrote a hard-coded and wrong database name.
             + DovecotConfig.fromPanelConfig().scriptFragment() + """
 
             # Generate master user password for SSO
             echo "[5/7] Configuring master user for SSO..."
             """
-            // Lo stesso pezzo di FullMailServerScript e FullMailStackScript.
+            // The same piece as in FullMailServerScript and FullMailStackScript.
             + org.daemoxcp.mail.system.DovecotMasterUser.shell() + """
 
             # Create SSL directory
@@ -175,7 +177,7 @@ public class DovecotScript {
         return this.data;
     }
 
-    /** Sempre, tutto o niente, con l'impronta del jar (InstallScripts): mai uno script di una versione di prima. */
+    /** Always, all or nothing, with the jar's fingerprint (InstallScripts): never a script from a previous version. */
     public void write_file() {
         this.writed = InstallScripts.write(SCRIPT_PATH, this.data);
     }

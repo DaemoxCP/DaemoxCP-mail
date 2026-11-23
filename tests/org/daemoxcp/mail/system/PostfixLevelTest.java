@@ -17,7 +17,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Postfix's compatibility level at installation (reperto 251): a server just installed by the panel must not start
+ * Postfix's compatibility level at installation (finding 251): a server just installed by the panel must not start
  * with "Postfix: the level is behind" in Diagnostics, and raising the level must not change how mail behaves.
  *  1. each of the three scripts that write main.cf (FullMailServerScript, FullMailStackScript, PostfixScript) writes
  *     the 3.6 floor, and decides in main.cf every parameter that a reviewed level above it changes (or the change does

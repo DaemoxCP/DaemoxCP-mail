@@ -13,7 +13,7 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- * Root giving a folder and its contents to a user without giving it other people's files (reperto 252). On FreeBSD
+ * Root giving a folder and its contents to a user without giving it other people's files (finding 252). On FreeBSD
  * anyone can hard-link another user's file on the same file system (security.bsd.hardlink_check_uid is 0 by default),
  * and /var/vmail is on the same file system as /etc: "chown -R vmail:vmail /var/vmail", run by root at every
  * regeneration of the mail folders, gave vmail a root file linked in there (measured on the VM with a test file).

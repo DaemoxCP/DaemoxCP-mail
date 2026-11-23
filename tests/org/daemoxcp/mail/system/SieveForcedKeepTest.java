@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The forced keep taken out of the panel's Sieve scripts already written, at boot (reperto 216).
+ * The forced keep taken out of the panel's Sieve scripts already written, at boot (finding 216).
  *
  *  1. fixed(): a script the panel wrote before (both require lines it ever wrote, with and without "date") loses only the
  *     tail, and becomes byte for byte what SieveGenerator writes now for the same rules; anything else (already fixed,
@@ -26,7 +26,7 @@ public class SieveForcedKeepTest {
 
     private static int failures = 0;
 
-    /** What the generator wrote before reperto 229: the require line without "mailbox", fileinto without :create. */
+    /** What the generator wrote before finding 229: the require line without "mailbox", fileinto without :create. */
     static String before229(String script) {
         return script.replace(SieveGenerator.REQUIRE, SieveGenerator.REQUIRE_BEFORE_MAILBOX)
                 .replace("fileinto :copy :create ", "fileinto :copy ").replace("fileinto :create ", "fileinto ");
@@ -34,7 +34,7 @@ public class SieveForcedKeepTest {
 
     public static void main(String[] args) throws Exception {
         SieveGenerator generator = new SieveGenerator();
-        // The scripts this repair meets were written before reperto 229 (no "mailbox", no :create): "now" here is what
+        // The scripts this repair meets were written before finding 229 (no "mailbox", no :create): "now" here is what
         // the generator wrote then, without the forced keep. SieveRulesRefresh brings them to today's text afterwards.
         String moveNow = before229(generator.generateSieveScript(1, new SieveGeneratorTest.Rules().filter("spam", "move", "Junk")));
         String forwardNow = before229(generator.generateSieveScript(1, new SieveGeneratorTest.Rules().forward("bob@example.test", false)
@@ -110,7 +110,7 @@ public class SieveForcedKeepTest {
             Path sievec = Path.of("/usr/local/bin/sievec");
             if ("yes".equals(System.getProperty("e2e.vm")) && Files.isExecutable(sievec)) {
                 // A folder of its own: frank, above, was put back with the tail on purpose. Open to everyone like
-                // /var/mail/sieve: sievec runs as its own user (reperto 218) and must reach the script.
+                // /var/mail/sieve: sievec runs as its own user (finding 218) and must reach the script.
                 Files.setPosixFilePermissions(root, PosixFilePermissions.fromString("rwxr-xr-x"));
                 Path real3 = Files.createDirectories(root.resolve("sieve-real"));
                 Path gina = write(real3.resolve("example.test/gina/.dovecot.sieve"), moveBefore);

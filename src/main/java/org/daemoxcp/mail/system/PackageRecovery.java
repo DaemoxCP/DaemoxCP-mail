@@ -19,21 +19,21 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Dopo un lavoro sui pacchetti che non e' arrivato in fondo: riproteggere anche quando pkg sta
- * ancora lavorando, e DIRLO.
+ * After a package job that did not get to the end: lock again even when pkg is still
+ * working, and SAY SO.
  *
- * Misurato sulla VM il 06/11/2026 (reperto 147):
- *  - il pannello ucciso a meta' di un aggiornamento: pkg continua e finisce da solo; il pannello
- *    riavviato mentre pkg lavora non riesce a riproteggere («PROTECTING AGAIN FAILED») e il
- *    pacchetto restava sbloccato fino al riavvio SUCCESSIVO, cioe' anche per settimane;
- *  - la corrente che manca durante pkg: all'avvio il pacchetto si riprotegge, ma risulta
- *    installato con lo script di installazione mai finito;
- *  - in tutti e due i casi l'unica traccia era una riga WARNING nel log: niente in pagina, niente
- *    nel rapporto periodico.
+ * Measured on the VM on 2026-11-06 (finding 147):
+ *  - the panel killed halfway through an upgrade: pkg goes on and finishes by itself; the panel
+ *    restarted while pkg is working fails to lock again ("PROTECTING AGAIN FAILED") and the
+ *    package stayed unlocked until the NEXT restart, that is, even for weeks;
+ *  - power failing during pkg: at startup the package is locked again, but it shows as
+ *    installed with the install script never finished;
+ *  - in both cases the only trace was a WARNING line in the log: nothing on the page, nothing
+ *    in the periodic report.
  *
- * Qui stanno le due risposte: il ripristino che riprova da solo ogni RETRY_SECONDS finche' pkg
- * non ha finito, e l'avviso su disco (NOTICE_PATH) che la pagina Aggiornamenti e il rapporto
- * mostrano finche' un amministratore non dice di aver controllato.
+ * Here are the two answers: the recovery that retries by itself every RETRY_SECONDS until pkg
+ * has finished, and the notice on disk (NOTICE_PATH) that the Updates page and the report
+ * show until an administrator says they have checked.
  */
 public final class PackageRecovery {
 
@@ -41,18 +41,18 @@ public final class PackageRecovery {
 
     private static final Logger LOGGER = Logger.getLogger(PackageRecovery.class.getName());
 
-    /** L'avviso di un lavoro interrotto: resta finche' un amministratore non lo chiude. */
+    /** The notice of an interrupted job: it stays until an administrator closes it. */
     public static final String NOTICE_PATH = "/var/db/daemoxcp-mail/package-job-interrupted.json";
 
-    /** Dove sta l'avviso. E' una variabile solo perche' le prove non scrivano in /var/db. */
+    /** Where the notice lives. It is a variable only so that the tests do not write in /var/db. */
     static Path notice = Path.of(NOTICE_PATH);
 
-    /** Ogni quanto si riprova a riproteggere mentre pkg lavora. */
+    /** How often to retry locking again while pkg is working. */
     static int retrySeconds = 30;
 
     private static Thread retry;
 
-    /** Il pkg che sta lavorando adesso ("pid nome argomenti"), o "" se nessuno. */
+    /** The pkg working right now ("pid name arguments"), or "" if none. */
     static String pkgRunning() {
         return Shell.runShell(Duration.ofSeconds(15), "pgrep -lfx 'pkg(-static)? .*' 2>/dev/null").outputTrim();
     }
@@ -62,9 +62,9 @@ public final class PackageRecovery {
     }
 
     /**
-     * Annota che un lavoro si e' interrotto: quale (dal record che il lavoro ha scritto accanto al
-     * suo elenco), con quali pacchetti, quali erano ancora sbloccati all'avvio, e se pkg stava
-     * ancora lavorando. Un avviso gia' presente non si sovrascrive: ci si aggiunge.
+     * Records that a job was interrupted: which one (from the record the job wrote next to its
+     * list), with which packages, which ones were still unlocked at startup, and whether pkg was
+     * still working. A notice that is already there is not overwritten: it is appended to.
      */
     static void recordInterruption(JSONObject job, List<String> packages, List<String> unlockedAtStart, String pkgNow) {
         JSONObject n = new JSONObject()
@@ -74,23 +74,22 @@ public final class PackageRecovery {
                 .put("packages", new JSONArray(packages))
                 .put("unlockedAtStart", new JSONArray(unlockedAtStart))
                 .put("pkgWasRunning", pkgNow);
-        // La reinstallazione completa interrotta lascia la posta spenta e le configurazioni
-        // cancellate, non solo dei pacchetti da riproteggere: l'avviso lo dice, con la sua via di
-        // ritorno (reperto 166).
+        // The interrupted full reinstallation leaves mail off and the configurations deleted, not
+        // just packages to lock again: the notice says so, with its way back (finding 166).
         if (job.optString("turnId", "").startsWith(InstallLocks.REINSTALL_TURN_PREFIX))
             n.put("reinstall", true).put("wayBack", PackageWayBack.newestReinstallWayBack());
         JSONObject old = notice();
         if (!old.isEmpty()) n.put("earlier", old);
         write(n);
-        // Nel registro l'id del lavoro e i pacchetti, in inglese: la descrizione e' nella lingua del pannello (avviso).
+        // In the log the job id and the packages, in English: the description is in the panel's language (notice).
         LOGGER.warning("Interrupted package job recorded in " + notice + ": job " + (job.optString("turnId", "").isEmpty()
                 ? "of unknown id" : job.optString("turnId")) + ", packages " + packages);
     }
 
     /**
-     * Il lavoro interrotto e' stato completato dal pannello (InterruptedJobRecovery): l'avviso dice che cosa ha
-     * fatto e se tutto torna. Se l'avviso non c'era (un lavoro che non aveva sbloccato niente, e quindi non lasciava
-     * l'elenco), lo crea dalla traccia del lavoro.
+     * The interrupted job was completed by the panel (InterruptedJobRecovery): the notice says what it did and
+     * whether everything adds up. If the notice was not there (a job that had unlocked nothing, and therefore did
+     * not leave the list), it creates it from the job's trace.
      */
     static void recordRecovery(JSONObject running, JSONObject recovery) {
         JSONObject n = notice();
@@ -110,13 +109,13 @@ public final class PackageRecovery {
         write(n.put("recovery", recovery));
     }
 
-    /** L'avviso dice un lavoro completato e verificato: da leggere, non una cosa da fare. */
+    /** The notice states a completed and verified job: something to read, not something to do. */
     static boolean completed(JSONObject n) {
         JSONObject r = n.optJSONObject("recovery");
         return r != null && r.optBoolean("ok");
     }
 
-    /** I pacchetti sono di nuovo protetti: l'avviso lo dice, ma resta finche' qualcuno non controlla. */
+    /** The packages are locked again: the notice says so, but it stays until someone checks. */
     static void markRelocked() {
         JSONObject n = notice();
         if (n.isEmpty() || n.has("relockedUtc")) return;
@@ -135,13 +134,13 @@ public final class PackageRecovery {
     }
 
     /**
-     * Per il rapporto periodico (UpdateManager.reportData): l'avviso come una cosa da fare, o null se
-     * non c'e'. La reinstallazione interrotta e' la cosa piu' urgente (la posta puo' essere spenta) e
-     * ha il suo titolo; prima usciva con l'urgenza e il titolo di un lavoro qualunque (reperto 172).
+     * For the periodic report (UpdateManager.reportData): the notice as something to do, or null if
+     * there is none. The interrupted reinstallation is the most urgent thing (mail may be off) and
+     * has its own title; before, it came out with the urgency and the title of any job (finding 172).
      */
     public static JSONObject reportItem() {
         JSONObject n = notice();
-        // Completato e verificato dal pannello: non c'e' niente da fare (la pagina lo mostra comunque).
+        // Completed and verified by the panel: there is nothing to do (the page shows it anyway).
         if (n.isEmpty() || completed(n)) return null;
         boolean reinstall = n.optBoolean("reinstall");
         return new JSONObject().put("urgency", reinstall ? 0 : 1)
@@ -150,13 +149,13 @@ public final class PackageRecovery {
                 .put("where", I18n.tr(reinstall ? "mail.report.where.interrupted" : "server.um.x.updatesPage"));
     }
 
-    /** L'avviso, o un oggetto vuoto se non c'e'. */
+    /** The notice, or an empty object if there is none. */
     public static JSONObject notice() {
         try { return new JSONObject(Files.readString(notice)); }
         catch (Exception e) { return new JSONObject(); }
     }
 
-    /** Per la pagina: l'avviso e, se l'elenco e' ancora su disco, i pacchetti ancora sbloccati. */
+    /** For the page: the notice and, if the list is still on disk, the packages still unlocked. */
     public static JSONObject status() {
         JSONObject r = new JSONObject().put("success", true);
         JSONObject n = notice();
@@ -168,7 +167,7 @@ public final class PackageRecovery {
         return r;
     }
 
-    /** I nomi scritti nell'elenco del lavoro interrotto (righe valide, senza commenti). */
+    /** The names written in the list of the interrupted job (valid lines, without comments). */
     static List<String> statePackages() {
         try {
             return Files.readAllLines(PackageQueue.list).stream().map(String::trim)
@@ -177,8 +176,8 @@ public final class PackageRecovery {
     }
 
     /**
-     * L'amministratore ha controllato: l'avviso si chiude. Non si chiude finche' i pacchetti sono
-     * ancora sbloccati: quello non e' un avviso da archiviare, e' un lavoro da finire.
+     * The administrator has checked: the notice is closed. It is not closed while the packages are
+     * still unlocked: that is not a notice to file away, it is a job to finish.
      */
     public static JSONObject dismiss() {
         if (PackageQueue.statePresent())
@@ -192,9 +191,9 @@ public final class PackageRecovery {
     }
 
     /**
-     * Riprova a riproteggere ogni retrySeconds, in un thread a parte, finche' il tentativo non
-     * dice di aver finito. Un solo thread per volta: un secondo avvio della stessa richiesta non
-     * ne crea un altro.
+     * Retries locking again every retrySeconds, in a separate thread, until the attempt says it
+     * has finished. Only one thread at a time: a second start of the same request does not
+     * create another one.
      */
     static synchronized void retryInBackground(BooleanSupplier attempt) {
         if (retry != null && retry.isAlive()) return;
@@ -212,7 +211,7 @@ public final class PackageRecovery {
         retry.start();
     }
 
-    /** Che cosa ha fatto il pannello completando il lavoro, in una frase: pacchetti, reinstallazioni, servizi. */
+    /** What the panel did when completing the job, in one sentence: packages, reinstallations, services. */
     static String actions(JSONObject r) {
         List<String> parts = new java.util.ArrayList<>();
         JSONArray ch = r.optJSONArray("changed");
@@ -242,7 +241,7 @@ public final class PackageRecovery {
         return String.join(" ", parts);
     }
 
-    /** Il testo dell'avviso nella lingua della richiesta, per la pagina e per il rapporto. */
+    /** The notice's text in the request's language, for the page and for the report. */
     static String text(JSONObject n) {
         String what = n.optString("description", "");
         String list = String.join(" ", n.optJSONArray("packages") == null ? List.of()
@@ -256,7 +255,7 @@ public final class PackageRecovery {
                         : I18n.tr("server.recovery.reinstallHint", java.util.Map.of("name", n.optString("wayBack"))));
         JSONObject r = n.optJSONObject("recovery");
         if (r != null && !n.optBoolean("reinstall")) {
-            // Il pannello l'ha completato: si dice che cosa ha fatto, e solo se qualcosa non torna che cosa resta.
+            // The panel completed it: we say what it did, and only if something does not add up, what is left.
             Map<String, String> v = new java.util.HashMap<>();
             v.put("what", what.isEmpty() ? I18n.tr("server.recovery.unknownJob") : what);
             v.put("started", n.optString("startedUtc", "?"));

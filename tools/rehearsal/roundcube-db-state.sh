@@ -1,19 +1,19 @@
 #!/bin/sh
-# Lo stato del database della webmail, per confrontare prima e dopo RoundcubeDbUser: chi c'e' in
-# db_dsnw, gli account MySQL coi privilegi, chi legge cosa, la pagina d'accesso e un accesso vero
-# con una casella di prova. Nessuna password esce: per ognuna si dice solo di chi e'.
-# Uso: roundcube-db-state.sh   (da root, dopo RehearsalCurrentSetup)
-# La cartella dei segreti col nome di DaemoxCP Mail (17/11/2026) o con quello di prima.
+# The state of the webmail database, to compare before and after RoundcubeDbUser: who is in
+# db_dsnw, the MySQL accounts with their privileges, who reads what, the login page and a real login
+# with a test mailbox. No password comes out: for each one it only says whose it is.
+# Usage: roundcube-db-state.sh   (as root, after RehearsalCurrentSetup)
+# The folder of the secrets with the name of DaemoxCP Mail (2026-11-17) or with the one from before.
 S=/usr/local/etc/daemoxcp-mail; [ -d "$S" ] || S=/usr/local/etc/mail-panel
 F=$S/panel-secrets.properties
 R=$S/root-secrets.properties
 C=/usr/local/www/roundcube/config/config.inc.php
-# La password di root sta nel file di root dal passo 1 della separazione; prima stava nel file del pannello.
+# The root password is in root's file since step 1 of the separation; before, it was in the panel's file.
 secret() { for x in "$R" "$F"; do [ -f "$x" ] && v=$(grep "^$1=" "$x" | cut -d= -f2- | sed 's/\\//g') && [ -n "$v" ] && { echo "$v"; return; }; done; }
 W=$(mktemp -d /var/tmp/roundcube-db-state.XXXXXX); trap 'rm -rf "$W"' EXIT
 printf "[client]\nuser=root\npassword=\"%s\"\n" "$(secret mysql_root_password)" > "$W/root.cnf"
 sql() { mysql --defaults-extra-file="$W/root.cnf" -N -B -e "$1" 2>&1; }
-# Entra con un utente e la sua password, sul database dato: "si" o "no".
+# Logs in with a user and its password, on the given database: "yes" or "no".
 reads() {
     printf "[client]\nuser=%s\npassword=\"%s\"\nhost=127.0.0.1\n" "$1" "$2" > "$W/u.cnf"
     mysql --defaults-extra-file="$W/u.cnf" -N -B "$3" -e "SELECT 1" >/dev/null 2>&1 && echo yes || echo no

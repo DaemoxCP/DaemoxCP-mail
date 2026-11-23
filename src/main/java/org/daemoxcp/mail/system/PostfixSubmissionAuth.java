@@ -8,19 +8,20 @@ import java.time.Duration;
 import java.util.logging.Logger;
 
 /**
- * L'autenticazione SMTP (AUTH) solo sulle porte di invio, 587 e 465; non sulla 25.
+ * SMTP authentication (AUTH) only on the submission ports, 587 and 465; not on 25.
  *
- * Misurato sulla VM il 20/11/2026: main.cf aveva smtpd_sasl_auth_enable = yes per tutte le porte, quindi la 25, dopo
- * STARTTLS, offriva AUTH a chiunque: un bersaglio in piu' per chi prova le password. Nessuno la usa: la webmail spedisce
- * da tls://127.0.0.1:587, i profili e la pagina delle impostazioni dei client dicono 587 o 465, e nel registro della
- * posta gli accessi passano da postfix/submission. La 25 e' la porta su cui gli altri server consegnano, e li' non
- * serve. E' la disposizione della documentazione di Postfix (SASL_README: l'autenticazione sui servizi di invio,
- * con -o smtpd_sasl_auth_enable=yes in master.cf).
+ * Measured on the VM on 2026-11-20: main.cf had smtpd_sasl_auth_enable = yes for all ports, so 25, after
+ * STARTTLS, offered AUTH to anyone: one more target for whoever tries passwords. Nobody uses it: the webmail
+ * sends from tls://127.0.0.1:587, the profiles and the client settings page say 587 or 465, and in the mail
+ * log the logins go through postfix/submission. 25 is the port on which the other servers deliver, and it is
+ * not needed there. It is the arrangement of the Postfix documentation (SASL_README: authentication on the
+ * submission services, with -o smtpd_sasl_auth_enable=yes in master.cf).
  *
- * master.cf la accende gia' sulla 587 (submission) e sulla 465 (smtps): qui si spegne in main.cf, solo se tutte e due la
- * accendono per conto loro, altrimenti i client non spedirebbero piu'. L'installatore lo scrive in main.cf; sui server
- * installati prima lo fa questa riparazione all'avvio: postconf -e, postfix check, reload, e la prova vera con STARTTLS
- * (la 25 non offre AUTH, la 587 si'). Se qualcosa non torna rimette il valore di prima e ricarica.
+ * master.cf already turns it on for 587 (submission) and 465 (smtps): here it is turned off in main.cf, only if
+ * both turn it on by themselves, otherwise the clients could no longer send. The installer writes it into
+ * main.cf; on the servers installed earlier this boot repair does it: postconf -e, postfix check, reload, and
+ * the real test with STARTTLS (25 does not offer AUTH, 587 does). If something does not add up it puts the
+ * previous value back and reloads.
  */
 public final class PostfixSubmissionAuth {
 
@@ -32,14 +33,14 @@ public final class PostfixSubmissionAuth {
 
     private PostfixSubmissionAuth() {}
 
-    /** Che cosa fare, dai tre valori: main.cf, submission e smtps in master.cf. Funzione pura. */
+    /** What to do, from the three values: main.cf, submission and smtps in master.cf. Pure function. */
     static Action decide(String main, String submission, String smtps) {
         if ("no".equalsIgnoreCase(trim(main))) return Action.NOTHING;
         if (!"yes".equalsIgnoreCase(trim(submission)) || !"yes".equalsIgnoreCase(trim(smtps))) return Action.MASTER_NOT_READY;
         return Action.APPLY;
     }
 
-    /** Il servizio offre AUTH, dalla risposta a EHLO dopo STARTTLS. Funzione pura. */
+    /** The service offers AUTH, from the answer to EHLO after STARTTLS. Pure function. */
     static boolean offersAuth(String ehlo) {
         return ehlo != null && ehlo.matches("(?s).*(^|\\n)250[- ]AUTH[ =].*");
     }
@@ -106,7 +107,7 @@ public final class PostfixSubmissionAuth {
         if (reload) Shell.run(Duration.ofSeconds(30), "postfix", "reload");
     }
 
-    /** La risposta a EHLO dopo STARTTLS sulla porta data di questa macchina (openssl s_client, come un client vero). */
+    /** The answer to EHLO after STARTTLS on the given port of this machine (openssl s_client, like a real client). */
     static String ehlo(int port) {
         Shell.Result r = Shell.run(Duration.ofSeconds(30), "sh", "-c",
                 "{ sleep 1; printf 'EHLO localhost\\r\\n'; sleep 1; printf 'QUIT\\r\\n'; sleep 1; } | "

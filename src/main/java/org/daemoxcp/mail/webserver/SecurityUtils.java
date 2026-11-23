@@ -14,39 +14,39 @@ public class SecurityUtils {
     // Username: letters, numbers, underscore, hyphen (3-50 chars)
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_-]{3,50}$");
 
-    // Password: lettere senza accenti, cifre e i simboli qui sotto, da 4 a 128 caratteri.
+    // Password: letters without accents, digits and the symbols below, from 4 to 128 characters.
     //
-    // E' l'unica fonte della regola: la usano isValidPassword, il generatore (PasswordVault, per i
-    // simboli di "Tutti i caratteri") e la pagina delle caselle, che avvisa mentre si scrive o si
-    // incolla. Prima il generatore aveva simboli suoi, e produceva password che qui non passavano.
-    /** I simboli ammessi in una password di casella, oltre a lettere (senza accenti) e cifre. */
+    // It is the single source of the rule: isValidPassword uses it, and so do the generator (PasswordVault, for the
+    // symbols of "All characters") and the mailbox page, which warns while one types or
+    // pastes. Before, the generator had symbols of its own, and produced passwords that did not pass here.
+    /** The symbols allowed in a mailbox password, besides letters (without accents) and digits. */
     public static final String PASSWORD_SYMBOLS = "!@#$%^&*()_+-=[]{}|;:,.?";
-    /** La stessa regola come classe di caratteri, valida sia in Java sia in JavaScript. */
+    /** The same rule as a character class, valid both in Java and in JavaScript. */
     public static final String PASSWORD_CHARACTERS = characterClass(PASSWORD_SYMBOLS);
     public static final int PASSWORD_MIN = 4, PASSWORD_MAX = 128;
     private static final Pattern PASSWORD_PATTERN =
             Pattern.compile("^" + PASSWORD_CHARACTERS + "{" + PASSWORD_MIN + "," + PASSWORD_MAX + "}$");
 
-    // Le password delle CASELLE: stessi caratteri, ma almeno 12 (dal 01/10/2026; prima 4, come
-    // quelle dell'admin). isValidPassword resta com'era perche' la usa anche il login dell'admin:
-    // alzarla avrebbe chiuso fuori chi ha una password piu' corta. Le caselle esistenti non sono
-    // toccate: la regola vale quando una password si crea o si cambia.
+    // MAILBOX passwords: the same characters, but at least 12 (since 2026-10-01; before, 4, like
+    // the admin's). isValidPassword stays as it was because the admin login uses it too:
+    // raising it would have locked out whoever has a shorter password. Existing mailboxes are not
+    // touched: the rule applies when a password is created or changed.
     public static final int MAILBOX_PASSWORD_MIN = 12;
     private static final Pattern MAILBOX_PASSWORD_PATTERN =
             Pattern.compile("^" + PASSWORD_CHARACTERS + "{" + MAILBOX_PASSWORD_MIN + "," + PASSWORD_MAX + "}$");
 
-    /** Una password di casella: 12..128 caratteri tra lettere senza accenti, cifre e PASSWORD_SYMBOLS. */
+    /** A mailbox password: 12..128 characters among letters without accents, digits and PASSWORD_SYMBOLS. */
     public static boolean isValidMailboxPassword(String password) {
         return password != null && MAILBOX_PASSWORD_PATTERN.matcher(password).matches();
     }
 
-    /** Il perche' del rifiuto, per chi crea o modifica una casella. */
+    /** The reason for the rejection, for whoever creates or edits a mailbox. */
     public static String passwordRule() {
         return org.daemoxcp.mail.i18n.I18n.tr("server.mailbox.passwordRule", java.util.Map.of("min", MAILBOX_PASSWORD_MIN, "max", PASSWORD_MAX,
                 "symbols", String.join(" ", PASSWORD_SYMBOLS.split(""))));
     }
 
-    /** [a-zA-Z0-9 + simboli], con i soli caratteri che dentro una classe vanno protetti: \ [ ] ^ - */
+    /** [a-zA-Z0-9 + symbols], escaping only the characters that need it inside a class: \ [ ] ^ - */
     private static String characterClass(String symbols) {
         StringBuilder sb = new StringBuilder("[a-zA-Z0-9");
         for (char c : symbols.toCharArray()) {
@@ -78,11 +78,11 @@ public class SecurityUtils {
      * Validates CSRF token using constant-time comparison.
      */
     public static boolean validateCsrfToken(String expected, String actual) {
-        // SECURITY: rifiuta esplicitamente i token vuoti — altrimenti due stringhe
-        // vuote passerebbero il check (length matches, result = 0).
+        // SECURITY: explicitly rejects empty tokens: otherwise two empty
+        // strings would pass the check (length matches, result = 0).
         if (expected == null || actual == null) return false;
         if (expected.isEmpty() || actual.isEmpty()) return false;
-        if (expected.length() < 16) return false; // un CSRF reale è > 16 char
+        if (expected.length() < 16) return false; // a real CSRF token is > 16 chars
         if (expected.length() != actual.length()) return false;
         int result = 0;
         for (int i = 0; i < expected.length(); i++) {

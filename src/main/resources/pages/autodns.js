@@ -1,8 +1,8 @@
-        // ---------- SPF e DMARC creati dal pannello su Cloudflare ----------
-        // Le regole non sono decorazione: due record SPF sullo stesso nome danno "permerror"
-        // e SPF smette di funzionare (RFC 7208 §4.5); due DMARC vengono scartati entrambi
-        // (RFC 9989). Per questo qui non si sovrascrive mai, e la domanda "esiste gia'?" e'
-        // posta sul CONTENUTO del record, non sul suo nome.
+        // ---------- SPF and DMARC created by the panel on Cloudflare ----------
+        // The rules are not decoration: two SPF records on the same name give "permerror"
+        // and SPF stops working (RFC 7208 section 4.5); two DMARC records are both discarded
+        // (RFC 9989). That is why nothing is ever overwritten here, and the question "does it
+        // already exist?" is asked about the record's CONTENT, not about its name.
         async function autoDnsApi(actionItem, extra) {
             const bodyText = Object.assign({ action: actionItem, domain_id: parseInt(currentDomainId) }, extra || {});
             const r = await fetch('/api/autodns', {
@@ -13,8 +13,8 @@
             return await r.json();
         }
 
-        // La conferma: la finestra del pannello (reperto 198), non il prompt del browser con la parola da scrivere. Il
-        // server riceve sempre il suo codice fisso (CREA, CAMBIA, CONFIGURA), nel codice di chi chiama.
+        // The confirmation: the panel's window (finding 198), not the browser's prompt with the word to type. The
+        // server always receives its fixed code (CREATE, CHANGE, CONFIGURE), in the caller's code.
         function adConfirm(textValue) {
             return panelConfirm(textValue);
         }
@@ -33,8 +33,9 @@
                 + '<span>' + adEsc(a) + '</span></div>').join('') + '</div>';
         }
 
-        // La lettura della scheda in corso: parte da sola alla scelta del dominio, e «Set up everything» premuto
-        // mentre e' in corso la aspetta, o la scheda ridisegnata cancellerebbe l'esito appena scritto (reperto 250)
+        // The reading of the card in progress: it starts by itself when the domain is chosen, and "Set up
+        // everything" pressed while it is in progress waits for it, or the redrawn card would erase the outcome
+        // just written (finding 250)
         let adLoading = null;
         async function autoDnsLoad() {
             const run = autoDnsRead();
@@ -87,8 +88,8 @@
 
                 let actionItem;
                 if (x.which === 'dmarc' && x.exists && x.currentPolicy) {
-                    // Il percorso e' none -> quarantine -> reject: il pannello deve rendere
-                    // facile anche i due passi dopo il primo, non solo il primo.
+                    // The path is none -> quarantine -> reject: the panel must make
+                    // the two steps after the first easy too, not just the first.
                     const option = ['none', 'quarantine', 'reject'].map(v =>
                         '<option value="' + v + '"' + (v === x.currentPolicy ? ' selected' : '') + '>p='
                         + v + '</option>').join('');
@@ -120,12 +121,12 @@
             if (r.reports && !r.reports.exists) adLoadMailboxes();
         }
 
-        // La cassetta a cui arrivano i rapporti DMARC. Va predisposta PRIMA di pubblicare il
-        // record: appena il DMARC e' pubblico i rapporti partono, e se l'indirizzo non
-        // esiste rimbalzano tutti (RFC 9989 §5.1.4).
+        // The mailbox the DMARC reports arrive at. It must be set up BEFORE publishing the
+        // record: as soon as DMARC is public the reports start, and if the address does not
+        // exist they all bounce (RFC 9989 section 5.1.4).
         //
-        // Due strade, perche' sono due scelte diverse e nessuna e' ovvia: girare la posta a
-        // un indirizzo che gia' si legge, oppure tenere i rapporti in una casella loro.
+        // Two ways, because they are two different choices and neither is obvious: forward the
+        // mail to an address that is already read, or keep the reports in a mailbox of their own.
         function adReports(reportList) {
             if (!reportList) return '';
             if (reportList.exists) {
@@ -140,7 +141,7 @@
 
                  + '<div class="row g-3">'
 
-                 // --- A: inoltro ---
+                 // --- A: forward ---
                  + '<div class="col-lg-6"><div class="border rounded p-3 h-100">'
                  + '<div class="fw-bold mb-1"><i class="fas fa-share me-1" aria-hidden="true"></i>' + escHtml(t('ad.fwdTitle')) + '</div>'
                  + '<div class="small text-muted mb-3">' + escHtml(t('ad.fwdHint', { address: reportList.address })) + ' <strong>' + escHtml(t('ad.recommended')) + '</strong></div>'
@@ -154,7 +155,7 @@
                  + '<i class="fas fa-share me-1" aria-hidden="true"></i>' + escHtml(t('ad.createFwd')) + '</button>'
                  + '</div></div>'
 
-                 // --- B: casella vera ---
+                 // --- B: real mailbox ---
                  + '<div class="col-lg-6"><div class="border rounded p-3 h-100">'
                  + '<div class="fw-bold mb-1"><i class="fas fa-inbox me-1" aria-hidden="true"></i>' + escHtml(t('ad.boxTitle', { address: reportList.address })) + '</div>'
                  + '<div class="small text-muted mb-3">' + escHtml(t('ad.boxHint')) + '</div>'
@@ -176,9 +177,9 @@
             if (otherOne) field.focus();
         }
 
-        // Gli indirizzi si scelgono da un elenco. Chi ne vuole uno diverso lo scrive, ma
-        // deve chiederlo apposta: un campo libero come prima scelta e' il modo piu' rapido
-        // per scrivere un indirizzo che non esiste e accorgersene fra sei mesi.
+        // Addresses are chosen from a list. Whoever wants a different one types it, but
+        // must ask for it on purpose: a free field as the first choice is the fastest way
+        // to write an address that does not exist and notice six months later.
         async function adLoadMailboxes() {
             const sel = document.getElementById('adDestination');
             if (!sel) return;
@@ -211,9 +212,9 @@
             const r = await autoDnsApi('alias_create', { confirm: 'CREATE', destination: destination });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + adEsc(r.note || r.error) + '</div>';
-            // Si ricarica anche quando il pannello si RIFIUTA: il rifiuto "esiste gia'" vuol
-            // dire che lo stato a schermo era vecchio, ed e' proprio quello da rileggere.
-            // Lasciare l'invito dov'e' inviterebbe a premere di nuovo.
+            // It reloads even when the panel REFUSES: the "already exists" refusal means
+            // that the state on screen was stale, and that is exactly what must be read again.
+            // Leaving the prompt where it is would invite pressing again.
             setTimeout(autoDnsLoad, 1000);
         }
 
@@ -230,7 +231,7 @@
                    + '<code data-style="font-size:1.05em">' + adEsc(r.password) + '</code><br>'
                    + escHtml(t('ad.passwordKept')) + '</div>';
             el.innerHTML = h;
-            // Non si ricarica da soli: la ricarica cancellerebbe la password dallo schermo.
+            // It does not reload by itself: the reload would erase the password from the screen.
             if (r.success) {
                 const b = document.getElementById('autoDnsOutcome');
                 if (b) b.innerHTML = '<div class="alert alert-info py-2 small mb-1">' + escHtml(t('ad.boxCreated')) + '</div>';
@@ -238,10 +239,10 @@
         }
 
 
-        // I record "opzionali": la posta funziona anche senza, ma senza di loro chi aggiunge
-        // la casella deve sapere a memoria server, porte e tipo di cifratura. Sono gli stessi
-        // valori della pagina DNS, letti dalla stessa impostazione: due modi di ricavare lo
-        // stesso hostname sono due hostname che un giorno divergono.
+        // The "optional" records: mail works without them too, but without them whoever adds
+        // the mailbox must know by heart server, ports and type of encryption. They are the same
+        // values as on the DNS page, read from the same setting: two ways of deriving the
+        // same hostname are two hostnames that one day diverge.
         function adOptional(itemList) {
             if (!itemList || !itemList.length) return '';
             const missingOnes = itemList.filter(x => !x.exists && !x.conflict).length;
@@ -291,12 +292,12 @@
 
             h += '</tbody></table></div><div id="adOpzOutcome"></div>';
 
-            // Qui c'era un riquadro fisso: "MTA-STS il pannello non lo crea, perche' quel sito
-            // non lo serve". Era vero quando fu scritto e ha smesso di esserlo il giorno in cui
-            // il pannello ha cominciato a servire la politica sulla 443 — ma la frase e' rimasta,
-            // e la pagina DNS ha continuato a negare una cosa che il pannello fa di routine.
-            // Adesso "Configura tutto" esegue l'intera catena MTA-STS per questo dominio, quindi
-            // non c'e' nessuna eccezione da spiegare: c'e' un pulsante da premere.
+            // Here there was a fixed box: "MTA-STS is not created by the panel, because that site
+            // does not serve it". It was true when it was written and stopped being true the day
+            // the panel started serving the policy on 443, but the sentence stayed,
+            // and the DNS page kept denying something the panel does routinely.
+            // Now "Set up everything" runs the whole MTA-STS chain for this domain, so
+            // there is no exception to explain: there is a button to press.
             return h + '</div></div>';
         }
 
@@ -310,8 +311,8 @@
             if (r.success) setTimeout(autoDnsLoad, 1200);
         }
 
-        // Crea in fila quelli che mancano. Uno per volta e non tutti insieme: se il terzo
-        // fallisce si deve poter dire QUALE ha fallito e perché, non "qualcosa è andato storto".
+        // Creates the missing ones in a row. One at a time and not all together: if the third
+        // fails it must be possible to say WHICH one failed and why, not "something went wrong".
         async function autoDnsCreateAllOptional() {
             const el = document.getElementById('adOpzOutcome');
             const r0 = await autoDnsApi('status');
@@ -333,8 +334,8 @@
             setTimeout(autoDnsLoad, 1500);
         }
 
-        // Cambia la politica di un DMARC gia' pubblicato. Prima si guarda il prima/dopo:
-        // una conferma che non fa vedere cosa cambia non e' una conferma.
+        // Changes the policy of an already published DMARC. First the before/after is shown:
+        // a confirmation that does not show what changes is not a confirmation.
         async function autoDnsChangePolicy() {
             const sel = document.getElementById('adPolicyNew');
             if (!sel) return;
@@ -395,9 +396,9 @@
             else if (r.mailboxMissing) setTimeout(autoDnsLoad, 300);
         }
 
-        // Tutto quello che serve a un dominio, in una volta. Ogni passo non sovrascrive
-        // niente: si puo' premere anche su un dominio configurato a meta', trova cio' che
-        // c'e' gia' e aggiunge solo il resto.
+        // Everything a domain needs, at once. No step overwrites
+        // anything: it can be pressed even on a half-configured domain, it finds what
+        // is already there and adds only the rest.
         async function autoDnsConfigureAll() {
             if (!currentDomainId) return;
             if (!await adConfirm(t('ad.confirmAll'), t('ad.wordConfigure'))) return;
@@ -405,8 +406,8 @@
 
             let el = document.getElementById('autoDnsOutcome');
             if (!el) {
-                // La scheda non e' ancora stata letta, o Cloudflare ha risposto con un errore: il posto per il lavoro
-                // si crea qui, o il pulsante, dopo la conferma, non farebbe niente (reperto 249)
+                // The card has not been read yet, or Cloudflare answered with an error: the place for the job
+                // is created here, or the button, after the confirmation, would do nothing (finding 249)
                 el = document.createElement('div');
                 el.id = 'autoDnsOutcome';
                 el.className = 'mt-2';
@@ -420,10 +421,10 @@
                              + adEsc(r.error || t('ad.startFailed')) + '</div>';
                 return;
             }
-            // La richiesta torna SUBITO con un identificativo. La sequenza include l'attesa
-            // della propagazione DNS e puo' durare minuti: tenendo aperta la richiesta, il
-            // browser riceverebbe la pagina di errore del proxy mentre sul server il lavoro
-            // continua, e nessuno saprebbe piu' com'e' finita.
+            // The request returns AT ONCE with an identifier. The sequence includes waiting
+            // for DNS propagation and can last minutes: keeping the request open, the
+            // browser would receive the proxy's error page while on the server the job
+            // goes on, and nobody would know any more how it ended.
             el.innerHTML = '<div class="alert alert-info py-2 small mb-2">'
                          + '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.running')) + '</div>'
                          + '<pre id="adLog" class="small p-2 border rounded mb-0" '
@@ -438,19 +439,19 @@
             if (s.success && s.job) {
                 if (pre) { pre.textContent = s.job.consoleLog || ''; pre.scrollTop = pre.scrollHeight; }
                 if (s.job.status === 'completed' || s.job.status === 'error') {
-                    // La scheda VA ricaricata, e il registro NON va perso: sono due esigenze
-                    // vere e prima ne era soddisfatta una sola.
+                    // The card MUST be reloaded, and the log must NOT be lost: they are two real
+                    // needs and before only one of them was met.
                     //
-                    // Lasciandola ferma, restava a schermo la fotografia di prima del lavoro. E'
-                    // cosi' che il pannello ha continuato a scrivere "Manca la cassetta dei
-                    // rapporti, scegli una delle due strade" venti secondi dopo aver creato lui
-                    // stesso quell'alias — e chi premeva si sentiva rispondere "esiste gia'".
-                    // Chiedere un'azione gia' compiuta, e dirlo solo dopo che e' stata tentata,
-                    // e' peggio di non dire niente: fa sembrare rotto cio' che ha funzionato.
+                    // Leaving it as it was, the snapshot from before the job stayed on screen.
+                    // That is how the panel kept writing "The report mailbox is missing, choose
+                    // one of the two ways" twenty seconds after creating that alias itself,
+                    // and whoever pressed was told "already exists".
+                    // Asking for an action already done, and saying so only after it has been
+                    // attempted, is worse than saying nothing: it makes what worked look broken.
                     //
-                    // Il registro sta dentro il contenitore che si ridisegna, quindi lo si tiene
-                    // da parte e lo si rimette nella scheda nuova.
-                    // Arrivato in fondo con dei passi non in ordine: avviso, non verde (reperto 250)
+                    // The log is inside the container that is redrawn, so it is set
+                    // aside and put back into the new card.
+                    // Reached the end with some steps out of order: a warning, not green (finding 250)
                     const allDone = s.job.status === 'completed' && !s.job.result;
                     const line = (allDone
                             ? '<i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('ad.done', { s: s.job.elapsedSeconds }))

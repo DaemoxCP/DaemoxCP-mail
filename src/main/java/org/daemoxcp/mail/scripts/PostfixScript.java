@@ -72,8 +72,8 @@ public class PostfixScript {
             service sendmail stop 2>/dev/null || true
 
             """
-            // Postfix come MTA locale: senza, la posta di sistema esce da dma. Lo stesso pezzo
-            // e' in FullMailServerScript e FullMailStackScript.
+            // Postfix as the local MTA: without it, system mail goes out through dma. The same piece
+            // is in FullMailServerScript and FullMailStackScript.
             + LocalMtaScript.SHELL + """
 
             # Create mail directories
@@ -148,8 +148,8 @@ virtual_mailbox_limit = 2147483648
 MAINCONF
 
             """
-            // Il livello di compatibilita' che chiede il Postfix installato, se esaminato (reperto 251). Lo stesso pezzo
-            // e' in FullMailServerScript e FullMailStackScript.
+            // The compatibility level the installed Postfix asks for, if examined (finding 251). The same piece
+            // is in FullMailServerScript and FullMailStackScript.
             + PostfixLevelScript.shell() + """
 
             # Create /etc/aliases.db (required by Postfix)

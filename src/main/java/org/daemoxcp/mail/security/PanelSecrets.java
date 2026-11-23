@@ -17,15 +17,15 @@ import java.util.Properties;
 import java.util.Set;
 
 /**
- * Le chiavi e i segreti del pannello in un file leggibile solo da root, mai nel database ne' nel
- * repository: cifratura dei dati (email degli amministratori, indirizzi delle sessioni), indice
- * cieco, impronte dei codici monouso, chiave della webmail; e i segreti di testo che
- * prima stavano nel database SQLite di configurazione (password MySQL, chiave privata TLS).
+ * The panel's keys and secrets, in a file readable only by root, never in the database nor in the
+ * repository: data encryption (administrators' email addresses, session addresses), blind
+ * index, fingerprints of the one-time codes, webmail key; and the text secrets that
+ * used to be in the SQLite configuration database (MySQL password, TLS private key).
  *
- * Il file sta in /usr/local/etc/daemoxcp-mail/panel-secrets.properties, accanto a master.key del
- * vault. La cartella e' 700 e il file 600; le chiavi si generano al primo uso con SecureRandom.
- * Chi copia il database senza questo file non legge le email cifrate e non puo' fabbricare un
- * codice valido. I test spostano la cartella con -Ddaemoxcp.mail.secrets.dir=...
+ * The file is /usr/local/etc/daemoxcp-mail/panel-secrets.properties, next to the vault's master.key.
+ * The folder is 700 and the file 600; the keys are generated on first use with SecureRandom.
+ * Whoever copies the database without this file cannot read the encrypted email addresses and cannot forge a
+ * valid code. Tests move the folder with -Ddaemoxcp.mail.secrets.dir=...
  */
 public final class PanelSecrets {
 
@@ -34,81 +34,81 @@ public final class PanelSecrets {
     static final String DATA_KEY = "data_key";
     static final String INDEX_KEY = "index_key";
     static final String CODE_KEY = "code_key";
-    // La chiave "session_key" (token CSRF) non si crea piu': i token di sessione, CSRF e di prima
-    // dell'accesso dipendono da una chiave che vive solo nella memoria del processo (WebSessions,
-    // reperto 184). Nei file di prima resta, inutilizzata.
-    /** La chiave che la webmail (Roundcube) manda al pannello per cambiare una password di casella. */
+    // The "session_key" key (CSRF token) is no longer created: the session, CSRF and pre-login
+    // tokens depend on a key that lives only in the process memory (WebSessions,
+    // finding 184). In older files it remains, unused.
+    /** The key the webmail (Roundcube) sends to the panel to change a mailbox password. */
     static final String WEBMAIL_KEY = "webmail_key";
-    /** La password dell'utente MySQL del pannello (prima stava nel database SQLite di configurazione). */
+    /** The password of the panel's MySQL user (it used to be in the SQLite configuration database). */
     public static final String MYSQL_PASSWORD = "mysql_password";
     /**
-     * La password nuova dell'utente MySQL del pannello finche' MySQL non l'ha accettata: la scrive
-     * l'installazione prima dello script, e diventa {@link #MYSQL_PASSWORD} solo quando MySQL la
-     * conosce (org.daemoxcp.mail.system.PendingDbPassword). Di solito non c'e'.
+     * The new password of the panel's MySQL user until MySQL has accepted it: the installation writes it
+     * before the script, and it becomes {@link #MYSQL_PASSWORD} only once MySQL
+     * knows it (org.daemoxcp.mail.system.PendingDbPassword). Usually it is not there.
      */
     public static final String MYSQL_PASSWORD_PENDING = "mysql_password_pending";
     /**
-     * Lo stato del cambio, una volta, della password dell'utente MySQL del pannello (org.daemoxcp.mail.system.PanelDbPassword,
-     * reperto 232): "retained:" e l'impronta della vecchia a meta', "done " e la data a cose fatte. Solo di root.
+     * The state of the one-time change of the panel's MySQL user password (org.daemoxcp.mail.system.PanelDbPassword,
+     * finding 232): "retained:" and the old one's fingerprint halfway through, "done " and the date once done. Root only.
      */
     public static final String MYSQL_PASSWORD_ROTATION = "mysql_password_rotation";
-    /** La password di root di MySQL: prima non esisteva, e root entrava senza nulla. */
+    /** The MySQL root password: it used not to exist, and root logged in with nothing. */
     public static final String MYSQL_ROOT_PASSWORD = "mysql_root_password";
     /**
-     * La password dell'utente MySQL della webmail (roundcube), che puo' toccare solo il database
-     * di Roundcube. Prima la webmail entrava con l'utente del pannello: vedi RoundcubeDbUser.
+     * The password of the webmail's MySQL user (roundcube), which can touch only the Roundcube
+     * database. The webmail used to log in with the panel's user: see RoundcubeDbUser.
      */
     public static final String ROUNDCUBE_DB_PASSWORD = "roundcube_db_password";
-    /** La chiave privata TLS (PEM) del pannello (prima stava nel database SQLite di configurazione). */
+    /** The panel's TLS private key (PEM) (it used to be in the SQLite configuration database). */
     public static final String PANEL_TLS_KEY = "panel_tls_key";
     /**
-     * La password dell'utente MySQL della parte web (daemoxcp_mail_web), che puo' solo chiamare le procedure della web.
-     * La scrive la root quando l'utente e' pronto e provato.
+     * The password of the web part's MySQL user (daemoxcp_mail_web), which can only call the web's procedures.
+     * The root part writes it when the user is ready and tested.
      */
     public static final String MYSQL_WEB_PASSWORD = "mysql_web_password";
     /**
-     * La chiave privata del vault (RSA, PKCS#8 in base64): legge le copie delle password delle caselle. Solo nel file
-     * di root (PasswordVault); quella di prima dell'ultima rotazione accanto.
+     * The vault's private key (RSA, PKCS#8 in base64): it reads the copies of the mailbox passwords. Only in the
+     * root file (PasswordVault); the one from before the last rotation next to it.
      */
     public static final String VAULT_PRIVATE_KEY = "vault_private_key";
     public static final String VAULT_PREVIOUS_PRIVATE_KEY = "vault_previous_private_key";
-    /** La chiave pubblica del vault (X.509 in base64): la web cifra con questa le copie delle password nuove. */
+    /** The vault's public key (X.509 in base64): the web part uses it to encrypt the copies of new passwords. */
     public static final String VAULT_PUBLIC_KEY = "vault_public_key";
-    /** Le password degli utenti MySQL di Postfix e Dovecot (MailDbUsers): solo di root, e nei loro file di configurazione. */
+    /** The passwords of the Postfix and Dovecot MySQL users (MailDbUsers): root only, and in their configuration files. */
     public static final String POSTFIX_DB_PASSWORD = "postfix_db_password";
     public static final String DOVECOT_DB_PASSWORD = "dovecot_db_password";
-    /** La password del controller di rspamd (RspamdController): solo di root, e nella configurazione di rspamd solo il suo hash. */
+    /** The rspamd controller password (RspamdController): root only, and in the rspamd configuration only its hash. */
     public static final String RSPAMD_CONTROLLER_PASSWORD = "rspamd_controller_password";
 
-    /** La cartella dei file; i test la spostano in una cartella temporanea. */
+    /** The folder of the files; tests move it to a temporary folder. */
     static Path dir = Paths.get(System.getProperty("daemoxcp.mail.secrets.dir", "/usr/local/etc/daemoxcp-mail"));
     private static final SecureRandom RANDOM = new SecureRandom();
 
     /**
-     * I segreti che restano solo di root. La parte web del pannello
-     * gira con l'utente daemoxcp_mail e legge il suo file; questi due li usano soltanto installatori e
-     * migrazioni, che girano da root, e con la password di root di MySQL chi bucasse la parte web avrebbe
-     * tutto il database. Stanno in un file a parte, 0600 di root, nella stessa cartella.
+     * The secrets that stay root only. The web part of the panel
+     * runs as the daemoxcp_mail user and reads its own file; these two are used only by installers and
+     * migrations, which run as root, and with the MySQL root password whoever broke into the web part would have
+     * the whole database. They live in a separate file, 0600 owned by root, in the same folder.
      */
     public static final Set<String> ROOT_ONLY = Set.of(MYSQL_ROOT_PASSWORD, ROUNDCUBE_DB_PASSWORD, VAULT_PRIVATE_KEY,
             VAULT_PREVIOUS_PRIVATE_KEY, POSTFIX_DB_PASSWORD, DOVECOT_DB_PASSWORD, MYSQL_PASSWORD_ROTATION, RSPAMD_CONTROLLER_PASSWORD);
 
     /**
-     * I segreti che passano nel file di root quando la parte web ha il suo utente MySQL ({@link #MYSQL_WEB_PASSWORD}
-     * nel file della web): la password dell'utente MySQL del pannello, che puo' tutto nel database, e quella in
-     * sospeso dell'installazione. Finche' la web non ha il suo, stanno nel file della web, che li usa.
+     * The secrets that move to the root file once the web part has its own MySQL user ({@link #MYSQL_WEB_PASSWORD}
+     * in the web file): the password of the panel's MySQL user, which can do anything in the database, and the
+     * pending one of the installation. Until the web part has its own, they stay in the web file, which uses them.
      *
-     * <p>Si leggono da tutti e due i file, prima da quello giusto (a meta' di uno spostamento sono in entrambi,
-     * uguali). La web non legge mai il file di root: per lei esiste solo il suo.
+     * <p>They are read from both files, the right one first (halfway through a move they are in both,
+     * identical). The web part never reads the root file: for it, only its own exists.
      */
     static final Set<String> MOVE_TO_ROOT = Set.of(MYSQL_PASSWORD, MYSQL_PASSWORD_PENDING);
 
     /**
-     * Il gruppo della parte web del pannello separato. Col pannello separato (PanelSeparation) la cartella
-     * e' 0750 root:daemoxcp_mail e il file della web 0640 root:daemoxcp_mail: la web lo legge, non lo scrive mai (le
-     * chiavi le genera la root all'avvio, prima di avviarla). Ogni riscrittura da root crea un file nuovo
-     * (un rename): prende il gruppo e i permessi di quello che sostituisce, cosi' chiunque scriva (la root,
-     * il menu, un comando da console) lascia la web in grado di leggere. Il file di root resta 0600.
+     * The group of the web part of the separated panel. With the separated panel (PanelSeparation) the folder
+     * is 0750 root:daemoxcp_mail and the web file 0640 root:daemoxcp_mail: the web part reads it and never writes it (the
+     * keys are generated by the root part at startup, before starting it). Every rewrite by root creates a new file
+     * (a rename): it takes the group and permissions of the one it replaces, so whoever writes (the root part,
+     * the menu, a console command) leaves the web part able to read. The root file stays 0600.
      */
     static final String WEB_GROUP = org.daemoxcp.mail.system.Product.ID;
 
@@ -121,7 +121,7 @@ public final class PanelSecrets {
         return WEB;
     }
 
-    /** La parte web entra in MySQL col suo utente: i segreti di MOVE_TO_ROOT stanno nel file di root. */
+    /** The web part logs in to MySQL with its own user: the secrets of MOVE_TO_ROOT are in the root file. */
     static boolean webHasItsOwnUser() {
         return !WEB.load().getProperty(MYSQL_WEB_PASSWORD, "").isEmpty();
     }
@@ -131,11 +131,11 @@ public final class PanelSecrets {
     private static boolean runningAsRoot() { return "root".equals(System.getProperty("user.name")); }
 
     /*
-     * Ogni file lo usano piu' processi: il pannello e i comandi da console (--access-code); col pannello
-     * separato anche le sue due parti. Ognuno tiene una copia in memoria; se un altro ha scritto il
-     * file, la copia si rilegge (data e dimensione cambiate). Le scritture rileggono dal disco sotto un
-     * lock del file system, cosi' una chiave mancante la genera uno solo: se ciascuno ne generasse una
-     * sua, il codice dato dalla console non sarebbe mai giusto per il pannello.
+     * Each file is used by several processes: the panel and the console commands (--access-code); with the
+     * separated panel also its two parts. Each keeps a copy in memory; if another one has written the
+     * file, the copy is reread (date and size changed). Writes reread from disk under a
+     * file system lock, so a missing key is generated by one process only: if each generated its
+     * own, the code given by the console would never be right for the panel.
      */
     static final class Store {
         private final String fileName;
@@ -184,7 +184,7 @@ public final class PanelSecrets {
             return cache;
         }
 
-        /** Legge, cambia e riscrive il file tenendo il lock: un solo processo alla volta. */
+        /** Reads, changes and rewrites the file while holding the lock: one process at a time. */
         synchronized Properties update(java.util.function.UnaryOperator<Properties> change) {
             try {
                 if (runningAsRoot() || !Files.isDirectory(dir)) {
@@ -217,8 +217,8 @@ public final class PanelSecrets {
                 p.store(w, web ? "DaemoxCP Mail secrets - the panel only, never in the database or the repository"
                                : "DaemoxCP Mail root secrets - root only, never in the database or the repository");
             }
-            // Il file della web, col pannello separato: il nuovo resta leggibile dal gruppo della web come
-            // quello che sostituisce. Prima del rename, cosi' non c'e' un istante in cui la web non legge.
+            // The web file, with the separated panel: the new one stays readable by the web group like
+            // the one it replaces. Before the rename, so there is no instant in which the web part cannot read.
             boolean forWeb = web && Files.exists(file()) && webGroup(file());
             if (forWeb) {
                 setGroup(tmp, WEB_GROUP);
@@ -237,7 +237,7 @@ public final class PanelSecrets {
         }
     }
 
-    /** Vero se il file e' del gruppo della parte web (il pannello separato l'ha aperto alla web). */
+    /** True if the file belongs to the web part's group (the separated panel has opened it to the web part). */
     static boolean webGroup(Path p) {
         try {
             return WEB_GROUP.equals(Files.readAttributes(p, java.nio.file.attribute.PosixFileAttributes.class,
@@ -252,14 +252,14 @@ public final class PanelSecrets {
             Set<PosixFilePermission> s = PosixFilePermissions.fromString(perms);
             Files.setPosixFilePermissions(p, s);
         } catch (UnsupportedOperationException ignored) {
-            // File system senza permessi POSIX: resta quello che c'e'.
+            // File system without POSIX permissions: whatever is there stays.
         }
     }
 
     /**
-     * Un file solo di root col gruppo di root. Su FreeBSD un file nuovo prende il gruppo della cartella
-     * (open(2)), e col pannello separato la cartella e' del gruppo della web: a 0600 il gruppo non legge
-     * comunque, ma chi guarda deve vedere root:wheel, e un chmod sbagliato domani non apre niente.
+     * A root-only file with the root group. On FreeBSD a new file takes the folder's group
+     * (open(2)), and with the separated panel the folder belongs to the web group: at 0600 the group cannot read
+     * anyway, but whoever looks must see root:wheel, and a wrong chmod tomorrow opens nothing.
      */
     private static void rootOnly(Path p) throws IOException {
         if (runningAsRoot() && webGroup(p)) setGroup(p, "wheel");
@@ -280,12 +280,12 @@ public final class PanelSecrets {
         return storeFor(name).load().getProperty(name, "");
     }
 
-    /** Una chiave di 32 byte, generata e scritta la prima volta che serve (da un processo solo). */
+    /** A 32-byte key, generated and written the first time it is needed (by one process only). */
     static synchronized byte[] key(String name) {
         String v = get(name);
         if (v.isEmpty()) {
             v = storeFor(name).update(p -> {
-                if (!p.getProperty(name, "").isEmpty()) return null;     // l'ha appena scritta l'altro processo
+                if (!p.getProperty(name, "").isEmpty()) return null;     // the other process just wrote it
                 byte[] k = new byte[32];
                 RANDOM.nextBytes(k);
                 p.setProperty(name, Base64.getEncoder().encodeToString(k));
@@ -297,30 +297,30 @@ public final class PanelSecrets {
         return k;
     }
 
-    /** Un segreto di testo (password, chiave PEM); "" se non c'e'. */
+    /** A text secret (password, PEM key); "" if it is not there. */
     public static String text(String name) {
         return get(name);
     }
 
     /**
-     * Un segreto di testo letto adesso dal disco, non dalla copia in memoria: per chi deve sapere
-     * che una password e' davvero nel file prima di metterla in un servizio (MysqlRoot).
+     * A text secret read right now from disk, not from the in-memory copy: for whoever must know
+     * that a password really is in the file before putting it into a service (MysqlRoot).
      */
     public static synchronized String reread(String name) {
         return storeFor(name).readFile().getProperty(name, "");
     }
 
-    /** Dove sta il file del pannello, da dire nei messaggi a chi deve andare a cercarlo. */
+    /** Where the panel's file is, to tell in messages to whoever has to go and look for it. */
     public static String location() {
         return WEB.file().toAbsolutePath().toString();
     }
 
-    /** Dove sta il file che tiene questo segreto. */
+    /** Where the file holding this secret is. */
     public static String location(String name) {
         return storeFor(name).file().toAbsolutePath().toString();
     }
 
-    /** Scrive (o con "" o null toglie) un segreto di testo; un processo alla volta, file 600. */
+    /** Writes (or with "" or null removes) a text secret; one process at a time, file 600. */
     public static synchronized void setText(String name, String value) {
         String v = value == null ? "" : value;
         Store store = storeFor(name);
@@ -330,18 +330,18 @@ public final class PanelSecrets {
             else p.setProperty(name, v);
             return p;
         });
-        // Spostato nel file di root: nell'altro non deve restare un valore vecchio.
+        // Moved to the root file: no old value must remain in the other one.
         if (store == ROOT && MOVE_TO_ROOT.contains(name)) {
             WEB.update(p -> p.remove(name) == null ? null : p);
         }
     }
 
     /**
-     * WebDbAccess, da root, quando l'utente MySQL della web e' pronto e provato: la sua password nel file della
-     * web, e i segreti di {@link #MOVE_TO_ROOT} da quel file a quello di root. Prima si scrive il file di root e
-     * lo si rilegge; poi, in una sola scrittura del file della web, la password della web entra e gli altri
-     * escono. A meta' strada ogni segreto c'e' in almeno un file, e chi legge lo trova (get). Vero se ha
-     * cambiato qualcosa: al secondo avvio non scrive niente.
+     * WebDbAccess, as root, when the web's MySQL user is ready and tested: its password into the web
+     * file, and the secrets of {@link #MOVE_TO_ROOT} from that file to the root one. First the root file is written and
+     * reread; then, in a single write of the web file, the web password goes in and the others
+     * go out. Halfway through every secret is in at least one file, and whoever reads finds it (get). True if it
+     * changed something: on the second startup it writes nothing.
      */
     public static synchronized boolean giveWebItsOwnUser(String webPassword) {
         if (webPassword == null || webPassword.isEmpty()) throw new IllegalArgumentException("no password for the web part's MySQL user");
@@ -371,11 +371,11 @@ public final class PanelSecrets {
     }
 
     /**
-     * All'avvio, da root: i segreti solo di root che stanno ancora nel file del pannello (i server di
-     * prima) passano nel file di root e poi spariscono da quello del pannello. Prima si scrive il file di
-     * root e lo si rilegge, poi si toglie dall'altro: a meta' strada il segreto c'e' sempre in almeno un
-     * file. Se il file di root ha gia' un valore diverso vince il suo, che e' quello scritto dopo. I nomi
-     * spostati, o nessuno.
+     * At startup, as root: the root-only secrets still in the panel's file (servers from
+     * before) move to the root file and then disappear from the panel's one. First the root file is written
+     * and reread, then the secret is removed from the other: halfway through the secret is always in at least one
+     * file. If the root file already has a different value, its value wins, being the one written later. The names
+     * moved, or none.
      */
     public static synchronized java.util.List<String> splitRootSecrets() {
         Properties web = WEB.readFile();
@@ -402,39 +402,39 @@ public final class PanelSecrets {
     }
 
     /**
-     * Le lettere con cui si genera una password.
+     * The characters a password is generated from.
      *
-     * <p>Mancano apposta l'apice, le virgolette, la barra rovescia e l'accento grave: la
-     * password finisce dentro {@code IDENTIFIED BY '...'} in un here-document dello script
-     * d'installazione, e uno di quei caratteri la spezzerebbe o verrebbe preso per un'escape
-     * di MySQL. Il dollaro resta: l'espansione del here-document avviene una volta sola,
-     * quindi un dollaro <em>dentro</em> la password non viene riespanso.
+     * <p>The single quote, the double quote, the backslash and the backtick are left out on purpose: the
+     * password ends up inside {@code IDENTIFIED BY '...'} in a here-document of the installation
+     * script, and one of those characters would break it or be taken for a MySQL
+     * escape. The dollar stays: the here-document expansion happens only once,
+     * so a dollar <em>inside</em> the password is not expanded again.
      */
     private static final char[] ALPHABET =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=".toCharArray();
 
     /**
-     * Solo lettere e cifre: l'alfabeto per la password dell'utente del pannello e per quella
-     * della webmail.
+     * Only letters and digits: the alphabet for the password of the panel's user and for the
+     * webmail's.
      *
-     * <p>Non e' una scelta pigra. Quelle password, a differenza di quella di root, finiscono
-     * in posti che <em>non</em> sono SQL: l'URL di collegamento di Roundcube
-     * ({@code mysql://utente:password@127.0.0.1/roundcubemail}), i file di Postfix e la
-     * configurazione di Dovecot. In un URL una chiocciola spezza l'indirizzo, un
-     * {@code %} apre una sequenza di decodifica e una barra cambia il percorso; nei file di
-     * configurazione un {@code #} puo' aprire un commento. Qui un carattere in piu' non
-     * aggiunge difesa che valga quelle rotture: ventiquattro caratteri alfanumerici sono
-     * circa 143 bit.
+     * <p>It is not a lazy choice. Those passwords, unlike the root one, end up
+     * in places that are <em>not</em> SQL: Roundcube's connection URL
+     * ({@code mysql://user:password@127.0.0.1/roundcubemail}), the Postfix files and the
+     * Dovecot configuration. In a URL an at sign breaks the address, a
+     * {@code %} opens a decoding sequence and a slash changes the path; in configuration
+     * files a {@code #} can open a comment. Here an extra character does not
+     * add any defence worth those breakages: twenty-four alphanumeric characters are
+     * about 143 bits.
      */
     private static final char[] ALPHANUMERIC =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".toCharArray();
 
-    /** Una password nuova per SQL, presa da un generatore crittografico. */
+    /** A new password for SQL, taken from a cryptographic generator. */
     public static String newPassword(int length) {
         return newPassword(length, ALPHABET);
     }
 
-    /** Una password nuova di sole lettere e cifre, per i posti che non sono SQL. */
+    /** A new password of letters and digits only, for the places that are not SQL. */
     public static String newAlphanumericPassword(int length) {
         return newPassword(length, ALPHANUMERIC);
     }
@@ -446,41 +446,41 @@ public final class PanelSecrets {
     }
 
     /**
-     * La password di root di MySQL, generandola se non c'e' ancora.
+     * The MySQL root password, generating it if it is not there yet.
      *
-     * <p>Prima non ce n'era nessuna: lo script d'installazione faceva {@code mysql -u root} e
-     * poi {@code mysql -u root --password=}, cioe' dava per scontato che root entrasse senza
-     * segreto. Su FreeBSD e' proprio come resta un MySQL appena installato, e root senza
-     * password vuol dire che <em>qualunque</em> utente locale — compreso {@code www}, che fa
-     * girare Roundcube — ha i pieni poteri sul database.
+     * <p>There used to be none: the installation script ran {@code mysql -u root} and
+     * then {@code mysql -u root --password=}, that is it took for granted that root logged in without a
+     * secret. On FreeBSD that is exactly how a freshly installed MySQL stays, and root without a
+     * password means that <em>any</em> local user, including {@code www}, which
+     * runs Roundcube, has full powers over the database.
      *
-     * <p>La <strong>prima</strong> password non si configura: si genera, una volta sola, con
-     * un generatore crittografico; da quel momento <em>quella</em> e' la password, e si
-     * rilegge da qui. Altrimenti quella nel file e quella impostata in MySQL non sarebbero
-     * piu' lo stesso segreto. Una password messa a mano non viene mai sostituita.
+     * <p>The <strong>first</strong> password is not configured: it is generated, once only, with
+     * a cryptographic generator; from then on <em>that</em> is the password, and it is
+     * reread from here. Otherwise the one in the file and the one set in MySQL would no
+     * longer be the same secret. A password set by hand is never replaced.
      *
-     * <p>Si puo' chiamare da piu' processi insieme: la generazione avviene sotto il lock del
-     * file e chi arriva secondo trova quella del primo, invece di sovrascriverla con una sua
-     * che in MySQL non e' mai stata impostata.
+     * <p>It can be called from several processes at once: the generation happens under the file
+     * lock, and whoever arrives second finds the first one's password, instead of overwriting it with its own
+     * that was never set in MySQL.
      */
     public static synchronized String ensureMysqlRootPassword() {
         return ensureGenerated(MYSQL_ROOT_PASSWORD, () -> newPassword(28));
     }
 
     /**
-     * La password dell'utente MySQL della webmail, generandola se non c'e' ancora. Come quella di
-     * root si genera una volta sola e poi si rilegge: la usano gli script d'installazione e la
-     * migrazione all'avvio, e devono dare a MySQL e a config.inc.php lo stesso segreto. Solo
-     * lettere e cifre, perche' finisce nell'URL di db_dsnw.
+     * The password of the webmail's MySQL user, generating it if it is not there yet. Like the root
+     * one it is generated once only and then reread: the installation scripts and the
+     * boot migration use it, and they must give MySQL and config.inc.php the same secret. Only
+     * letters and digits, because it ends up in the db_dsnw URL.
      */
     public static synchronized String ensureRoundcubeDbPassword() {
         return ensureGenerated(ROUNDCUBE_DB_PASSWORD, () -> newAlphanumericPassword(24));
     }
 
     /**
-     * La password di uno degli utenti MySQL di Postfix e Dovecot (MailDbUsers), generandola se non c'e' ancora:
-     * 32 lettere e cifre, perche' finisce nelle mappe di Postfix e nella riga connect di Dovecot, dove uno spazio,
-     * un apice o un cancelletto cambierebbero il senso della riga.
+     * The password of one of the Postfix and Dovecot MySQL users (MailDbUsers), generating it if it is not there yet:
+     * 32 letters and digits, because it ends up in the Postfix maps and in Dovecot's connect line, where a space,
+     * a quote or a hash sign would change the meaning of the line.
      */
     public static synchronized String ensureServiceDbPassword(String name) {
         if (!POSTFIX_DB_PASSWORD.equals(name) && !DOVECOT_DB_PASSWORD.equals(name))
@@ -488,26 +488,29 @@ public final class PanelSecrets {
         return ensureGenerated(name, () -> newAlphanumericPassword(32));
     }
 
-    /** Il segreto se c'e'; altrimenti lo genera sotto il lock del file, e chi arriva secondo trova il primo. */
+    /**
+     * The secret if it is there; otherwise it generates it under the file lock, and whoever arrives second finds the
+     * first one.
+     */
     private static synchronized String ensureGenerated(String name, java.util.function.Supplier<String> generator) {
         String v = get(name);
         if (!v.isEmpty()) return v;
         return storeFor(name).update(p -> {
-            if (!p.getProperty(name, "").isEmpty()) return null;   // l'ha appena scritta un altro
+            if (!p.getProperty(name, "").isEmpty()) return null;   // someone else just wrote it
             p.setProperty(name, generator.get());
             return p;
         }).getProperty(name, "");
     }
 
     /**
-     * La chiave della webmail in base64url senza '=': va scritta nella configurazione di Roundcube
-     * (letta solo da www), che la manda nell'intestazione X-DaemoxCP-Key.
+     * The webmail key in base64url without '=': it has to be written into the Roundcube configuration
+     * (readable only by www), which sends it in the X-DaemoxCP-Key header.
      */
     public static String webmailKey() {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(key(WEBMAIL_KEY));
     }
 
-    /** All'avvio: tutte le chiavi esistono prima che un altro processo possa servirsene. */
+    /** At startup: all the keys exist before another process can use them. */
     public static void ensureKeys() {
         key(DATA_KEY);
         key(INDEX_KEY);

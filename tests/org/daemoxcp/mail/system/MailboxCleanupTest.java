@@ -14,8 +14,8 @@ import org.daemoxcp.mail.integration.WebmailPasswordConfig;
 import org.daemoxcp.mail.util.Shell;
 
 /**
- * Automatic emptying of Junk and Trash, per mailbox, off until asked (20/11/2026: «deve essere una cosa sia del pannello
- * che di roundcube»), and the emergency emptying from the console («per le emergenze»).
+ * Automatic emptying of Junk and Trash, per mailbox, off until asked (2026-11-20: "it must be a thing of both the
+ * panel and roundcube"), and the emergency emptying from the console ("for emergencies").
  *  1. the days: never (the default), 7, 14, 30, 60, 90; the same list for the panel and the webmail;
  *  2. MySQL: the two columns (new installs and the migration), the update from the panel's window and its web-part
  *     procedure in the same order, the procedures that read mailboxes, the routines' and Dovecot's grants;

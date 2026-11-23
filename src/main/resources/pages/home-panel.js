@@ -1,11 +1,12 @@
 
-        // ---------- il pannello stesso, in cima alla dashboard (reperto 183) ----------
-        // Da quando gira lo vede chiunque apra la dashboard. Il resto (versione, build, commit,
-        // impronta del jar, Java, sistema, processo) sta dietro l'occhio: lo vede solo chi ha
-        // system.view, e si chiede al server solo quando lo si apre.
+        // ---------- the panel itself, at the top of the dashboard (finding 183) ----------
+        // How long it has been running is visible to anyone who opens the dashboard. The rest (version, build,
+        // commit, jar fingerprint, Java, system, process) is behind the eye: only those with
+        // system.view see it, and it is asked from the server only when it is opened.
         //
-        // Gli istanti arrivano in UTC (r13) e si mostrano qui, nella lingua della pagina, con il
-        // fuso scritto accanto: un'ora senza fuso, letta da un altro paese, sbaglia senza dirlo.
+        // The instants arrive in UTC (r13) and are shown here, in the page's language, with the
+        // time zone written next to them: a time without a zone, read from another country, is wrong
+        // without saying so.
         const panelInfo = { offsetMs: 0, startedMs: 0, details: null, tick: null, sync: null };
 
         async function panelInfoGet(action) {
@@ -32,7 +33,7 @@
             }
         }
 
-        // 3 giorni, 4 ore e 12 minuti: i secondi no, la pagina si aggiorna ogni quindici.
+        // 3 days, 4 hours and 12 minutes: no seconds, the page refreshes every fifteen.
         function panelInfoDuration(seconds) {
             const s = Math.max(0, Math.floor(seconds));
             const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
@@ -67,7 +68,7 @@
             }
         }
 
-        // L'ora di adesso secondo il server: l'orologio del browser puo' essere avanti o indietro.
+        // The current time according to the server: the browser's clock can be ahead or behind.
         function panelInfoNow() {
             return Date.now() + panelInfo.offsetMs;
         }
@@ -99,12 +100,12 @@
             document.getElementById('panelInfoToggle').hidden = !r.details;
             panelReleaseShow(r.release);
             if (!panelInfo.tick) panelInfo.tick = setInterval(panelInfoTick, 15000);
-            // Se il pannello riparte mentre la pagina e' aperta, l'inizio cambia: si rilegge ogni tanto.
+            // If the panel restarts while the page is open, the start changes: it is reread every so often.
             if (!panelInfo.sync) panelInfo.sync = setInterval(panelInfoLoad, 5 * 60 * 1000);
         }
 
-        // Una versione nuova su GitHub (ReleaseCheck): il server la manda solo a chi vede le pagine del sistema. Il
-        // link va alla pagina della release solo se e' davvero una release su GitHub.
+        // A new version on GitHub (ReleaseCheck): the server sends it only to those who see the system pages.
+        // The link goes to the release page only if it really is a release on GitHub.
         function panelReleaseShow(release) {
             const box = document.getElementById('panelReleaseNotice');
             if (!box) return;
@@ -126,7 +127,7 @@
             if (!open) return;
             const list = document.getElementById('panelInfoList');
             list.replaceChildren(panelInfoEl('dd', 'col-12 text-muted mb-0', t('hp.readingDetails')));
-            // Ogni apertura rilegge: la memoria cambia, e un jar sostituito si vede subito.
+            // Every opening rereads: memory changes, and a replaced jar shows at once.
             const r = await panelInfoGet('details');
             if (button.getAttribute('aria-expanded') !== 'true') return;
             if (!r.success) {
@@ -164,8 +165,8 @@
             return b;
         }
 
-        // Una riga della lista: il nome a sinistra, il valore (testo o nodi) a destra; sotto lo
-        // schermo stretto vanno uno sopra l'altro.
+        // A row of the list: the name on the left, the value (text or nodes) on the right; on a
+        // narrow screen they go one above the other.
         function panelInfoRow(list, label, ...values) {
             list.append(panelInfoEl('dt', 'col-sm-4 col-lg-3 fw-semibold', label));
             const dd = panelInfoEl('dd', 'col-sm-8 col-lg-9');
@@ -235,7 +236,7 @@
                     setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500);
                 }
             } catch (e) {
-                // Senza permesso per gli appunti: lo si seleziona, e lo si copia a mano.
+                // Without permission for the clipboard: it is selected, and copied by hand.
                 const code = document.getElementById(which === 'commit' ? 'panelInfoCommit' : 'panelInfoSha');
                 if (code) {
                     if (which === 'commit') code.textContent = value;

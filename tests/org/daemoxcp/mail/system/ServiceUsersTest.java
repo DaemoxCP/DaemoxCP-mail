@@ -100,7 +100,7 @@ public class ServiceUsersTest {
         check("Dovecot's auth-worker as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
         f = ex(AFTER + "root    65001 59971 dovecot/auth\n", POOL_AFTER, "", false);
         check("Dovecot's auth as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
-        // Dovecot 2.4 runs anvil as root by design (measured on 09/11/2026, reperto 213): there it is needed, on 2.3 not.
+        // Dovecot 2.4 runs anvil as root by design (measured on 09/11/2026, finding 213): there it is needed, on 2.3 not.
         String anvilRoot = AFTER.replace("dovecot 61342 59971 dovecot/anvil", "root    61342 59971 dovecot/anvil");
         f = ex(anvilRoot, POOL_AFTER, "", false);
         check("Dovecot 2.3's anvil as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));

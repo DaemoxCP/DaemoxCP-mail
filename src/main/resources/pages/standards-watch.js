@@ -1,18 +1,18 @@
-        // ---------- Sorveglianza: cosa e' cambiato sotto i piedi del pannello ----------
-        // Il RFC Editor pubblica lo stato di ogni documento in forma leggibile da un
-        // programma (rfcNNNN.json, 1,3 KB): "obsoleted_by" e "updated_by". Quello che il
-        // 01/09/2026 abbiamo scoperto per caso su DMARC, da qui si vede da solo.
+        // ---------- Watch: what has changed under the panel's feet ----------
+        // The RFC Editor publishes the state of every document in a form a program can
+        // read (rfcNNNN.json, 1.3 KB): "obsoleted_by" and "updated_by". What we found out
+        // by chance about DMARC on 2026-09-01 can be seen from here by itself.
         async function watchLoad() {
             const el = document.getElementById('upd-sorv');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sv.querying')) + '';
-            // Una alla volta, per lo stesso motivo: il lucchetto di updApi fa fallire la
-            // seconda chiamata parallela, e la sezione delle scadenze restava vuota.
+            // One at a time, for the same reason: updApi's lock makes the second
+            // parallel call fail, and the deadlines section stayed empty.
             const r = await updApi('watch');
             const o = await updApi('openssl_expiry');
 
             let h = '';
 
-            // --- specifiche ---
+            // --- specifications ---
             if (!r.success) {
                 h += '<div class="alert alert-danger py-2 small mb-3">' + updEsc(r.error || t('cfi.failed')) + '</div>';
             } else {
@@ -27,9 +27,9 @@
                                 : g === 2 ? '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i>'
                                 : g === 1 ? '<i class="fas fa-triangle-exclamation text-warning" aria-hidden="true"></i>'
                                           : '<i class="fas fa-check-circle text-success" aria-hidden="true"></i>';
-                    // Per ogni documento nuovo c'e' un bottone che ne estrae l'elenco dei
-                    // cambiamenti scritto dagli autori: e' li' che sta la risposta a "cosa e'
-                    // cambiato", e non serve leggere duecento pagine per trovarla.
+                    // For every new document there is a button that extracts its list of
+                    // changes written by the authors: that is where the answer to "what has
+                    // changed" is, and there is no need to read two hundred pages to find it.
                     const newOnes = (s.replacedBy || []).concat(s.updatedBy || []);
                     let buttons = '';
                     newOnes.forEach(x => {
@@ -48,7 +48,7 @@
                    + '<div class="small text-muted mb-3">' + t('sv.sourceNote.html', { source: updEsc(r.source) }) + '</div>';
             }
 
-            // --- scadenze OpenSSL ---
+            // --- OpenSSL expiry dates ---
             if (!o.success) {
                 h += '<div class="alert alert-danger py-2 small mb-0">' + updEsc(o.error || t('cfi.failed')) + '</div>';
             } else {
@@ -86,9 +86,9 @@
             el.innerHTML = h;
         }
 
-        // Scarica il documento nuovo ed estrae cio' che dice di se stesso. Il testo e'
-        // copiato alla lettera: un riassunto di un elenco di cambiamenti e' il modo migliore
-        // per perdere proprio la riga che contava.
+        // Downloads the new document and extracts what it says about itself. The text is
+        // copied verbatim: a summary of a list of changes is the best way
+        // to lose precisely the line that mattered.
         async function watchChanges(rfc, reference) {
             const el = document.getElementById('sorv-changes');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sv.downloadingRfc', { rfc: rfc }));
@@ -101,9 +101,9 @@
                   + ' py-2 small mb-2"><strong>RFC ' + updEsc(r.rfc) + '</strong> &mdash; '
                   + updEsc(r.note) + '</div>';
 
-            // Prima le righe che nominano qualcosa che il pannello usa davvero: sono quelle
-            // da cui cominciare. L'elenco intero resta sotto, perche' l'incrocio non e' un
-            // filtro completo e presentarlo come tale farebbe saltare la riga che conta.
+            // First the lines that name something the panel really uses: they are the ones
+            // to start from. The whole list stays below, because the cross-match is not a
+            // complete filter and presenting it as such would skip the line that matters.
             const touches = r.concernsYou || [];
             if (r.crossNote)
                 h += '<div class="alert alert-' + (touches.length ? 'warning' : 'secondary')

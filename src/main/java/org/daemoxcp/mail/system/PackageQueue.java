@@ -18,30 +18,30 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Un lavoro alla volta sui pacchetti, e l'elenco per riproteggerli scritto davvero prima di
- * sbloccarli.
+ * One job at a time on the packages, and the list for locking them again really written before
+ * unlocking them.
  *
- * Aggiornamento guidato, manutenzione, aggiornamento dei non protetti, Roundcube, la JVM, il
- * passaggio di Python, la migrazione di MySQL, il ricollegamento delle librerie, la pulizia del
- * client MySQL, l'installazione dei componenti, la protezione e la rimozione dei pacchetti: tutti
- * cambiano i pacchetti o le loro protezioni, e due insieme si pestano i piedi. Il secondo
- * sovrascriveva l'elenco su disco del primo; il primo, finendo, lo cancellava mentre il secondo
- * aveva ancora pacchetti sbloccati; e un'interruzione in quel momento li lasciava sbloccati senza
- * che l'avvio lo sapesse. Un "pkg upgrade" dei non protetti, partito mentre la manutenzione aveva
- * tolto la protezione a Dovecot, aggiornava anche Dovecot. E il piano calcolato da uno non vale
- * piu' se l'altro cambia i pacchetti nel frattempo.
+ * Guided upgrade, maintenance, upgrade of the unlocked ones, Roundcube, the JVM, the Python
+ * switch, the MySQL migration, the relinking of the libraries, the cleanup of the MySQL client,
+ * the installation of the components, the locking and the removal of packages: all of them
+ * change the packages or their locks, and two at once step on each other's toes. The second one
+ * overwrote the first one's list on disk; the first one, when finishing, deleted it while the
+ * second one still had unlocked packages; and an interruption at that moment left them unlocked
+ * without the startup knowing it. A "pkg upgrade" of the unlocked ones, started while the
+ * maintenance had removed Dovecot's lock, upgraded Dovecot too. And the plan computed by one is
+ * no longer valid if the other changes the packages in the meantime.
  *
- * Il turno si prende nella richiesta, PRIMA di avviare il lavoro: quindi prima dei controlli, del
- * piano e di ogni sblocco. Si rilascia quando il lavoro finisce, qualunque cosa succeda. Chi lo
- * trova preso non parte, e sa chi lo tiene.
+ * The turn is taken in the request, BEFORE starting the job: so before the checks, the plan and
+ * any unlock. It is released when the job ends, whatever happens. Whoever finds it taken does
+ * not start, and knows who holds it.
  *
- * Il turno vale fra PROCESSI, non solo dentro questo. Fino al 06/11/2026 era un AtomicReference:
- * misurato sulla VM, un secondo processo Java lo prendeva mentre il primo lo teneva, e ogni avvio
- * del jar (anche il menu da console aperto mentre il pannello web aggiorna) riproteggeva i
- * pacchetti di un lavoro in corso e ne cancellava l'elenco, facendo fallire il suo pkg upgrade
- * («is locked and may not be modified»). Adesso chi prende il turno tiene anche un lock fcntl su
- * TURN_LOCK_PATH: il sistema lo toglie da solo quando il processo muore, quindi un lavoro
- * interrotto non lascia il turno preso per sempre.
+ * The turn holds across PROCESSES, not only within this one. Until 2026-11-06 it was an
+ * AtomicReference: measured on the VM, a second Java process took it while the first held it,
+ * and every start of the jar (even the console menu open while the web panel upgrades) locked
+ * again the packages of a running job and deleted its list, making its pkg upgrade fail
+ * ("is locked and may not be modified"). Now whoever takes the turn also holds an fcntl lock on
+ * TURN_LOCK_PATH: the system removes it by itself when the process dies, so an interrupted job
+ * does not leave the turn taken forever.
  */
 public final class PackageQueue {
 
@@ -50,66 +50,66 @@ public final class PackageQueue {
     private PackageQueue() {}
 
     /**
-     * L'elenco dei pacchetti che un lavoro in corso ha sbloccato. Il finally di un lavoro non gira
-     * se il processo muore (riavvio del pannello, kill, crash della JVM): questo file e' l'unica
-     * cosa che sopravvive, e all'avvio il pannello riprotegge cio' che c'e' scritto.
+     * The list of the packages that a running job has unlocked. A job's finally does not run if
+     * the process dies (panel restart, kill, JVM crash): this file is the only thing that
+     * survives, and at startup the panel locks again what is written in it.
      */
     public static final String STATE_PATH = "/var/db/daemoxcp-mail-maintenance-locks";
 
-    /** Dove sta l'elenco. E' una variabile solo perche' le prove non scrivano in /var/db. */
+    /** Where the list lives. It is a variable only so that the tests do not write in /var/db. */
     static Path list = Path.of(STATE_PATH);
 
     private record Turn(String id, String description, long start) {}
 
     private static final AtomicReference<Turn> IN_PROGRESS = new AtomicReference<>();
 
-    /** Il lock del turno fra processi. Dentro c'e' scritto chi lo tiene, per dirlo a chi lo trova preso. */
+    /** The cross-process lock of the turn. Written inside is who holds it, to tell whoever finds it taken. */
     public static final String TURN_LOCK_PATH = "/var/db/daemoxcp-mail/package-turn.lock";
 
-    /** Dove sta il lock. E' una variabile solo perche' le prove non scrivano in /var/db. */
+    /** Where the lock lives. It is a variable only so that the tests do not write in /var/db. */
     static Path turnLock = Path.of(TURN_LOCK_PATH);
 
     /**
-     * Il lavoro che tiene il turno, scritto su disco quando lo prende e tolto quando lo rilascia: chi e',
-     * quando e' partito, da quale processo, e com'erano pacchetti e servizi all'inizio. Se il processo muore
-     * a meta' resta, ed e' da qui che il pannello in servizio capisce che cosa il lavoro ha cambiato e lo
-     * completa (InterruptedJobRecovery): anche un lavoro che non aveva sbloccato niente, e che quindi non
-     * lasciava l'elenco. Sta accanto al lock del turno, cosi' le prove che spostano il lock spostano anche lui.
+     * The job that holds the turn, written on disk when it takes it and removed when it releases it: who it is,
+     * when it started, from which process, and how packages and services were at the start. If the process dies
+     * halfway it stays, and it is from here that the running panel understands what the job changed and
+     * completes it (InterruptedJobRecovery): even a job that had unlocked nothing, and which therefore did not
+     * leave the list. It sits next to the turn lock, so the tests that move the lock move it too.
      */
     static Path running() {
         return turnLock.resolveSibling("package-job-running.json");
     }
 
     /**
-     * Com'erano pacchetti e servizi all'inizio di un lavoro ({"inventory": {nome: versione}, "services": {nome:
-     * acceso}}): lo fornisce UpdateManager, che sa chiederlo al sistema. Vuoto finche' nessuno lo imposta.
+     * How packages and services were at the start of a job ({"inventory": {name: version}, "services": {name:
+     * running}}): provided by UpdateManager, which knows how to ask the system for it. Empty until someone sets it.
      */
     static volatile java.util.function.Supplier<JSONObject> snapshot = JSONObject::new;
 
     /**
-     * Il canale e il lock di chi tiene il turno in QUESTO processo. Si toccano solo da chi tiene
-     * IN_PROGRESS: un secondo canale aperto e chiuso sullo stesso file, nello stesso processo,
-     * toglierebbe il lock fcntl (e' la regola di POSIX, la ricorda anche la documentazione di
-     * FileChannel), quindi qui se ne apre uno solo per volta.
+     * The channel and the lock of whoever holds the turn in THIS process. They are touched only by
+     * whoever holds IN_PROGRESS: a second channel opened and closed on the same file, in the same
+     * process, would remove the fcntl lock (it is the POSIX rule, the FileChannel documentation
+     * recalls it too), so here only one is opened at a time.
      */
     private static FileChannel lockChannel;
     private static FileLock fileLock;
 
     /**
-     * Prende il turno per il lavoro 'id'. null se l'ha preso; altrimenti il motivo per cui il
-     * lavoro non puo' partire, da mostrare cosi' com'e'.
+     * Takes the turn for the job 'id'. null if it took it; otherwise the reason why the job
+     * cannot start, to be shown as it is.
      *
-     * Non lo prende nemmeno se su disco c'e' l'elenco di un lavoro che non si e' chiuso: quei
-     * pacchetti potrebbero essere ancora sbloccati, e un "pkg upgrade" o un "pkg install" li
-     * cambierebbe come se niente fosse.
+     * It does not take it even if on disk there is the list of a job that did not close: those
+     * packages might still be unlocked, and a "pkg upgrade" or a "pkg install" would change
+     * them as if nothing were wrong.
      */
     public static String take(String id, String description) {
         return take(id, description, true);
     }
 
     /**
-     * Come prendi, ma anche con l'elenco di un lavoro interrotto su disco. Solo per rimettere o
-     * togliere protezioni: rimetterle e' proprio il rimedio a quell'elenco.
+     * Like take, but also with the list of an interrupted job on disk. Only for putting back or
+     * removing locks: putting them back is precisely the remedy for that list.
      */
     public static String takeForLocks(String id, String description) {
         return take(id, description, false);
@@ -120,9 +120,9 @@ public final class PackageQueue {
         while (!IN_PROGRESS.compareAndSet(null, fresh)) {
             String holder = holder();
             if (holder != null) return busy(holder);
-            // Rilasciato fra i due passi: si riprova.
+            // Released between the two steps: try again.
         }
-        // Poi il turno fra processi: un altro pannello (o un menu da console) puo' tenerlo.
+        // Then the cross-process turn: another panel (or a console menu) may hold it.
         String other = takeFileLock(fresh);
         if (other != null) {
             IN_PROGRESS.compareAndSet(fresh, null);
@@ -130,12 +130,12 @@ public final class PackageQueue {
         }
         if (notWithOpenList && statePresent()) {
             release(id);
-            // L'elenco dell'aggiornamento della Java c'e' per disegno finche' lo script lavora: non e' un lavoro che non
-            // e' finito, e riavviare il pannello sarebbe il consiglio sbagliato (reperto 210).
+            // The Java upgrade's list is there by design while the script works: it is not a job that did not
+            // finish, and restarting the panel would be the wrong advice (finding 210).
             if (jobRecord().optBoolean("expectsRestart")) return I18n.tr("server.turn.javaRunning");
             return I18n.tr("server.turn.openList", java.util.Map.of("file", String.valueOf(list)));
         }
-        // Un lavoro vero (non il ripristino delle protezioni) lascia la sua traccia finche' tiene il turno.
+        // A real job (not the restoring of the locks) leaves its trace as long as it holds the turn.
         if (notWithOpenList) writeRunning(fresh);
         return null;
     }
@@ -169,16 +169,16 @@ public final class PackageQueue {
     }
 
     /**
-     * Chi tiene il turno, per il registro: il pid di chi ha preso il lock e, se e' suo, l'id del lavoro; in inglese per
-     * tutti. La descrizione resta fuori: e' nella lingua del pannello e serve a chi legge la pagina, e i registri sono in
-     * inglese (EnglishLogsTest; visto sulla VM il 22/11/2026, «aggiornamento di …» nel registro di un pannello in
-     * italiano).
+     * Who holds the turn, for the log: the pid of whoever took the lock and, if it is theirs, the job id; in English
+     * for everyone. The description stays out: it is in the panel's language and serves whoever reads the page, and
+     * the logs are in English (EnglishLogsTest; seen on the VM on 2026-11-22, `aggiornamento di ...` ("upgrade
+     * of ...") in the log of a panel in Italian).
      *
-     * <p>Chi tiene il turno lo dice il file del lock, che scrive solo chi l'ha appena preso. La traccia del lavoro no:
-     * quella di un lavoro ucciso resta su disco finche' qualcuno non lo completa, e intanto il turno puo' averlo preso
-     * un altro, per esempio il guardiano del servizio che rimette le protezioni. Visto sulla VM il 22/11/2026 (prova M4
-     * di UpdaterRobustnessE2ETest): il registro diceva «job guid-…, pid 95770; a job is running there», cioe' il lavoro
-     * appena ucciso, mentre il turno l'aveva il servizio. Il lavoro si nomina solo se la sua traccia e' di quel pid.
+     * <p>Who holds the turn is told by the lock file, which only whoever has just taken it writes. Not so the job's
+     * trace: that of a killed job stays on disk until someone completes it, and meanwhile someone else may have taken
+     * the turn, for example the service guardian that puts the locks back. Seen on the VM on 2026-11-22 (test M4 of
+     * UpdaterRobustnessE2ETest): the log said "job guid-..., pid 95770; a job is running there", that is the job
+     * just killed, while the service held the turn. The job is named only if its trace belongs to that pid.
      */
     public static String holderForLog() {
         Turn t = IN_PROGRESS.get();
@@ -193,32 +193,32 @@ public final class PackageQueue {
 
     private static final java.util.regex.Pattern LOCK_PID = java.util.regex.Pattern.compile("^pid ([0-9]{1,10}),");
 
-    /** Il pid scritto nel file del lock da chi l'ha preso per ultimo («pid N, …», takeFileLock); 0 se non si legge. */
+    /** The pid written in the lock file by whoever took it last ("pid N, ...", takeFileLock); 0 if it cannot be read. */
     static long lockPid() {
         try {
             java.util.regex.Matcher m = LOCK_PID.matcher(new String(Files.readAllBytes(turnLock), StandardCharsets.UTF_8).trim());
             return m.find() ? Long.parseLong(m.group(1)) : 0;
         } catch (Exception e) {
-            return 0;     // senza il file si dice solo che e' un altro processo
+            return 0;     // without the file we only say that it is another process
         }
     }
 
-    /** La traccia del lavoro che tiene (o teneva) il turno, o un oggetto vuoto se non c'e'. */
+    /** The trace of the job that holds (or held) the turn, or an empty object if there is none. */
     public static JSONObject runningRecord() {
         try { return new JSONObject(Files.readString(running())); }
         catch (Exception e) { return new JSONObject(); }
     }
 
-    /** Toglie la traccia: chi ha completato un lavoro interrotto, o il lavoro stesso quando rilascia il turno. */
+    /** Removes the trace: whoever completed an interrupted job, or the job itself when it releases the turn. */
     static void deleteRunning() {
         try { Files.deleteIfExists(running()); }
         catch (Exception e) { LOGGER.log(Level.WARNING, "Cannot remove " + running(), e); }
     }
 
     /**
-     * Il lock fra processi, per il turno appena preso in questo processo. null se preso; altrimenti
-     * il messaggio per chi lo trova preso (o per chi non puo' nemmeno aprire il file: senza il
-     * lock non si parte, perche' un turno che non vale fra processi e' quello che si e' rotto).
+     * The cross-process lock, for the turn just taken in this process. null if taken; otherwise
+     * the message for whoever finds it taken (or for whoever cannot even open the file: without the
+     * lock we do not start, because a turn that does not hold across processes is the one that broke).
      */
     private static String takeFileLock(Turn t) {
         FileChannel c = null;
@@ -227,7 +227,7 @@ public final class PackageQueue {
             c = FileChannel.open(turnLock, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
             FileLock l;
             try { l = c.tryLock(); }
-            catch (OverlappingFileLockException e) { l = null; }   // non succede: c'e' IN_PROGRESS davanti
+            catch (OverlappingFileLockException e) { l = null; }   // does not happen: IN_PROGRESS comes first
             if (l == null) {
                 String who = new String(Files.readAllBytes(turnLock), StandardCharsets.UTF_8).trim();
                 c.close();
@@ -247,14 +247,14 @@ public final class PackageQueue {
         }
     }
 
-    /** Rilascia il turno, ma solo se e' di 'id': un lavoro non puo' liberare quello di un altro. */
+    /** Releases the turn, but only if it belongs to 'id': a job cannot free another one's. */
     public static void release(String id) {
         Turn t = IN_PROGRESS.get();
         if (t == null || !t.id().equals(id)) return;
-        // Il lavoro e' finito (bene o male, ma dentro il suo finally): la sua traccia non serve piu'.
+        // The job has finished (well or badly, but inside its finally): its trace is no longer needed.
         if (id.equals(runningRecord().optString("id"))) deleteRunning();
-        // Prima il lock fra processi, poi il turno di questo processo: al contrario, un altro
-        // thread potrebbe prendere il turno e trovare il file ancora bloccato da noi.
+        // First the cross-process lock, then this process's turn: the other way round, another
+        // thread could take the turn and find the file still locked by us.
         try {
             if (fileLock != null) fileLock.release();
             if (lockChannel != null) lockChannel.close();
@@ -267,13 +267,13 @@ public final class PackageQueue {
         IN_PROGRESS.compareAndSet(t, null);
     }
 
-    /** L'id del lavoro che tiene il turno adesso, o null se e' libero (reperto 206: la pagina lo segue). */
+    /** The id of the job that holds the turn now, or null if it is free (finding 206: the page follows it). */
     public static String holderId() {
         Turn t = IN_PROGRESS.get();
         return t == null ? null : t.id();
     }
 
-    /** Chi tiene il turno adesso ("manutenzione, in corso da 3 minuti"), o null se e' libero. */
+    /** Who holds the turn now ("maintenance, running for 3 minutes"), or null if it is free. */
     public static String holder() {
         Turn t = IN_PROGRESS.get();
         if (t == null) return null;
@@ -284,8 +284,8 @@ public final class PackageQueue {
     }
 
     /**
-     * Mentre un lavoro cambia i pacchetti, un piano calcolato adesso vedrebbe protezioni tolte e
-     * versioni che stanno cambiando: null se si puo' calcolare, altrimenti il motivo.
+     * While a job changes the packages, a plan computed now would see removed locks and
+     * versions that are changing: null if it can be computed, otherwise the reason.
      */
     public static String planNotNow() {
         String holder = holder();
@@ -293,23 +293,23 @@ public final class PackageQueue {
              : I18n.tr("server.turn.busyPlan", java.util.Map.of("who", String.valueOf(holder)));
     }
 
-    /** Il messaggio per chi trova il turno preso. */
+    /** The message for whoever finds the turn taken. */
     static String busy(String holder) {
         return I18n.tr("server.turn.busy", java.util.Map.of("who", String.valueOf(holder)));
     }
 
     /**
-     * Avvia in un thread il lavoro che ha GIA' preso il turno 'id', e rilascia il turno quando il
-     * lavoro finisce, anche con un errore. Se il thread non parte, lo rilascia subito.
+     * Starts in a thread the job that has ALREADY taken the turn 'id', and releases the turn when the
+     * job ends, even with an error. If the thread does not start, it releases it immediately.
      */
     public static void start(String id, String name, Runnable work) {
         try {
-            // La lingua di chi ha chiesto il lavoro segue il lavoro nel suo thread (messaggi e log)
+            // The language of whoever requested the job follows the job into its thread (messages and logs)
             Thread t = new Thread(I18n.withCurrent(() -> {
                 try { work.run(); }
                 finally { release(id); }
             }), name);
-            t.setDaemon(true);   // come prima: un lavoro non tiene acceso un pannello che si sta spegnendo
+            t.setDaemon(true);   // as before: a job does not keep alive a panel that is shutting down
             t.start();
         } catch (RuntimeException | Error e) {
             release(id);
@@ -318,15 +318,15 @@ public final class PackageQueue {
     }
 
     /**
-     * Scrive su disco l'elenco dei pacchetti che si stanno per sbloccare, PRIMA di sbloccarli, e
-     * dice se ci e' riuscito: null se l'elenco e' scritto e forzato su disco, altrimenti il motivo.
-     * Se non e' null, chi chiama NON deve sbloccare niente.
+     * Writes on disk the list of the packages about to be unlocked, BEFORE unlocking them, and
+     * says whether it succeeded: null if the list is written and forced to disk, otherwise the reason.
+     * If it is not null, the caller must NOT unlock anything.
      *
-     * Prima un errore di scrittura (disco pieno, /var/db non scrivibile) finiva in un avviso e il
-     * lavoro sbloccava lo stesso: se poi il processo moriva, l'avvio non aveva nessun elenco da cui
-     * riproteggere. Il file si crea solo se non esiste (CREATE_NEW, atomico): se esiste, e'
-     * l'elenco di un lavoro interrotto che l'avvio non e' riuscito a chiudere, e sovrascriverlo
-     * perderebbe proprio i pacchetti da riproteggere.
+     * Before, a write error (disk full, /var/db not writable) ended in a warning and the job
+     * unlocked anyway: if the process then died, the startup had no list from which to lock
+     * again. The file is created only if it does not exist (CREATE_NEW, atomic): if it exists, it
+     * is the list of an interrupted job that the startup could not close, and overwriting it
+     * would lose precisely the packages to lock again.
      */
     public static String writeState(List<String> packages) {
         String error = writeState(list, packages);
@@ -335,29 +335,29 @@ public final class PackageQueue {
     }
 
     /**
-     * Come writeState, per un lavoro che passa i pacchetti a uno script fuori dal pannello e si
-     * aspetta di essere riavviato da lui (l'aggiornamento della JVM): al riavvio l'elenco c'e' per
-     * disegno, e non va scambiato per un lavoro interrotto.
+     * Like writeState, for a job that hands the packages to a script outside the panel and expects
+     * to be restarted by it (the JVM upgrade): at the restart the list is there by design, and
+     * must not be mistaken for an interrupted job.
      */
     public static String writeStateForRestart(List<String> packages) {
         String error = writeState(list, packages);
         if (error == null) {
             writeJobRecord(packages, true);
-            // Anche la traccia del turno: al riavvio voluto il processo e' morto per disegno, non interrotto.
+            // The turn's trace too: at the intended restart the process died by design, it was not interrupted.
             JSONObject r = runningRecord();
             if (!r.isEmpty()) writeJson(running(), r.put("expectsRestart", true));
         }
         return error;
     }
 
-    /** Accanto all'elenco: quale lavoro l'ha scritto, quando, e da quale processo. */
+    /** Next to the list: which job wrote it, when, and from which process. */
     static Path jobRecordPath() {
         return list.resolveSibling(list.getFileName() + ".job.json");
     }
 
     /**
-     * Chi ha scritto l'elenco, per dire all'avvio QUALE lavoro si e' interrotto. Se non si scrive
-     * non si ferma niente: l'elenco basta a riproteggere, questo serve solo a spiegare.
+     * Who wrote the list, to tell at startup WHICH job was interrupted. If it cannot be written
+     * nothing stops: the list is enough to lock again, this only serves to explain.
      */
     private static void writeJobRecord(List<String> packages, boolean expectsRestart) {
         Turn t = IN_PROGRESS.get();
@@ -379,7 +379,7 @@ public final class PackageQueue {
         }
     }
 
-    /** Il lavoro che ha scritto l'elenco, o un oggetto vuoto se non si sa (elenco di un pannello di prima). */
+    /** The job that wrote the list, or an empty object if unknown (list from an older panel). */
     public static JSONObject jobRecord() {
         try { return new JSONObject(Files.readString(jobRecordPath())); }
         catch (Exception e) { return new JSONObject(); }
@@ -397,7 +397,7 @@ public final class PackageQueue {
             return I18n.tr("server.turn.listExists", java.util.Map.of("file", String.valueOf(f)));
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Cannot write " + f, e);
-            // Un elenco scritto a meta' non deve restare: l'avvio lo leggerebbe come vero.
+            // A list written halfway must not remain: the startup would read it as real.
             if (created) {
                 try { Files.deleteIfExists(f); }
                 catch (Exception x) { LOGGER.log(Level.WARNING, "Cannot remove " + f, x); }
@@ -406,7 +406,7 @@ public final class PackageQueue {
         }
     }
 
-    /** Cancella l'elenco. Lo fa solo il lavoro che l'ha scritto, dopo aver riprotetto tutto. */
+    /** Deletes the list. Only the job that wrote it does so, after locking everything again. */
     public static void deleteState() {
         try { Files.deleteIfExists(list); }
         catch (Exception e) { LOGGER.log(Level.WARNING, "Cannot remove " + list, e); }
@@ -414,7 +414,7 @@ public final class PackageQueue {
         catch (Exception e) { LOGGER.log(Level.WARNING, "Cannot remove " + jobRecordPath(), e); }
     }
 
-    /** Se c'e' un elenco di un lavoro non concluso. */
+    /** Whether there is a list from an unfinished job. */
     public static boolean statePresent() {
         return Files.exists(list);
     }

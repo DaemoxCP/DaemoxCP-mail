@@ -14,7 +14,7 @@ import java.util.concurrent.Executors;
 
 /**
  * The real panel server for home-panel-browser-test.js and session-restart-browser-test.js in REMOTE
- * mode (reperti 183-184): the Java handlers, the generated pages, /api/panel_info with the machine's
+ * mode (findings 183-184): the Java handlers, the generated pages, /api/panel_info with the machine's
  * real data, the test MySQL, over HTTPS with the name panel.localhost. A superadmin and a test
  * session of theirs: the token goes to stdout ("SESSION ..."), for the browser cookie, which thus
  * does not go through the sign-in (login-browser-test.js covers that). The session is valid only
@@ -77,7 +77,7 @@ public class HomePanelE2EServer {
         https.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         https.start();
 
-        // Like SSLMailServer.start (reperto 184): the sessions of the previous start go. The same
+        // Like SSLMailServer.start (finding 184): the sessions of the previous start go. The same
         // database across two starts of this server is a jar started again.
         System.out.println("CLOSED " + Main.sessions.beginRun());
         String[] session = TestSessions.open(db, "dashboard-boss", "HomePanelE2EServer");

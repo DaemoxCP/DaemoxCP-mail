@@ -11,20 +11,20 @@ import java.time.Duration;
 import java.util.logging.Logger;
 
 /**
- * Il file principale di nginx (/usr/local/etc/nginx/nginx.conf): una sola fonte.
+ * The main nginx file (/usr/local/etc/nginx/nginx.conf): a single source.
  *
- * Installando dal README su una VM pulita il 20/11/2026 i modelli erano due, diversi: quello dell'installatore
- * (FullMailServerScript) senza il blocco default_server, per cui la 8443 rispondeva con Roundcube a qualunque nome e
- * all'indirizzo nudo; e quello del pannello (cambio di dominio o di certificati della webmail), che riscriveva il file
- * da capo, cancellando la riga di include della superficie pubblica sulla 443 (WebProtection: MTA-STS e la
- * configurazione di Thunderbird), senza nginx -t prima e senza copia. Tutti e due mostravano la versione di nginx
- * (Server: nginx/1.30.6, contro la regola r19) e alla webmail mancavano HSTS, nosniff e Referrer-Policy (r15).
+ * Installing from the README on a clean VM on 2026-11-20 there were two different templates: the installer's
+ * (FullMailServerScript) without the default_server block, so 8443 answered with Roundcube to any name and to the
+ * bare address; and the panel's (change of domain or of webmail certificates), which rewrote the file from scratch,
+ * deleting the include line of the public surface on 443 (WebProtection: MTA-STS and the Thunderbird
+ * configuration), without nginx -t first and without a copy. Both showed the nginx version (Server: nginx/1.30.6,
+ * against rule r19) and the webmail lacked HSTS, nosniff and Referrer-Policy (r15).
  *
- * Qui il contenuto e' uno: lo usano l'installatore (con dei segnaposto che lo script riempie), il pannello quando
- * cambia la webmail, e la riparazione all'avvio dei server installati prima, che aggiunge solo le righe che mancano.
- * Le intestazioni stanno nel blocco della webmail e nessuna location ne aggiunge altre: in nginx un add_header in una
- * location cancella quelli del blocco sopra. X-Frame-Options lo manda gia' Roundcube (sameorigin), e una CSP
- * rompeva Roundcube, che ha codice in linea: non si mettono.
+ * Here there is one content: it is used by the installer (with placeholders the script fills in), by the panel when
+ * it changes the webmail, and by the boot repair of servers installed before, which adds only the missing lines.
+ * The headers are in the webmail block and no location adds others: in nginx an add_header in a location cancels
+ * those of the block above. X-Frame-Options is already sent by Roundcube (sameorigin), and a CSP broke Roundcube,
+ * which has inline code: they are not set.
  */
 public final class NginxMain {
 
@@ -32,7 +32,7 @@ public final class NginxMain {
 
     static Path conf = Path.of("/usr/local/etc/nginx/nginx.conf");
 
-    /** Le intestazioni di sicurezza della webmail, con always: anche sulle risposte di errore. */
+    /** The webmail security headers, with always: also on error responses. */
     static final String HEADERS = """
                     # Webmail security (r15): HTTPS only for a year, no guessing of file types, and
                     # the webmail's address does not leak to the sites opened from messages.
@@ -49,8 +49,8 @@ public final class NginxMain {
     private NginxMain() {}
 
     /**
-     * Il file intero. Gli argomenti sono gia' controllati da chi chiama (nome, porta, percorsi); il pool PHP e' quello
-     * di Roundcube (RoundcubeUser.fastcgiPass).
+     * The whole file. The arguments are already checked by the caller (name, port, paths); the PHP pool is
+     * Roundcube's (RoundcubeUser.fastcgiPass).
      */
     public static String content(String domain, String port, String cert, String key, String rcRoot, String fastcgiPass) {
         return """
@@ -116,18 +116,18 @@ __HEADERS__
                 .formatted(port, cert, key, port, domain, rcRoot, cert, key, fastcgiPass);
     }
 
-    /** I segnaposto dell'installatore: lo script li sostituisce con i valori dei suoi argomenti. */
+    /** The installer's placeholders: the script replaces them with the values of its arguments. */
     public static final String P_DOMAIN = "__RC_DOMAIN__", P_PORT = "__RC_PORT__", P_CERT = "__RC_CERT__",
             P_KEY = "__RC_KEY__", P_ROOT = "__RC_ROOT__";
 
-    /** Il file per l'installatore, coi segnaposto. */
+    /** The file for the installer, with the placeholders. */
     public static String template() {
         return content(P_DOMAIN, P_PORT, P_CERT, P_KEY, P_ROOT, "unix:" + RoundcubeUser.SOCKET);
     }
 
     /**
-     * Il file nuovo con le righe che altre parti del pannello hanno messo nel vecchio: l'include della superficie
-     * pubblica sulla 443 (WebProtection). Riscrivere da capo la toglieva.
+     * The new file with the lines other parts of the panel put in the old one: the include of the public surface on
+     * 443 (WebProtection). Rewriting from scratch removed it.
      */
     public static String keepIncludes(String next, String current) {
         if (current == null || next == null) return next;
@@ -138,17 +138,17 @@ __HEADERS__
     }
 
     /**
-     * Le righe che mancano a un file del pannello gia' sul server: server_tokens off nel blocco http; il blocco
-     * default_server che risponde 444 agli altri nomi, se nessun listen della porta della webmail lo e' gia' (con le
-     * stesse righe listen e lo stesso certificato del blocco della webmail); le intestazioni nel blocco della webmail,
-     * se non ne ha gia'. Null se non c'e' niente da aggiungere, o se il file non ha la forma che il pannello scrive (un
-     * blocco http e un server col nome della webmail). Funzione pura.
+     * The lines missing from a panel file already on the server: server_tokens off in the http block; the
+     * default_server block that answers 444 to other names, if no listen of the webmail port already is one (with the
+     * same listen lines and the same certificate as the webmail block); the headers in the webmail block, if it does
+     * not have them already. Null if there is nothing to add, or if the file does not have the shape the panel writes
+     * (an http block and a server with the webmail name). Pure function.
      */
     static String harden(String current, String webmailDomain) {
         if (current == null || webmailDomain == null || webmailDomain.isBlank()) return null;
         String[] lines = current.split("\n", -1);
         String nameLine = "server_name " + webmailDomain + ";";
-        // Il blocco della webmail: dalla riga «server {» che lo apre alla graffa che lo chiude.
+        // The webmail block: from the "server {" line that opens it to the brace that closes it.
         int name = -1;
         for (int i = 0; i < lines.length; i++) if (lines[i].trim().equals(nameLine)) { name = i; break; }
         if (name < 0 || !current.matches("(?s).*(^|\\n)\\s*http\\s*\\{.*")) return null;
@@ -212,9 +212,9 @@ __HEADERS__
     }
 
     /**
-     * Mette il file al suo posto solo se nginx lo accetta: si scrive accanto (le include relative come mime.types si
-     * risolvono dalla stessa cartella), si prova con nginx -t -c, e solo allora si sposta, tenendo una copia del vecchio
-     * (ConfigBackups). Non ricarica: lo fa chi chiama. Null se e' andato bene, altrimenti cosa non va.
+     * Puts the file in place only if nginx accepts it: it is written alongside (relative includes such as mime.types
+     * are resolved from the same folder), tested with nginx -t -c, and only then moved, keeping a copy of the old one
+     * (ConfigBackups). It does not reload: the caller does. Null if it went well, otherwise what is wrong.
      */
     public static String write(String next) {
         try {
@@ -235,8 +235,8 @@ __HEADERS__
     }
 
     /**
-     * Sui server installati prima: le righe che mancano, poi reload e la prova dal vivo (le intestazioni arrivano e la
-     * versione non c'e'). Se qualcosa non torna, il file di prima e un altro reload.
+     * On servers installed before: the missing lines, then reload and the live test (the headers arrive and the
+     * version is absent). If something does not match, the previous file and another reload.
      */
     public static void ensureAtBoot() {
         try {
@@ -270,7 +270,7 @@ __HEADERS__
         }
     }
 
-    /** Reload, poi una richiesta vera alla webmail: le intestazioni nuove ci sono, la versione di nginx no. */
+    /** Reload, then a real request to the webmail: the new headers are there, the nginx version is not. */
     static String reloadAndCheck(String domain, String port) throws InterruptedException {
         if (!Shell.run(Duration.ofSeconds(30), "service", "nginx", "reload").success()) return "service nginx reload failed";
         String last = "the webmail did not answer";
@@ -282,7 +282,7 @@ __HEADERS__
             if (!h.startsWith("http/")) { last = "the webmail did not answer"; continue; }
             if (!h.contains("x-content-type-options: nosniff")) { last = "the webmail's answer has no nosniff header"; continue; }
             if (h.matches("(?s).*\\nserver: nginx/[0-9].*")) { last = "nginx still says its version"; continue; }
-            // Un altro nome sulla stessa porta: il blocco default_server chiude senza risposta (444), niente Roundcube.
+            // Another name on the same port: the default_server block closes without an answer (444), no Roundcube.
             Shell.Result other = Shell.run(Duration.ofSeconds(15), "curl", "-skI", "--max-time", "8", "--resolve",
                     "not-the-webmail.invalid:" + port + ":127.0.0.1", "https://not-the-webmail.invalid:" + port + "/");
             if (other.output().toLowerCase(java.util.Locale.ROOT).startsWith("http/")) {

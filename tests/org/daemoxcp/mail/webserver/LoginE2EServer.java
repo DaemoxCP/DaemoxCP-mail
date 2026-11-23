@@ -74,7 +74,7 @@ public class LoginE2EServer {
         // The panel's name: HostCheck (since 17/10/2026), with the "listen everywhere" address, only
         // accepts localhost and the machine's addresses, and the browser arrives as panel.localhost
         // (the passkeys' name). Without this line every page answered 421 and the test no longer
-        // passed; found by running it against the test machine (reperto 178).
+        // passed; found by running it against the test machine (finding 178).
         Main.dbManager.update_panel_config("panel.localhost", "0", Files.readString(dir.resolve("c.pem")),
                 Files.readString(dir.resolve("k.pem")), "", "daemoxcp-mail-");
         // The vault's key pair, as the real root part makes it at start (SSLMailServer, PanelSeparation): since the vault

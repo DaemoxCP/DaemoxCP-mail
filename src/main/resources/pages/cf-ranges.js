@@ -1,9 +1,9 @@
 
-        // ---------- gli intervalli Cloudflare: quelli veri contro quelli compilati ----------
-        // La lista compilata si disegna sempre: e' conoscenza del pannello, non dipende da
-        // cloudflare.com. Sta in una funzione sua perche' serve in ENTRAMBI i rami — quando il
-        // confronto riesce e quando fallisce. Anzi: quando fallisce serve di piu', perche' e'
-        // l'unico momento in cui non si puo' sapere altro.
+        // ---------- the Cloudflare ranges: the real ones against the compiled ones ----------
+        // The compiled list is always drawn: it is the panel's knowledge, it does not depend on
+        // cloudflare.com. It is in a function of its own because it is needed in BOTH branches: when the
+        // comparison succeeds and when it fails. In fact, when it fails it is needed more, because it is
+        // the only moment when nothing else can be known.
         function cfLists(r) {
             const one = (titleText, entries) => !entries || !entries.length ? ''
                 : '<div class="small fw-bold mt-2 mb-1">' + escHtml(titleText) + ' (' + entries.length + ')</div>'
@@ -20,7 +20,7 @@
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('cfi.downloading')) + '';
             const r = await updApi('cf_intervals');
             if (!r.success) {
-                // "Non ho potuto controllare" non e' "va bene", e non deve sembrarlo.
+                // "I could not check" is not "all good", and must not look like it.
                 el.innerHTML = '<div class="alert alert-secondary py-2 small mb-2">'
                              + '<i class="fas fa-question-circle me-1" aria-hidden="true"></i>' + updEsc(r.error || t('cfi.failed'))
                              + '</div>' + cfLists(r);

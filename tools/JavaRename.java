@@ -39,59 +39,60 @@ import java.util.TreeSet;
 import java.util.stream.Stream;
 
 /**
- * Rinomina nomi Java con il compilatore, non con il testo (r26).
+ * Renames Java names with the compiler, not with the text (r26).
  *
- * javac analizza tutti i sorgenti del progetto insieme (src/main/java e tests), e ogni
- * occorrenza di un nome — dichiarazione, chiamata, accesso a un campo, riferimento a metodo —
- * viene risolta alla dichiarazione a cui punta. Si cambiano solo le occorrenze che puntano
- * alla dichiarazione scelta: un omonimo in un'altra classe, un parametro con lo stesso nome
- * in un altro metodo, una parola uguale in un commento restano come sono.
+ * javac analyses all the sources of the project together (src/main/java and tests), and every
+ * occurrence of a name - declaration, call, field access, method reference - is resolved to
+ * the declaration it points to. Only the occurrences that point to the chosen declaration are
+ * changed: a namesake in another class, a parameter with the same name in another method, an
+ * identical word in a comment stay as they are.
  *
- * Poi il controllo, che e' la parte che conta: si rianalizza tutto e OGNI occorrenza di OGNI
- * nome del progetto deve puntare alla stessa dichiarazione di prima. «Compila» non basta:
- * un nome nuovo uguale a un campo esistente compila, e cambia il significato in silenzio.
- * Se una sola occorrenza non torna, lo strumento lo dice e esce con 1.
+ * Then the check, which is the part that matters: everything is analysed again and EVERY
+ * occurrence of EVERY name of the project must point to the same declaration as before.
+ * "It compiles" is not enough: a new name equal to an existing field compiles, and silently
+ * changes the meaning. If a single occurrence does not match, the tool says so and exits with 1.
  *
- * I commenti e le stringhe il compilatore non li vede: dopo la rinomina si cercano a parte i
- * nomi vecchi rimasti, e si decide uno per uno.
+ * The compiler does not see comments and strings: after the rename the old names that are left
+ * are searched for separately, and decided one by one.
  *
- * Uso, dalla radice del progetto, con il jar costruito come classpath delle dipendenze:
+ * Usage, from the project root, with the built jar as the classpath of the dependencies:
  *
- *   java tools/JavaRename.java declarations target/daemoxcp-mail.jar righe.txt
- *        elenca le dichiarazioni il cui nome sta su una delle righe (file:riga per riga)
- *   java tools/JavaRename.java rename target/daemoxcp-mail.jar mappa.txt
- *        applica la mappa e controlla; una riga per nome:
+ *   java tools/JavaRename.java declarations target/daemoxcp-mail.jar lines.txt
+ *        lists the declarations whose name is on one of the lines (file:line per line)
+ *   java tools/JavaRename.java rename target/daemoxcp-mail.jar map.txt
+ *        applies the map and checks; one line per name:
  *          member:org.daemoxcp.mail.system.UpdateManager#avviaSulTurno startOnTurn
- *              tutti i membri con quel nome in quella classe (gli overload insieme)
+ *              all the members with that name in that class (the overloads together)
  *          local:src/main/java/org/daemoxcp/mail/system/UpdateManager.java:2750:lavoro work
- *              il parametro o la variabile dichiarata su quella riga
+ *              the parameter or the variable declared on that line
  *          type:org.daemoxcp.mail.system.PackageQueue$Turno Turn
- *              un tipo annidato, con i suoi costruttori (i tipi in un giro a parte)
+ *              a nested type, with its constructors (the types in a separate pass)
  *          enum:org.daemoxcp.mail.system.SubmissionPort$Outcome#AGGIUNTA ADDED
- *              una costante di enum; solo cosi', perche' il suo nome e' un valore che puo' uscire
- *              dal codice (name(), valueOf()) e chi lo legge fuori va cambiato nello stesso passo.
- *        Un componente di record si sceglie come un campo (member:), e porta con se' il suo
- *        accessore implicito.
+ *              an enum constant; only this way, because its name is a value that can leave
+ *              the code (name(), valueOf()) and whoever reads it outside must be changed in the
+ *              same step.
+ *        A record component is chosen like a field (member:), and brings its implicit
+ *        accessor with it.
  */
 public class JavaRename {
 
-    /** Una occorrenza di un nome: dove sta, e a quale dichiarazione punta. */
+    /** An occurrence of a name: where it is, and which declaration it points to. */
     record Occurrence(String file, int pos, String name, boolean declaration, String target) {}
 
-    /** Una dichiarazione del progetto, con cio' che serve per sceglierla dalla mappa. */
+    /** A declaration of the project, with what is needed to choose it from the map. */
     record Declaration(String file, int pos, int line, String name, String kind, String owner) {}
 
     static final class Analysis {
         final List<Occurrence> occurrences = new ArrayList<>();
         final List<Declaration> declarations = new ArrayList<>();
         final Map<String, String> sources = new HashMap<>();
-        /** Per ogni metodo del progetto, i metodi di cui fa l'override (per chiave). */
+        /** For each method of the project, the methods it overrides (by key). */
         final Map<String, Set<String>> overrides = new HashMap<>();
-        /** I nomi qualificati scritti come watchQualified (file -> posizioni d'inizio), per il modo package. */
+        /** The qualified names written as watchQualified (file -> start positions), for the package mode. */
         final Map<String, TreeSet<Integer>> qualifiedSpans = new HashMap<>();
     }
 
-    /** Il nome qualificato di cui raccogliere le occorrenze scritte per intero (modo package), o null. */
+    /** The qualified name whose occurrences written in full are to be collected (package mode), or null. */
     static String watchQualified = null;
 
     public static void main(String[] args) throws Exception {
@@ -109,15 +110,15 @@ public class JavaRename {
         }
     }
 
-    // ===================== l'analisi =====================
+    // ===================== the analysis =====================
 
     static List<Path> sourceFiles(Path root) throws IOException {
         List<Path> files = new ArrayList<>();
         for (String dir : List.of("src/main/java", "tests")) {
             Path d = root.resolve(dir);
             if (!Files.isDirectory(d)) continue;
-            // tests/planted ha una copia guasta apposta di una classe del pannello (stesso nome, stesso
-            // pacchetto): compilata insieme alle altre sarebbe una classe doppia.
+            // tests/planted has a deliberately broken copy of a panel class (same name, same
+            // package): compiled together with the others it would be a duplicate class.
             Path planted = root.resolve("tests/planted");
             try (Stream<Path> s = Files.walk(d)) {
                 s.filter(p -> p.toString().endsWith(".java") && !p.startsWith(planted)).sorted().forEach(files::add);
@@ -150,8 +151,8 @@ public class JavaRename {
         Analysis a = new Analysis();
         Map<Element, String> keys = new IdentityHashMap<>();
 
-        // Due giri: prima le dichiarazioni (cosi' ogni riferimento trova la sua chiave anche se
-        // la dichiarazione sta in un file che viene dopo), poi i riferimenti.
+        // Two passes: first the declarations (so that every reference finds its key even if
+        // the declaration is in a file that comes later), then the references.
         List<CompilationUnitTree> cus = new ArrayList<>();
         trees.forEach(cus::add);
         for (CompilationUnitTree cu : cus) {
@@ -165,8 +166,8 @@ public class JavaRename {
             new ReferenceScanner(t, cu, file, a.sources.get(file), keys, a).scan(cu, null);
             if (watchQualified != null) new QualifiedScanner(t, cu, file, a.sources.get(file), a).scan(cu, null);
         }
-        // Gli override. La risoluzione dei riferimenti non li vede: un metodo rinominato come uno
-        // della superclasse lo sostituisce a runtime senza che nessun riferimento cambi bersaglio.
+        // The overrides. Reference resolution does not see them: a method renamed like one
+        // of the superclass replaces it at runtime without any reference changing its target.
         javax.lang.model.util.Types types = task.getTypes();
         for (Map.Entry<Element, String> en : keys.entrySet()) {
             if (!(en.getKey() instanceof ExecutableElement me) || me.getKind() != javax.lang.model.element.ElementKind.METHOD) continue;
@@ -190,14 +191,14 @@ public class JavaRename {
         return a;
     }
 
-    /** La chiave di una dichiarazione fuori dal progetto: tipo, contenitore, nome, parametri. */
+    /** The key of a declaration outside the project: kind, container, name, parameters. */
     static String externalKey(Element e) {
         String sig = e instanceof ExecutableElement x ? x.getParameters().stream()
                 .map(p -> p.asType().toString()).toList().toString() : "";
         return "ext:" + e.getKind() + ":" + e.getEnclosingElement() + "." + e.getSimpleName() + sig;
     }
 
-    /** Dove comincia il nome, cercandolo da 'from' come parola intera. -1 se non c'e'. */
+    /** Where the name begins, searching for it from 'from' as a whole word. -1 if it is not there. */
     static int findName(String text, int from, String name) {
         if (from < 0) return -1;
         int i = text.indexOf(name, from);
@@ -229,8 +230,8 @@ public class JavaRename {
                     "posizione sbagliata per " + name + " in " + file + ":" + lines.getLineNumber(Math.max(pos, 0)));
             String key = "src:" + file + "@" + pos;
             keys.put(e, key);
-            // Per un tipo il "proprietario" e' il tipo stesso: lo si sceglie per nome binario.
-            // Per un costruttore e' la sua classe: si rinomina insieme a lei.
+            // For a type the "owner" is the type itself: it is chosen by binary name.
+            // For a constructor it is its class: it is renamed together with it.
             Element ownerEl = kind.equals("type") ? e : e.getEnclosingElement();
             String owner = ownerEl instanceof TypeElement te
                     ? elements.getBinaryName(te).toString()
@@ -239,7 +240,7 @@ public class JavaRename {
             a.occurrences.add(new Occurrence(file, pos, name, true, key));
         }
 
-        /** Che cosa e' davvero la dichiarazione: decide cosa si puo' scegliere, e come. */
+        /** What the declaration really is: it decides what can be chosen, and how. */
         String refine(Element e, String kind) {
             switch (e.getKind()) {
                 case CLASS, INTERFACE, ENUM, RECORD, ANNOTATION_TYPE: return "type";
@@ -272,7 +273,7 @@ public class JavaRename {
                 record(node, name, findName(text, from, name), "method");
             } else if (sp.getStartPosition(cu, node) >= 0 && getCurrentPath().getParentPath().getLeaf() instanceof ClassTree ct
                        && !ct.getSimpleName().toString().isEmpty()) {
-                // Un costruttore scritto nel sorgente (quelli impliciti non hanno testo).
+                // A constructor written in the source (the implicit ones have no text).
                 String cn = ct.getSimpleName().toString();
                 int from = (int) sp.getEndPosition(cu, node.getModifiers());
                 if (from < 0) from = (int) sp.getStartPosition(cu, node);
@@ -286,7 +287,7 @@ public class JavaRename {
             String name = node.getName().toString();
             int from = node.getType() != null ? (int) sp.getEndPosition(cu, node.getType()) : -1;
             int start = (int) sp.getStartPosition(cu, node);
-            // Un parametro di lambda senza tipo, o un tipo sintetizzato: il nome e' all'inizio.
+            // A lambda parameter without a type, or a synthesized type: the name is at the start.
             if (from < start) from = start;
             int pos = findName(text, from, name);
             if (pos < 0 || !text.startsWith(name, pos)) pos = findName(text, start, name);
@@ -309,7 +310,7 @@ public class JavaRename {
             if (pos < 0 || name.equals("this") || name.equals("super") || name.equals("class")) return;
             Element e = trees.getElement(getCurrentPath());
             if (e == null) return;
-            if (!text.startsWith(name, pos)) return;   // nomi sintetizzati dal compilatore
+            if (!text.startsWith(name, pos)) return;   // names synthesized by the compiler
             String key = keys.getOrDefault(e, externalKey(e));
             a.occurrences.add(new Occurrence(file, pos, name, false, key));
         }
@@ -335,9 +336,9 @@ public class JavaRename {
     }
 
     /**
-     * I punti in cui il nome qualificato del pacchetto e' scritto per intero: dichiarazione del
-     * pacchetto, import, nomi scritti per intero nel codice. Un nome qualificato scritto come quello cercato che il compilatore
-     * risolve a qualcos'altro che quel pacchetto e' un errore, non si tocca.
+     * The places where the qualified name of the package is written in full: the package
+     * declaration, imports, names written in full in the code. A qualified name written like the one searched
+     * for that the compiler resolves to something other than that package is an error, and is not touched.
      */
     static final class QualifiedScanner extends TreePathScanner<Void, Void> {
         final Trees trees; final CompilationUnitTree cu; final String file, text; final Analysis a; final SourcePositions sp;
@@ -355,21 +356,21 @@ public class JavaRename {
                                     && pe.getQualifiedName().contentEquals(watchQualified)))
                     throw new IllegalStateException(file + "@" + s + ": " + watchQualified + " risolto a " + el.getKind() + " " + el);
                 a.qualifiedSpans.computeIfAbsent(file, k -> new TreeSet<>()).add(s);
-                return null;   // dentro ci sono solo i pezzi del nome stesso
+                return null;   // only the pieces of the name itself are inside
             }
             return super.visitMemberSelect(node, v);
         }
     }
 
-    // ===================== il pacchetto =====================
+    // ===================== the package =====================
 
     /**
-     * Sposta un pacchetto, con i suoi sottopacchetti, sotto un nome nuovo (il 17/11/2026
-     * org.mail_panel -> org.daemoxcp.mail): si cambiano i nomi qualificati che il compilatore risolve a quel pacchetto
-     * (dichiarazioni, import, nomi scritti per intero) e i file passano nella cartella del pacchetto
-     * nuovo. Il controllo e' quello della rinomina: rianalizzato tutto, ogni occorrenza di ogni nome
-     * deve puntare alla stessa dichiarazione di prima, nel file spostato. I pezzi del nome del
-     * pacchetto stesso ("mail_panel" che diventa "daemoxcp" e "mail") si controllano a parte.
+     * Moves a package, with its subpackages, under a new name (on 2026-11-17
+     * org.mail_panel -> org.daemoxcp.mail): the qualified names that the compiler resolves to that package
+     * are changed (declarations, imports, names written in full) and the files move into the folder of the
+     * new package. The check is the one of the rename: everything analysed again, every occurrence of every
+     * name must point to the same declaration as before, in the moved file. The pieces of the name of the
+     * package itself ("mail_panel" that becomes "daemoxcp" and "mail") are checked separately.
      */
     static int renamePackage(Path root, String classpath, String oldPkg, String newPkg) throws IOException {
         String pkgName = "[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)+";
@@ -408,7 +409,7 @@ public class JavaRename {
         }
         for (String base : List.of("src/main/java/", "tests/")) deleteEmptyDirs(root.resolve(base + oldDir));
 
-        // --- il controllo ---
+        // --- the check ---
         Analysis after = analyze(root, classpath);
         Map<String, Occurrence> afterAt = new HashMap<>();
         for (Occurrence o : after.occurrences) afterAt.put(o.file() + "@" + o.pos(), o);
@@ -416,7 +417,7 @@ public class JavaRename {
         String[] newParts = newPkg.split("\\.");
         for (Occurrence o : before.occurrences) {
             Integer span = spanContaining(before.qualifiedSpans.get(o.file()), o.pos(), oldPkg.length());
-            if (span != null && o.pos() != span) { insideBefore++; continue; }   // i pezzi del nome vecchio
+            if (span != null && o.pos() != span) { insideBefore++; continue; }   // the pieces of the old name
             String nf = moves.getOrDefault(o.file(), o.file());
             int np = shift(byFile.get(o.file()), o.pos());
             Occurrence n = afterAt.get(nf + "@" + np);
@@ -426,10 +427,10 @@ public class JavaRename {
                         + (n == null ? "sparita" : n.name() + " punta a " + n.target()) + ", attesa " + expectedTarget);
             }
         }
-        // I pezzi del nome nuovo, dove prima c'era il nome vecchio: tutti, nell'ordine, al loro posto. Si contano
-        // TUTTE le occorrenze registrate li' dentro, anche due volte la stessa posizione: il compilatore a volte
-        // visita due volte lo stesso nome (lo faceva anche prima, coi pezzi del nome vecchio), e contarle una sola
-        // volta qui darebbe un totale che non torna senza che niente sia cambiato.
+        // The pieces of the new name, where the old name used to be: all of them, in order, in their place. ALL
+        // the occurrences recorded in there are counted, even the same position twice: the compiler sometimes
+        // visits the same name twice (it did so before too, with the pieces of the old name), and counting them
+        // only once here would give a total that does not match without anything having changed.
         Map<String, TreeMap<Integer, String>> expectedParts = new HashMap<>();
         for (Map.Entry<String, TreeSet<Integer>> q : before.qualifiedSpans.entrySet()) {
             String nf = moves.getOrDefault(q.getKey(), q.getKey());
@@ -473,14 +474,14 @@ public class JavaRename {
         return bad == 0 ? 0 : 1;
     }
 
-    /** L'inizio del nome qualificato che contiene pos, se pos sta dentro uno di quelli raccolti. */
+    /** The start of the qualified name that contains pos, if pos is inside one of those collected. */
     static Integer spanContaining(TreeSet<Integer> spans, int pos, int len) {
         if (spans == null) return null;
         Integer s = spans.floor(pos);
         return s != null && pos < s + len ? s : null;
     }
 
-    /** La chiave di una dichiarazione dopo lo spostamento: file nuovo e posizione nuova, o il pacchetto nuovo nel nome. */
+    /** The key of a declaration after the move: new file and new position, or the new package in the name. */
     static String moveKey(String key, Map<String, String> moves, Map<String, TreeMap<Integer, Edit>> byFile, String oldPkg, String newPkg) {
         if (key.startsWith("src:")) {
             int at = key.lastIndexOf('@');
@@ -500,7 +501,7 @@ public class JavaRename {
         }
     }
 
-    // ===================== elenco delle dichiarazioni =====================
+    // ===================== list of the declarations =====================
 
     static void listDeclarations(Path root, String classpath, Path linesFile) throws IOException {
         Set<String> wanted = new TreeSet<>();
@@ -512,7 +513,7 @@ public class JavaRename {
         }
     }
 
-    // ===================== rinomina e controllo =====================
+    // ===================== rename and check =====================
 
     record Edit(String file, int pos, String oldName, String newName) {}
 
@@ -528,16 +529,16 @@ public class JavaRename {
         Analysis before = analyze(root, classpath);
         System.out.println("prima: " + before.occurrences.size() + " occorrenze, " + before.declarations.size() + " dichiarazioni");
 
-        // Selettore -> chiavi delle dichiarazioni che sceglie. Ogni selettore deve sceglierne
-        // almeno una: un selettore che non trova niente e' un errore di battitura, non un no-op.
+        // Selector -> keys of the declarations it chooses. Every selector must choose
+        // at least one: a selector that finds nothing is a typo, not a no-op.
         Map<String, String> targetToNew = new HashMap<>();
-        // Chiavi di dichiarazioni senza testo (l'accessore implicito di un record) che cambiano
-        // nome: nel controllo, la chiave attesa e' quella col nome nuovo.
+        // Keys of declarations without text (the implicit accessor of a record) that change
+        // name: in the check, the expected key is the one with the new name.
         Map<String, String> externalRenames = new HashMap<>();
-        // Tipi rinominati, per nome canonico: compaiono dentro le chiavi esterne (un accessore
-        // implicito, values() di un enum) e vanno riscritti anche li'.
+        // Renamed types, by canonical name: they appear inside the external keys (an implicit
+        // accessor, values() of an enum) and must be rewritten there too.
         Map<String, String> typeRenames = new LinkedHashMap<>();
-        // Un tipo di primo livello da' il nome al suo file: rinominato lui, il file si sposta.
+        // A top-level type gives its name to its file: once it is renamed, the file moves.
         Map<String, String> moves = new HashMap<>();
         int problems = 0;
         for (Map.Entry<String, String> m : map.entrySet()) {
@@ -546,8 +547,8 @@ public class JavaRename {
             for (Declaration d : before.declarations) {
                 if (sel.startsWith("member:")) {
                     String[] cm = sel.substring("member:".length()).split("#");
-                    // Le costanti di enum no: il loro nome e' un valore (name(), valueOf()) che
-                    // finisce nel JSON o su disco, e si cambia con chi lo legge.
+                    // Not the enum constants: their name is a value (name(), valueOf()) that
+                    // ends up in the JSON or on disk, and is changed together with whoever reads it.
                     if (cm.length == 2 && d.owner().equals(cm[0]) && d.name().equals(cm[1])
                             && (d.kind().equals("method") || d.kind().equals("field") || d.kind().equals("component"))) {
                         chosen.add(d);
@@ -558,8 +559,8 @@ public class JavaRename {
                         }
                     }
                 } else if (sel.startsWith("enum:")) {
-                    // Una costante di enum, scelta apposta: il suo nome e' un valore che puo' uscire
-                    // dal codice (name(), valueOf()), e chi lo legge fuori va cambiato insieme.
+                    // An enum constant, chosen on purpose: its name is a value that can leave
+                    // the code (name(), valueOf()), and whoever reads it outside must be changed with it.
                     String[] cm = sel.substring("enum:".length()).split("#");
                     if (cm.length == 2 && d.owner().equals(cm[0]) && d.name().equals(cm[1]) && d.kind().equals("enumconst"))
                         chosen.add(d);
@@ -616,7 +617,7 @@ public class JavaRename {
             if (!to.equals(f.getKey())) Files.delete(root.resolve(f.getKey()));
         }
 
-        // --- il controllo ---
+        // --- the check ---
         Analysis after = analyze(root, classpath);
         Map<String, Occurrence> afterAt = new HashMap<>();
         for (Occurrence o : after.occurrences) afterAt.put(o.file() + "@" + o.pos(), o);
@@ -632,7 +633,7 @@ public class JavaRename {
                         + " -> " + (n == null ? "sparita" : n.name() + " punta a " + n.target()) + ", attesa " + expectedTarget);
             }
         }
-        // Gli override devono essere gli stessi: ne' persi ne' guadagnati.
+        // The overrides must be the same: none lost and none gained.
         for (Map.Entry<String, Set<String>> ov : before.overrides.entrySet()) {
             String nk = moveFile(shiftKey(byFile, ov.getKey()), moves);
             Set<String> expected = new TreeSet<>();
@@ -656,7 +657,7 @@ public class JavaRename {
         return bad == 0 ? 0 : 1;
     }
 
-    /** La posizione di prima, dopo le sostituzioni fatte prima di lei nello stesso file. */
+    /** The position from before, after the replacements made before it in the same file. */
     static int shift(TreeMap<Integer, Edit> edits, int pos) {
         if (edits == null) return pos;
         int delta = 0;
@@ -664,7 +665,7 @@ public class JavaRename {
         return pos + delta;
     }
 
-    /** Una chiave esterna che nomina un tipo rinominato, scritta col nome nuovo. */
+    /** An external key that names a renamed type, written with the new name. */
     static String renameTypesIn(String key, Map<String, String> typeRenames) {
         if (!key.startsWith("ext:")) return key;
         for (Map.Entry<String, String> r : typeRenames.entrySet())
@@ -673,7 +674,7 @@ public class JavaRename {
         return key;
     }
 
-    /** Una chiave "src:" del file spostato (tipo di primo livello rinominato), col file nuovo. */
+    /** A "src:" key of the moved file (renamed top-level type), with the new file. */
     static String moveFile(String key, Map<String, String> moves) {
         if (!key.startsWith("src:") || moves.isEmpty()) return key;
         int at = key.lastIndexOf('@');

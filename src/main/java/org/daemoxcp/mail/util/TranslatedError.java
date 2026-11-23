@@ -1,9 +1,10 @@
 package org.daemoxcp.mail.util;
 
 /**
- * Il segno di un errore gia' tradotto per la pagina, che ErrorText lascia passare. Due tipi lo portano, perche' chi
- * chiama distingue: ShownException (IllegalStateException) e ShownException.Argument (IllegalArgumentException, per gli
- * argomenti sbagliati: SSLMailServer cattura proprio quella attorno ad AddressTransform.destinations).
+ * The mark of an error already translated for the page, which ErrorText lets through. Two types carry it, because
+ * the caller tells them apart: ShownException (IllegalStateException) and ShownException.Argument
+ * (IllegalArgumentException, for wrong arguments: SSLMailServer catches exactly that one around
+ * AddressTransform.destinations).
  */
 public interface TranslatedError {
 }

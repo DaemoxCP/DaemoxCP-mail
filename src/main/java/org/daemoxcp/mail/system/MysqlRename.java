@@ -24,62 +24,63 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * All'avvio del servizio, prima che qualcuno entri in MySQL: il database e gli utenti MySQL del pannello prendono il
- * nome nuovo (DaemoxCP Mail, 17/11/2026).
+ * At service startup, before anyone logs into MySQL: the panel's database and MySQL users take the new name
+ * (DaemoxCP Mail, 2026-11-17).
  *
- * <p>Fino a questa versione il database si chiamava come l'aveva chiamato l'installatore (mailserver) e gli utenti
- * mailpanel (il pannello), mailpanel_web (la parte web), mailpanel_routines (il proprietario delle procedure, bloccato),
- * mailpanel_postfix e mailpanel_dovecot (le letture di Postfix e Dovecot). Diventano daemoxcp_mail e daemoxcp_mail_*.
+ * <p>Until this version the database was named as the installer had named it (mailserver) and the users were
+ * mailpanel (the panel), mailpanel_web (the web part), mailpanel_routines (the owner of the procedures, locked),
+ * mailpanel_postfix and mailpanel_dovecot (the Postfix and Dovecot reads). They become daemoxcp_mail and
+ * daemoxcp_mail_*.
  *
- * <p>MySQL non sa rinominare un database. Si crea quello nuovo e ci si spostano le tabelle con RENAME TABLE, che non
- * copia niente: una tabella alla volta, le sole che il pannello conosce (MailDatabase.PANEL_TABLES). Una tabella che il
- * pannello non conosce resta dov'era, e con lei il database di prima. Gli utenti si rinominano con RENAME USER, che
- * porta con se' password e permessi; MySQL pero' rifiuta di rinominare chi ha definito una procedura, quindi le
- * procedure della parte web si tolgono prima (WebDbAccess le ricrea all'avvio, nel database nuovo, col proprietario
- * nuovo). I permessi sulle singole tabelle non seguono la tabella spostata: si tolgono e si ridanno (quelli di Postfix e
- * Dovecot qui, quelli delle procedure WebDbAccess), e l'utente del pannello prende tutto sul database nuovo come glielo
- * da' l'installatore.
+ * <p>MySQL cannot rename a database. The new one is created and the tables are moved into it with RENAME TABLE,
+ * which copies nothing: one table at a time, only those the panel knows (MailDatabase.PANEL_TABLES). A table the
+ * panel does not know stays where it was, and with it the previous database. Users are renamed with RENAME USER,
+ * which carries password and privileges along; MySQL however refuses to rename a user who has defined a procedure,
+ * so the web part's procedures are removed first (WebDbAccess recreates them at startup, in the new database, with
+ * the new owner). Privileges on single tables do not follow the moved table: they are revoked and granted again
+ * (Postfix's and Dovecot's here, the procedures' in WebDbAccess), and the panel user gets everything on the new
+ * database, as the installer grants it.
  *
- * <p>Poi i file che nominano utente e database: le tre mappe di Postfix e la connessione di Dovecot. Si controllano
- * (postfix check, doveconf -n), si ricaricano Postfix e Dovecot, e si prova che una ricerca vera arrivi a MySQL
- * (postmap -q e doveadm auth lookup, come MailDbUsers). Infine la configurazione del pannello (SQLite) dice il nome
- * nuovo, e il database di prima, se e' quello dell'installatore ed e' rimasto vuoto, se ne va.
+ * <p>Then the files that name user and database: the three Postfix maps and the Dovecot connection. They are
+ * checked (postfix check, doveconf -n), Postfix and Dovecot are reloaded, and it is tested that a real lookup
+ * reaches MySQL (postmap -q and doveadm auth lookup, like MailDbUsers). Finally the panel configuration (SQLite)
+ * states the new name, and the previous database, if it is the installer's and has been left empty, is removed.
  *
- * <p>Tutto o niente: al primo passo che non torna si rimette tutto com'era (file, utenti, tabelle) e si ricaricano
- * Postfix e Dovecot. Senza la password di root di MySQL non si fa niente: al prossimo avvio si riprova. Fino ad allora il
- * pannello lavora coi nomi di prima, che restano validi (WebDbAccess e MailDbUsers creano i loro utenti col nome nuovo
- * accanto a quelli vecchi).
+ * <p>All or nothing: at the first step that does not match, everything is put back as it was (files, users,
+ * tables) and Postfix and Dovecot are reloaded. Without the MySQL root password nothing is done: it is tried again
+ * at the next startup. Until then the panel works with the previous names, which stay valid (WebDbAccess and
+ * MailDbUsers create their users with the new name next to the old ones).
  */
 public final class MysqlRename {
 
     private static final Logger LOGGER = Logger.getLogger(MysqlRename.class.getName());
 
-    /** Il database di adesso, come in SqlCatalog.RENAME_CREATE_DATABASE. */
+    /** The current database, as in SqlCatalog.RENAME_CREATE_DATABASE. */
     static final String NEW_DB = Product.ID;
-    /** Il nome che l'installatore dava al database (SqlCatalog.RENAME_DROP_OLD_DEFAULT_DATABASE). */
+    /** The name the installer gave the database (SqlCatalog.RENAME_DROP_OLD_DEFAULT_DATABASE). */
     static final String OLD_DEFAULT_DB = "mailserver";
 
     enum Outcome { NOTHING, DONE, LEFT, ROLLED_BACK }
 
     record Report(Outcome outcome, String detail) {}
 
-    /** MySQL, i file e i servizi, separati per provarli. */
+    /** MySQL, the files and the services, kept separate to test them. */
     interface Services {
-        /** Un'istruzione del catalogo come root, con la connessione su {@code db} (null: nessuno). */
+        /** A catalog statement as root, with the connection on {@code db} (null: none). */
         Shell.Result sql(String db, String statement, Object... params);
-        /** I file dei servizi che nominano utente e database. */
+        /** The service files that name user and database. */
         List<Path> files();
-        /** Il controllo della configurazione: null se va. */
+        /** The configuration check: null if it passes. */
         String check();
-        /** Ricarica Postfix e Dovecot: null se e' andato. */
+        /** Reloads Postfix and Dovecot: null if it worked. */
         String reload();
-        /** Una ricerca vera da Postfix e da Dovecot: null se arriva a MySQL. */
+        /** A real lookup from Postfix and from Dovecot: null if it reaches MySQL. */
         String probe();
     }
 
     private MysqlRename() {}
 
-    /** All'avvio, col database del pannello gia' aperto (SQLite). */
+    /** At startup, with the panel database already open (SQLite). */
     public static void ensureAtBoot(dataBaseManager config) {
         try {
             if (!"root".equals(System.getProperty("user.name"))) return;
@@ -100,9 +101,9 @@ public final class MysqlRename {
         }
     }
 
-    // ===================== funzioni pure =====================
+    // ===================== pure functions =====================
 
-    /** Le righe di un'uscita (una riga per riga, colonne separate da tab). */
+    /** The rows of an output (one row per line, columns separated by tabs). */
     static List<String[]> rows(Shell.Result r) {
         List<String[]> out = new ArrayList<>();
         if (r == null || !r.success()) return out;
@@ -111,8 +112,8 @@ public final class MysqlRename {
     }
 
     /**
-     * Il testo di un file di Postfix o Dovecot coi nomi di adesso: gli utenti di prima e il database di prima, solo
-     * come parole intere (mailpanel non tocca mailpanel_postfix, mailserver non tocca mailserver2).
+     * The text of a Postfix or Dovecot file with the current names: the previous users and the previous database,
+     * only as whole words (mailpanel does not touch mailpanel_postfix, mailserver does not touch mailserver2).
      */
     static String renamedNames(String text, String oldDb, Map<String, String> users) {
         String out = text;
@@ -126,7 +127,7 @@ public final class MysqlRename {
         return Pattern.compile("(?<![A-Za-z0-9_])" + Pattern.quote(w) + "(?![A-Za-z0-9_])");
     }
 
-    /** Le istruzioni del catalogo che iniziano con un prefisso, per nome: RENAME_TABLE_DOMAINS -> l'istruzione. */
+    /** The catalogue statements that start with a prefix, by name: RENAME_TABLE_DOMAINS -> the statement. */
     static Map<String, String> catalog(String prefix) {
         Map<String, String> out = new LinkedHashMap<>();
         for (Field f : SqlCatalog.class.getFields()) {
@@ -136,7 +137,7 @@ public final class MysqlRename {
         return out;
     }
 
-    // ===================== il passaggio =====================
+    // ===================== the switchover =====================
 
     static Report rename(String oldDb, String panelUser, Services sv) {
         if (oldDb.equals(NEW_DB)) return new Report(Outcome.NOTHING, "");
@@ -147,11 +148,11 @@ public final class MysqlRename {
         for (String[] r : rows(schemas)) present.add(r[0]);
         if (!present.contains(oldDb)) return new Report(Outcome.NOTHING, "");
 
-        // Gli utenti: col nome di prima e di adesso. Un nome nuovo gia' preso ferma tutto.
+        // The users: with the previous and the current name. A new name already taken stops everything.
         Map<String, String> userStatements = catalog("RENAME_USER_");
         Set<String> users = new LinkedHashSet<>();
         for (String[] r : rows(sv.sql(null, SqlCatalog.RENAME_USERS))) users.add(r[0] + "@" + r[1]);
-        List<String[]> toRename = new ArrayList<>();      // {nome della costante, vecchio@host, nuovo@host}
+        List<String[]> toRename = new ArrayList<>();      // {constant name, old@host, new@host}
         for (Map.Entry<String, String> e : userStatements.entrySet()) {
             Matcher m = Pattern.compile("RENAME USER '([^']+)'@'([^']+)' TO '([^']+)'@'([^']+)'").matcher(e.getValue());
             if (!m.matches()) continue;
@@ -161,7 +162,7 @@ public final class MysqlRename {
             toRename.add(new String[] {e.getKey(), from, to});
         }
 
-        // Le tabelle: solo quelle che il pannello conosce; trigger, eventi e viste non si sanno spostare.
+        // The tables: only those the panel knows; triggers, events and views cannot be moved.
         Map<String, String> tableType = new LinkedHashMap<>();
         for (String[] r : rows(sv.sql(null, SqlCatalog.RENAME_TABLES_OF, oldDb))) tableType.put(r[0], r.length > 1 ? r[1] : "");
         if (tableType.values().stream().anyMatch(v -> v.toUpperCase(Locale.ROOT).contains("VIEW")))
@@ -178,11 +179,11 @@ public final class MysqlRename {
         if (present.contains(NEW_DB) && !rows(sv.sql(null, SqlCatalog.RENAME_TABLES_OF, NEW_DB)).isEmpty())
             return new Report(Outcome.LEFT, "the database " + NEW_DB + " already exists and is not empty: nothing moved");
 
-        // Le procedure di prima: solo quelle della parte web, che il pannello sa togliere e ricreare.
+        // The previous procedures: only those of the web part, which the panel knows how to remove and recreate.
         Set<String> known = new LinkedHashSet<>();
         Map<String, String> drops = new LinkedHashMap<>();
-        // Tutte le DROP PROCEDURE del catalogo: quelle di adesso e quelle delle procedure ritirate. Si riconoscono dalle
-        // parole, non da un testo SQL scritto qui (SqlCatalogTest: niente SQL fuori dal catalogo).
+        // All the DROP PROCEDURE statements of the catalogue: the current ones and those of retired procedures. They
+        // are recognised by their words, not by SQL text written here (SqlCatalogTest: no SQL outside the catalogue).
         for (String drop : catalog("WEB_DROP_").values()) {
             String[] w = drop.trim().split("\\s+");
             if (w.length != 5 || !w[0].equals("DROP") || !w[1].equals("PROCEDURE") || !w[2].equals("IF") || !w[3].equals("EXISTS")) continue;
@@ -196,7 +197,7 @@ public final class MysqlRename {
             if (!known.contains(r)) return new Report(Outcome.LEFT, "the database " + oldDb + " has the routine " + r
                     + ", not the panel's: nothing moved");
 
-        // --- da qui si cambia ---
+        // --- from here on, things change ---
         List<String> movedTables = new ArrayList<>();
         List<String> renamedUsers = new ArrayList<>();
         List<Path> written = new ArrayList<>();
@@ -221,7 +222,7 @@ public final class MysqlRename {
                 need(sv.sql(null, userStatements.get(u[0])), step);
                 renamedUsers.add(u[0]);
             }
-            // I permessi. L'utente del pannello: tutto sul database nuovo, niente su quello di prima.
+            // The privileges. The panel user: everything on the new database, nothing on the previous one.
             Set<String> after = new LinkedHashSet<>();
             for (String[] r : rows(sv.sql(null, SqlCatalog.RENAME_USERS))) after.add(r[0] + "@" + r[1]);
             step = "granting the panel's user";
@@ -231,7 +232,7 @@ public final class MysqlRename {
                 if (after.contains(Product.ID + "@localhost")) sv.sql(null, SqlCatalog.RENAME_REVOKE_OLD_DEFAULT_LOCALHOST);
                 if (after.contains(Product.ID + "@127.0.0.1")) sv.sql(null, SqlCatalog.RENAME_REVOKE_OLD_DEFAULT_LOOPBACK);
             }
-            // Postfix e Dovecot: via i permessi sulle tabelle di prima, e quelli sulle tabelle nuove.
+            // Postfix and Dovecot: the privileges on the previous tables go away, those on the new tables come.
             step = "granting Postfix and Dovecot";
             if (after.contains(MailDbUsers.POSTFIX_USER + "@localhost")) {
                 need(sv.sql(null, SqlCatalog.MAILDB_REVOKE_POSTFIX), step);
@@ -242,14 +243,14 @@ public final class MysqlRename {
                 need(sv.sql(null, SqlCatalog.MAILDB_REVOKE_DOVECOT), step);
                 need(sv.sql(NEW_DB, SqlCatalog.MAILDB_GRANT_DOVECOT_MAILBOXES), step);
             }
-            // Il proprietario delle procedure: i permessi li ridà WebDbAccess, sulle tabelle nuove.
+            // The owner of the procedures: WebDbAccess grants its privileges again, on the new tables.
             if (after.contains(Product.ID + "_routines@localhost")) sv.sql(null, SqlCatalog.RENAME_REVOKE_ROUTINES);
 
-            // I file di Postfix e Dovecot.
+            // The Postfix and Dovecot files.
             step = "rewriting the Postfix and Dovecot files";
             Map<String, String> names = new LinkedHashMap<>();
             for (String[] u : toRename) names.put(u[1].substring(0, u[1].indexOf('@')), u[2].substring(0, u[2].indexOf('@')));
-            // L'utente del pannello, se un file lo usa ancora (prima di MailDbUsers): mailpanel -> daemoxcp_mail.
+            // The panel user, if a file still uses it (before MailDbUsers): mailpanel -> daemoxcp_mail.
             if (!panelUser.equals(Product.ID) && toRename.stream().anyMatch(u -> u[1].startsWith(panelUser + "@")))
                 names.put(panelUser, Product.ID);
             for (Path f : sv.files()) {
@@ -284,12 +285,13 @@ public final class MysqlRename {
                 if (!sv.sql(oldDb, backStatements.get(movedTables.get(i))).success()) problems.add("table " + movedTables.get(i));
             if (created && rows(sv.sql(null, SqlCatalog.RENAME_TABLES_OF, NEW_DB)).isEmpty()) sv.sql(null, SqlCatalog.RENAME_DROP_NEW_DATABASE);
             if (!written.isEmpty()) sv.reload();
-            // Le procedure le ricrea WebDbAccess all'avvio, nel database di prima: non c'e' da rimetterle qui.
+            // WebDbAccess recreates the procedures at startup, in the previous database: no need to put them back
+            // here.
             return new Report(Outcome.ROLLED_BACK, step + ": " + first(e.getMessage())
                     + (problems.isEmpty() ? "; everything put back as it was" : "; NOT put back: " + String.join(", ", problems)));
         }
 
-        // Il database di prima: se e' quello dell'installatore ed e' rimasto vuoto, se ne va.
+        // The previous database: if it is the installer's and has been left empty, it is removed.
         String dropped = "";
         if (oldDb.equals(OLD_DEFAULT_DB) && unknown.isEmpty() && rows(sv.sql(null, SqlCatalog.RENAME_TABLES_OF, oldDb)).isEmpty()
                 && rows(sv.sql(null, SqlCatalog.RENAME_ROUTINES_OF, oldDb)).isEmpty()
@@ -313,7 +315,7 @@ public final class MysqlRename {
         return i < 0 ? s : s.substring(0, i);
     }
 
-    // ===================== il sistema vero =====================
+    // ===================== the real system =====================
 
     static final class RealServices implements Services {
         private final MailDbUsers.Places places = MailDbUsers.Places.real();
@@ -327,7 +329,7 @@ public final class MysqlRename {
             for (String m : MailDbUsers.POSTFIX_MAPS) out.add(places.postfixDir().resolve(m));
             out.add(places.dovecotSql());
             out.add(places.dovecotAuthSql());
-            // Roundcube, dove sui server piu' vecchi entra ancora con l'utente del pannello (RoundcubeDbUser.otherPanelDsn).
+            // Roundcube, which on older servers still logs in with the panel user (RoundcubeDbUser.otherPanelDsn).
             out.add(Path.of(RoundcubeDbUser.ROUNDCUBE_DIR, "config", "config.inc.php"));
             return out;
         }

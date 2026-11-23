@@ -1,4 +1,4 @@
-// The provider firewall card and the two new Diagnostics checks (reperti 245, 246), on the real panel of the TEST
+// The provider firewall card and the two new Diagnostics checks (findings 245, 246), on the real panel of the TEST
 // VM, from the page:
 //
 //  1. Firewall: the card "Your provider's firewall" with the rules from this server's real ports (SSH, mail, panel and

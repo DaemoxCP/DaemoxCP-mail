@@ -20,7 +20,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The panel's Sieve rules do what they say, with real deliveries (reperto 216).
+ * The panel's Sieve rules do what they say, with real deliveries (finding 216).
  *
  * Until 09/11/2026 SieveGenerator ended every script with an explicit keep: a "move" left the message in the folder AND
  * in INBOX, a forward without a copy kept one, "delete" deleted nothing. Here every rule is written by the panel's own
@@ -158,7 +158,7 @@ public class SieveActionsE2ETest {
 
         System.out.println("\n== 8. a script written before, fixed as at boot ==");
         Path root = Path.of("/var/mail/sieve");
-        // As the panel wrote it before the forced keep went (reperto 216) and before mailbox (reperto 229).
+        // As the panel wrote it before the forced keep went (finding 216) and before mailbox (finding 229).
         String now = SieveForcedKeepTest.before229(GENERATOR.generateSieveScript(0, new Rules().filter("old-" + RUN, "move", "SieveMove")));
         check("written as the panel wrote it before (the forced keep at the end)",
                 GENERATOR.saveSieveScript(ALICE, now + SieveGenerator.OLD_FORCED_KEEP));
@@ -310,7 +310,7 @@ public class SieveActionsE2ETest {
     private static int spoolMode = -1;
 
     /**
-     * /var/mail as the panel leaves it at boot (MailSpoolSticky, reperto 221): sticky, or root writes no rule under it.
+     * /var/mail as the panel leaves it at boot (MailSpoolSticky, finding 221): sticky, or root writes no rule under it.
      * Its mode before, to put back at the end: the VM is shared.
      */
     static int spoolAsAtBoot() throws Exception {

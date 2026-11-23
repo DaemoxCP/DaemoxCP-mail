@@ -1,7 +1,7 @@
-        // ---------- MTA-STS: un pulsante solo ----------
-        // La sequenza e' di otto passi e l'ordine conta: ogni passo e' il presupposto del
-        // successivo. Farla fare a mano significa sbagliare l'ordine, quindi la conosce il
-        // pannello, che sa anche a che punto e' e riparte da li'.
+        // ---------- MTA-STS: a single button ----------
+        // The sequence has eight steps and the order matters: each step is the precondition of
+        // the next. Having it done by hand means getting the order wrong, so the panel knows it,
+        // and it also knows where it is and resumes from there.
         async function amsPlan() {
             const el = document.getElementById('upd-ams');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ams.reading')) + '';
@@ -18,8 +18,8 @@
             (r.steps || []).forEach((p, i) => {
                 const done = p.state === 'done';
                 const uncertain = p.state === 'uncertain';
-                // "incerto" non e' verde: il pannello non ha potuto verificare, e mostrarlo
-                // come fatto sarebbe la bugia che stiamo cercando di togliere dal pannello.
+                // "uncertain" is not green: the panel could not verify, and showing it
+                // as done would be the lie we are trying to remove from the panel.
                 h += '<tr class="upd-cell"><td data-style="width:2rem">'
                    + (done ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('up.pDone')) + '</span>'
                             : uncertain
@@ -49,11 +49,11 @@
                              + updEsc(r.error || t('ams.startFailed')) + '</div>';
                 return;
             }
-            // La richiesta torna SUBITO con un identificativo: l'emissione del certificato
-            // dura piu' del limite di tempo del proxy, e tenendo aperta la richiesta il
-            // browser riceverebbe una pagina di errore mentre sul server l'operazione
-            // continua — lasciando lo stato sconosciuto proprio mentre si tocca il
-            // certificato di produzione.
+            // The request returns AT ONCE with an identifier: issuing the certificate
+            // takes longer than the proxy's time limit, and keeping the request open the
+            // browser would receive an error page while on the server the operation
+            // goes on, leaving the state unknown precisely while the production
+            // certificate is being touched.
             el.innerHTML = '<div class="alert alert-info py-2 small mb-2">'
                          + '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ams.inProgress')) + '</div>'
                          + '<pre id="amsLog" class="small p-2 border rounded mb-0" '

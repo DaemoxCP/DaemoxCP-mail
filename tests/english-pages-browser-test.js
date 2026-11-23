@@ -99,7 +99,7 @@ const API = {
     'POST /api/fail2ban': (q, body) => ({
         get_jail_config: { success: true, max_retry: 5, find_time: 600, ban_time: 3600, filter: 'postfix-sasl', ignoreip: ['127.0.0.1/8'] },
     })[body.action] || { success: true },
-    // The second answer (reperto 200): nothing broken, but one jail could not be read. Not a fault: no "if you do not
+    // The second answer (finding 200): nothing broken, but one jail could not be read. Not a fault: no "if you do not
     // fix it", no fix, no "all good", and the reason in the text.
     'GET /api/fail2ban_health': () => !f2bUnmeasured ? { success: true, all_ok: false, checks: [
         { ok: true, label: 'Fail2ban installed', status: 'version 1.1.0' },
@@ -161,7 +161,7 @@ const API = {
                       repository: [{ name: 'FreeBSD', role: 'packages', branch: 'quarterly', enabled: true, url: 'pkg+https://pkg.FreeBSD.org/...' }] },
         os_status: { success: true, installedKernel: '15.0-RELEASE-p3', uname: '15.0-RELEASE-p3', restartNeeded: false, userland: '15.0-RELEASE-p3',
                      arch: 'amd64', endOfSupport: '2026-12-31', supportNotes: '', supportSource: 'freebsd.org', updatableWithFreebsdUpdate: true, alreadyReady: 'none' },
-        // A move to a newer release prepared and waiting for the command from SSH: the guided steps (reperto 196).
+        // A move to a newer release prepared and waiting for the command from SSH: the guided steps (finding 196).
         os_upgrade_targets: { success: true, current: '15.0', versions: [{ version: '15.1', endOfSupport: '31/03/2027', note: '' }] },
         jump_state: { success: true, inProgress: true, phase: 'prepared', target: '15.1', upgradeFetched: false, steps: [],
                       installedKernel: '15.0-RELEASE-p3', runningKernel: '15.0-RELEASE-p3', userland: '15.0-RELEASE-p3', restartNeeded: false },
@@ -306,15 +306,15 @@ const VISITS = [
         await page.waitForSelector('#repFreq');
     } },
     { path: '/setup' },
-    // "Update the server" with every row opened in place (reperto 193): the branch, FreeBSD with the guided move to a
-    // new release (reperto 196), the plan of the packages; and the whole package list. The checks that only read are on
+    // "Update the server" with every row opened in place (finding 193): the branch, FreeBSD with the guided move to a
+    // new release (finding 196), the plan of the packages; and the whole package list. The checks that only read are on
     // Diagnostics.
     { path: '/updates', prepare: async page => {
-        // The branch has its own card (reperto 205): it reads itself.
+        // The branch has its own card (finding 205): it reads itself.
         await page.waitForSelector('#branch-body table');
         await page.click('#uc-os button[data-on-click="ucRelease()"]');
         await page.waitForSelector('#os-steps pre');
-        // The package list is under the Packages row, closed (reperto 202): opened, as a person would.
+        // The package list is under the Packages row, closed (finding 202): opened, as a person would.
         await page.click('#pk-list summary');
         for (const [fn, sel] of [['pkOverview', '#pk-body table']]) {
             await page.evaluate(f => window[f](), fn);

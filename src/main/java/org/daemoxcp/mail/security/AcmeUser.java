@@ -32,37 +32,37 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * acme.sh col suo utente.
+ * acme.sh with its own user.
  *
- * <p>Per chiedere un certificato non serve root: si parla con la CA, si scrive un file o un
- * record DNS, si riceve il certificato. Root serve solo dopo, per metterlo dove lo leggono Postfix,
- * Dovecot e nginx e per ricaricarli: lo fa il pannello ({@code AcmeManager.deployCertificate}).
- * acme.sh invece e' un programma di shell di novemila righe che legge le risposte della rete, e
- * gli e' gia' successo di eseguirle: prima della 3.0.6 un server ACME poteva fargli eseguire
- * comandi attraverso un {@code eval} (CVE-2023-38198, sfruttato nel giugno 2023). Da root, quei
- * comandi avevano la macchina.
+ * <p>Requesting a certificate does not need root: you talk to the CA, write a file or a
+ * DNS record, receive the certificate. Root is needed only afterwards, to put it where Postfix,
+ * Dovecot and nginx read it and to reload them: the panel does that ({@code AcmeManager.deployCertificate}).
+ * acme.sh, instead, is a nine-thousand-line shell program that reads the answers from the network, and
+ * it has already happened that it executed them: before 3.0.6 an ACME server could make it execute
+ * commands through an {@code eval} (CVE-2023-38198, exploited in June 2023). As root, those
+ * commands had the machine.
  *
- * <p>Quindi acme.sh viene dal pacchetto security/acme.sh, che crea l'utente {@code acme} (uid 169)
- * con la casa in /var/db/acme e installa il programma in /usr/local/sbin, aggiornato con gli altri
- * pacchetti invece che da se' (prima: {@code curl https://get.acme.sh | sh} da root, in /root). Il
- * pannello lo esegue come acme ({@link #run}); i certificati stanno in /var/db/acme/certs, come
- * nella configurazione del pacchetto.
+ * <p>So acme.sh comes from the security/acme.sh package, which creates the {@code acme} user (uid 169)
+ * with its home in /var/db/acme and installs the program in /usr/local/sbin, updated with the other
+ * packages instead of by itself (before: {@code curl https://get.acme.sh | sh} as root, in /root). The
+ * panel runs it as acme ({@link #run}); the certificates are in /var/db/acme/certs, as
+ * in the configuration of the package.
  *
- * <p>La sfida HTTP: prima acme.sh apriva da se' la porta 80 (--standalone, con socat), cosa che
- * senza root non si puo'. Adesso acme.sh scrive il file della sfida in /var/db/acme/challenge e la
- * porta 80 la apre il pannello, solo per il tempo della richiesta e solo per quei file
+ * <p>The HTTP challenge: before, acme.sh opened port 80 by itself (--standalone, with socat), which
+ * cannot be done without root. Now acme.sh writes the challenge file into /var/db/acme/challenge and
+ * port 80 is opened by the panel, only for the duration of the request and only for those files
  * ({@link Challenge}).
  *
- * <p>I rinnovi li fa il pannello, una volta al giorno, e dopo ogni rinnovo installa il certificato:
- * il cron che acme.sh si scriveva in quello di root rinnovava nella sua cartella senza installare
- * niente, e con l'utente acme non potrebbe nemmeno farlo. Per questo non c'e' piu'.
+ * <p>Renewals are done by the panel, once a day, and after every renewal it installs the certificate:
+ * the cron entry that acme.sh wrote for itself into root's renewed in its own folder without installing
+ * anything, and as the acme user it could not even do that. That is why it is no longer there.
  *
- * <p>All'avvio ({@link #ensureAtBoot()}) i server installati prima passano da /root/.acme.sh a
- * /var/db/acme: si installa il pacchetto, si copiano l'account e i certificati, si chiede ad
- * acme.sh, come acme, se li vede tutti; solo dopo si toglie la riga dal cron di root e /root/.acme.sh
- * prende un altro nome (non si cancella: dentro ci sono le chiavi). Al primo passo che fallisce si
- * rimette tutto com'era e il pannello continua a usare acme.sh da root come prima, finche' un avvio
- * successivo non ci riesce.
+ * <p>At startup ({@link #ensureAtBoot()}) servers installed earlier move from /root/.acme.sh to
+ * /var/db/acme: the package is installed, the account and the certificates are copied, acme.sh is
+ * asked, as acme, whether it sees them all; only then is the line removed from root's cron, and
+ * /root/.acme.sh gets another name (it is not deleted: the keys are inside). At the first step that
+ * fails everything is put back as it was and the panel keeps using acme.sh as root as before, until a
+ * later start succeeds.
  */
 public final class AcmeUser {
 
@@ -72,17 +72,17 @@ public final class AcmeUser {
     public static final String BASE = "/var/db/acme";
     public static final String HOME = BASE + "/.acme.sh";
     public static final String CERT_HOME = BASE + "/certs";
-    /** La cartella delle sfide HTTP: acme.sh ci scrive, il pannello la serve sulla porta 80. */
+    /** The HTTP challenge folder: acme.sh writes into it, the panel serves it on port 80. */
     public static final String WEBROOT = BASE + "/challenge";
     public static final String SCRIPT = "/usr/local/sbin/acme.sh";
     public static final String PACKAGE = "security/acme.sh";
-    /** Dove lo metteva l'installazione di prima, da root. */
+    /** Where the previous installation put it, as root. */
     public static final String OLD_HOME = "/root/.acme.sh";
-    /** Il nome che prende /root/.acme.sh dopo la migrazione: resta, ma nessuno lo esegue piu'. */
+    /** The name /root/.acme.sh takes after the migration: it stays, but nobody runs it any more. */
     public static final String MOVED_HOME = OLD_HOME + ".moved-to-var-db-acme";
     static final String BACKUP_DIR = "/var/db/daemoxcp-mail/service-users-backup";
 
-    /** Le chiavi di account.conf che parlano di percorsi o dell'aggiornamento da se': non si portano. */
+    /** The keys of account.conf that are about paths or about self-updating: they are not carried over. */
     private static final Set<String> NOT_CARRIED = Set.of("LOG_FILE", "CERT_HOME", "LE_WORKING_DIR",
             "LE_CONFIG_HOME", "USER_PATH", "AUTO_UPGRADE", "ACME_DIR");
 
@@ -90,23 +90,23 @@ public final class AcmeUser {
 
     private AcmeUser() {}
 
-    // ===================== dove sta acme.sh e come si esegue =====================
+    // ===================== where acme.sh lives and how it is run =====================
 
     /**
-     * Il programma, le sue cartelle e se si esegue come acme. Il --cert-home si passa sempre, come
-     * --home e --server: un valore preso da altrove e' una dipendenza nascosta.
+     * The program, its folders and whether it runs as acme. --cert-home is always passed, like
+     * --home and --server: a value taken from elsewhere is a hidden dependency.
      */
     public record Layout(String script, String home, String certHome, boolean asAcme) {
         public String command(String args) {
             return script + " --home " + home + " --cert-home " + certHome + " " + args;
         }
 
-        /** Le cartelle in cui acme.sh tiene il certificato di un nome: prima quella ECC. */
+        /** The folders in which acme.sh keeps the certificate of a name: the ECC one first. */
         public List<Path> certDirs(String host) {
             return List.of(Path.of(certHome, host + "_ecc"), Path.of(certHome, host));
         }
 
-        /** La cartella del certificato di un nome, se acme.sh ne ha uno; null altrimenti. */
+        /** The certificate folder of a name, if acme.sh has one; null otherwise. */
         public Path certDir(String host) {
             for (Path d : certDirs(host)) if (Files.exists(d.resolve(host + ".cer"))) return d;
             return null;
@@ -114,9 +114,9 @@ public final class AcmeUser {
     }
 
     /**
-     * Quello che c'e' su questa macchina. /root/.acme.sh con dentro il programma vuol dire che la
-     * migrazione non c'e' ancora stata (o non e' riuscita): si continua come prima, da root, perche'
-     * li' stanno l'account e i certificati. null: acme.sh non c'e'.
+     * What there is on this machine. /root/.acme.sh with the program inside means that the
+     * migration has not happened yet (or did not succeed): things go on as before, as root, because
+     * that is where the account and the certificates are. null: acme.sh is not there.
      */
     public static Layout layout() {
         if (Files.isRegularFile(Path.of(OLD_HOME, "acme.sh")))
@@ -131,10 +131,10 @@ public final class AcmeUser {
     }
 
     /**
-     * Esegue acme.sh. Come acme: con su, in un ambiente vuoto salvo PATH, HOME e le variabili
-     * passate (il token di Cloudflare), cosi' a acme.sh arriva solo quello che gli serve. Gli
-     * argomenti finiscono in una riga di shell: chi chiama passa solo nomi gia' controllati, e niente
-     * redirezioni (stdout e stderr si uniscono qui), cosi' la riga e' la stessa per sh e per csh.
+     * Runs acme.sh. As acme: with su, in an empty environment except for PATH, HOME and the variables
+     * passed (the Cloudflare token), so acme.sh gets only what it needs. The
+     * arguments end up in a shell line: callers pass only names already checked, and no
+     * redirections (stdout and stderr are merged here), so the line is the same for sh and for csh.
      */
     public static String run(Layout l, String args, Map<String, String> env) throws IOException, InterruptedException {
         String line = l.command(args);
@@ -148,7 +148,7 @@ public final class AcmeUser {
             pb.directory(new java.io.File(BASE));
         } else {
             Shell.applyPath(pb);
-            // rc.d non passa HOME. Senza, acme.sh calcola "$HOME/.acme.sh" = "/.acme.sh".
+            // rc.d does not pass HOME. Without it, acme.sh computes "$HOME/.acme.sh" = "/.acme.sh".
             pb.environment().putIfAbsent("HOME", "/root");
         }
         if (env != null) pb.environment().putAll(env);
@@ -167,7 +167,7 @@ public final class AcmeUser {
         }
     }
 
-    /** La cartella delle sfide, di acme: acme.sh ci scrive, il pannello (root) la legge. */
+    /** The challenge folder, owned by acme: acme.sh writes into it, the panel (root) reads it. */
     public static void prepareWebroot() throws IOException {
         Path w = Path.of(WEBROOT);
         Files.createDirectories(w);
@@ -176,8 +176,8 @@ public final class AcmeUser {
     }
 
     /**
-     * Una cartella scelta dall'amministratore per la sfida HTTP (il webroot di un sito che gia'
-     * risponde sulla 80): acme deve poterci scrivere la sfida, e solo quella.
+     * A folder chosen by the administrator for the HTTP challenge (the webroot of a site that already
+     * answers on 80): acme must be able to write the challenge there, and only that.
      */
     public static void allowChallengeIn(String webroot) throws IOException {
         Path d = Path.of(webroot, ".well-known", "acme-challenge");
@@ -185,7 +185,7 @@ public final class AcmeUser {
         Shell.run(Duration.ofSeconds(10), "chown", USER + ":" + USER, d.toString());
     }
 
-    /** Il valore di Le_Webroot nella configurazione del certificato, o null. */
+    /** The value of Le_Webroot in the configuration of the certificate, or null. */
     public static String savedWebroot(Path certDir, String host) {
         try {
             Path conf = certDir.resolve(host + ".conf");
@@ -196,13 +196,13 @@ public final class AcmeUser {
         return null;
     }
 
-    // ===================== la sfida HTTP sulla porta 80 =====================
+    // ===================== the HTTP challenge on port 80 =====================
 
     /**
-     * La porta 80 per il tempo di una richiesta: serve /.well-known/acme-challenge/GETTONE dalla
-     * cartella in cui acme.sh l'ha scritto, e nient'altro. Il gettone e' fatto di lettere, cifre,
-     * "-" e "_" (RFC 8555, base64url): qualunque altra cosa e' un 404, cosi' nessun percorso esce
-     * dalla cartella. Si chiude da se' alla fine del try.
+     * Port 80 for the duration of a request: it serves /.well-known/acme-challenge/TOKEN from the
+     * folder in which acme.sh wrote it, and nothing else. The token is made of letters, digits,
+     * "-" and "_" (RFC 8555, base64url): anything else is a 404, so no path gets out of the
+     * folder. It closes by itself at the end of the try.
      */
     public static final class Challenge implements AutoCloseable {
         private static final Pattern TOKEN = Pattern.compile("[A-Za-z0-9_-]{1,256}");
@@ -244,30 +244,30 @@ public final class AcmeUser {
         @Override public void close() { server.stop(0); }
     }
 
-    // ===================== la migrazione all'avvio =====================
+    // ===================== the boot migration =====================
 
     enum Outcome { NOTHING, NOT_YET, BOTH_PLACES, DONE, ROLLED_BACK }
 
     record Report(Outcome outcome, String detail) {}
 
-    /** Dove stanno le cose: fisse sul server, cartelle temporanee nella prova. */
+    /** Where things are: fixed on the server, temporary folders in the test. */
     record Places(Path oldHome, Path movedHome, Path home, Path certHome, Path backupDir) {
         static Places real() {
             return new Places(Path.of(OLD_HOME), Path.of(MOVED_HOME), Path.of(HOME), Path.of(CERT_HOME), Path.of(BACKUP_DIR));
         }
     }
 
-    /** Quello che serve da pkg, cron e acme.sh, separato per provarlo senza toccarli. */
+    /** What is needed from pkg, cron and acme.sh, kept separate so it can be tested without touching them. */
     interface Services {
-        /** Il programma del pacchetto e l'utente acme ci sono. */
+        /** The program of the package and the acme user are there. */
         boolean packageInstalled();
         Shell.Result installPackage();
-        /** Il cron di root, "" se non ne ha, null se non si legge. */
+        /** Root's cron, "" if it has none, null if it cannot be read. */
         String rootCrontab();
         boolean writeRootCrontab(String content);
-        /** Proprietario e gruppo acme, su tutto quello che c'e' sotto, senza seguire i link. */
+        /** Owner and group acme, on everything below, without following links. */
         void giveToAcme(Path p) throws IOException;
-        /** L'elenco dei certificati che acme.sh vede, chiesto come acme con le cartelle nuove. */
+        /** The list of certificates that acme.sh sees, asked as acme with the new folders. */
         String list();
     }
 
@@ -294,9 +294,9 @@ public final class AcmeUser {
                         + "): acme.sh keeps running as root from " + at.oldHome() + ", retrying at the next start");
         }
 
-        // Cosa si porta: l'account (ca/ e account.conf) e le cartelle dei certificati, cioe' quelle
-        // che hanno dentro NOME.conf (NOME_ecc per i certificati ECC). Il programma, dnsapi/,
-        // deploy/ e notify/ no: li da' il pacchetto.
+        // What is carried over: the account (ca/ and account.conf) and the certificate folders, that is, those
+        // that contain NAME.conf (NAME_ecc for ECC certificates). Not the program, dnsapi/,
+        // deploy/ and notify/: the package provides them.
         List<Path> certs = new ArrayList<>();
         try (Stream<Path> s = Files.list(at.oldHome())) {
             for (Path d : s.sorted().toList()) {
@@ -315,12 +315,12 @@ public final class AcmeUser {
         Deque<Path> copied = new ArrayDeque<>();
         Path accountConf = at.home().resolve("account.conf");
         String accountBefore = Files.isRegularFile(accountConf) ? Files.readString(accountConf, StandardCharsets.UTF_8) : null;
-        // Anche di chi era e con che permessi: tornando indietro si rimette tutto, non solo il testo.
+        // Also whose it was and with which permissions: going back restores everything, not just the text.
         java.nio.file.attribute.PosixFileAttributes accountAttrs = accountBefore == null ? null
                 : Files.readAttributes(accountConf, java.nio.file.attribute.PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         String crontabBefore = null;
         try {
-            // La crea il pacchetto, di acme; se manca, la si crea di acme.
+            // The package creates it, owned by acme; if it is missing, it is created owned by acme.
             if (!Files.isDirectory(at.certHome())) {
                 Files.createDirectories(at.certHome());
                 sv.giveToAcme(at.certHome());
@@ -343,7 +343,7 @@ public final class AcmeUser {
                 Files.setPosixFilePermissions(accountConf, java.nio.file.attribute.PosixFilePermissions.fromString("rw-r-----"));
             }
 
-            // La prova: acme.sh, come acme, vede ogni certificato che c'era.
+            // The test: acme.sh, as acme, sees every certificate that was there.
             String list = sv.list();
             for (Path d : certs) {
                 String name = d.getFileName().toString().replaceFirst("_ecc$", "");
@@ -352,7 +352,7 @@ public final class AcmeUser {
                             "acme.sh, run as " + USER + ", does not list " + name + " after the copy" + (list == null ? " (it did not run)" : ""));
             }
 
-            // Solo adesso il cron di root smette di eseguire quello vecchio.
+            // Only now does root's cron stop running the old one.
             crontabBefore = sv.rootCrontab();
             if (crontabBefore == null)
                 return rollBack(copied, accountConf, accountBefore, accountAttrs, null, sv, "cannot read root's crontab");
@@ -399,9 +399,9 @@ public final class AcmeUser {
     }
 
     /**
-     * account.conf: quello del pacchetto (CERT_HOME, LOG_FILE) con l'account di prima (l'email, i
-     * token SAVED_*, la CA predefinita). Non si portano i percorsi di /root ne' l'aggiornamento da
-     * se': il programma adesso lo aggiorna pkg, e acme non puo' scriverlo.
+     * account.conf: the one of the package (CERT_HOME, LOG_FILE) with the previous account (the email, the
+     * SAVED_* tokens, the default CA). The /root paths and self-updating are not carried over: the
+     * program is now updated by pkg, and acme cannot write it.
      */
     static String mergedAccount(String pkgConf, String oldConf, String oldHome) {
         Map<String, String> lines = new LinkedHashMap<>();
@@ -429,15 +429,15 @@ public final class AcmeUser {
     }
 
     /**
-     * Un certificato chiesto con --standalone ha Le_Webroot='no': rinnovarlo cosi' vorrebbe dire
-     * aprire la porta 80, che acme non puo'. Lo si sposta sulla cartella delle sfide che il pannello
-     * serve. Gli altri metodi (dns_cf, il DNS a mano, un webroot) restano.
+     * A certificate requested with --standalone has Le_Webroot='no': renewing it that way would mean
+     * opening port 80, which acme cannot do. It is moved to the challenge folder that the panel
+     * serves. The other methods (dns_cf, manual DNS, a webroot) stay.
      */
     static String withoutStandalone(String conf) {
         return conf.replaceAll("(?m)^Le_Webroot=(['\"]?)no\\1\\s*$", "Le_Webroot='" + WEBROOT + "'");
     }
 
-    /** Il cron di root senza la riga con cui acme.sh si eseguiva da /root (--cron --home ...). */
+    /** Root's cron without the line with which acme.sh ran itself from /root (--cron --home ...). */
     static String withoutAcmeCron(String crontab, String oldHome) {
         List<String> keep = crontab.lines()
                 .filter(l -> l.trim().startsWith("#") || !(l.contains(oldHome) && l.contains("--cron")))
@@ -457,7 +457,7 @@ public final class AcmeUser {
         }
     }
 
-    /** Copia una cartella coi permessi, senza seguire e senza copiare i link. */
+    /** Copies a folder with its permissions, without following and without copying links. */
     static void copyTree(Path from, Path to) throws IOException {
         List<Path> all;
         try (Stream<Path> s = Files.walk(from)) { all = s.toList(); }
@@ -482,7 +482,7 @@ public final class AcmeUser {
         for (Path x : all) Files.delete(x);
     }
 
-    // ===================== i servizi veri =====================
+    // ===================== the real services =====================
 
     private static final class RealServices implements Services {
         private static final Duration SHORT = Duration.ofSeconds(20);
@@ -498,7 +498,7 @@ public final class AcmeUser {
         @Override public String rootCrontab() {
             Shell.Result r = Shell.run(SHORT, "crontab", "-l", "-u", "root");
             if (r.success()) return r.output();
-            // Senza cron per root crontab esce 1 e lo dice.
+            // Without a cron for root, crontab exits 1 and says so.
             return r.output().contains("no crontab") ? "" : null;
         }
 
@@ -523,7 +523,7 @@ public final class AcmeUser {
             List<Path> all;
             try (Stream<Path> s = Files.walk(p)) { all = s.toList(); }
             for (Path x : all) {
-                // Ne' collegamenti ne' file con piu' nomi: un hard link a un file di root e' quel file (reperto 252)
+                // Neither links nor files with several names: a hard link to a root file is that file (finding 252)
                 if (!SafeOwnership.safeToChange(x)) continue;
                 PosixFileAttributeView v = Files.getFileAttributeView(x, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
                 v.setOwner(u);

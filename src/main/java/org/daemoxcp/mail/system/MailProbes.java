@@ -30,28 +30,28 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 /**
- * Le prove vere della posta, da questa macchina verso i suoi servizi: entrare in una casella con IMAP, consegnare (senza
- * consegnare) con LMTP, il saluto di ManageSieve, il socket di autenticazione che Postfix usa per l'invio, gli
- * indirizzi su cui Dovecot ascolta.
+ * The real mail tests, from this machine towards its services: logging into a mailbox with IMAP, delivering
+ * (without delivering) with LMTP, the ManageSieve greeting, the authentication socket Postfix uses for sending, the
+ * addresses Dovecot listens on.
  *
- * Le usa il passaggio a Dovecot 2.4 prima e dopo (reperto 213). «Il servizio gira» non dice che una casella entra: il
- * 24/10/2026 un'installazione aveva Dovecot acceso, la configurazione accettata e le porte aperte, e nessuna casella
- * entrava («Support not compiled in for passdb driver 'sql'»).
+ * They are used by the move to Dovecot 2.4, before and after (finding 213). "The service is running" does not say
+ * that a mailbox can log in: on 2026-10-24 an installation had Dovecot running, the configuration accepted and the
+ * ports open, and no mailbox could log in ("Support not compiled in for passdb driver 'sql'").
  *
- * Nessuna cambia niente: IMAP apre la casella in sola lettura (EXAMINE), LMTP si ferma prima di DATA, ManageSieve e il
- * socket di autenticazione si salutano e basta. Ogni prova da' null se e' passata, altrimenti il perche' in una riga,
- * senza mai la password.
+ * None of them changes anything: IMAP opens the mailbox read-only (EXAMINE), LMTP stops before DATA, ManageSieve
+ * and the authentication socket just exchange greetings. Every test gives null if it passed, otherwise the reason
+ * in one line, never with the password.
  */
 final class MailProbes {
     private MailProbes() {}
 
-    /** Un indirizzo che finisce in un comando di protocollo: niente spazi, a capo o caratteri strani. */
+    /** An address that ends up in a protocol command: no spaces, newlines or strange characters. */
     static final java.util.regex.Pattern MAILBOX = java.util.regex.Pattern.compile("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}");
 
     /**
-     * Il certificato che Dovecot presenta, letto dal file della sua configurazione: la prova IMAP accetta solo quello.
-     * Non si fida di nessuna autorita' e non lo salta: e' piu' stretto di una verifica normale, e funziona anche con un
-     * certificato fatto da se' (la VM) o con un nome che non e' 127.0.0.1.
+     * The certificate Dovecot presents, read from the file in its configuration: the IMAP test accepts only that one.
+     * It trusts no authority and does not skip the check: it is stricter than a normal verification, and it also works
+     * with a self-signed certificate (the VM) or with a name that is not 127.0.0.1.
      */
     static X509Certificate leafCertificate(Path pem) throws IOException, CertificateException {
         try (InputStream in = Files.newInputStream(pem)) {
@@ -61,16 +61,16 @@ final class MailProbes {
         throw new CertificateException("no certificate in " + pem);
     }
 
-    /** Una stringa fra virgolette per IMAP (RFC 3501, quoted): null se contiene a capo o NUL, che li' non possono stare. */
+    /** A quoted string for IMAP (RFC 3501, quoted): null if it contains a newline or NUL, which cannot go there. */
     static String imapQuoted(String s) {
         if (s == null || s.indexOf('\r') >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\0') >= 0) return null;
         return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     /**
-     * Entra in una casella su IMAP con TLS (993) e la apre in sola lettura: LOGIN, EXAMINE INBOX, LOGOUT. Con l'utente
-     * principale («casella*admin») e' la stessa strada di Roundcube; passa da passdb e userdb e dalla cartella della
-     * posta, cioe' da tutto cio' che la configurazione nuova riscrive.
+     * Logs into a mailbox over IMAP with TLS (993) and opens it read-only: LOGIN, EXAMINE INBOX, LOGOUT. With the
+     * master user ("mailbox*admin") it is the same path Roundcube takes; it goes through passdb and userdb and the mail
+     * folder, that is, through everything the new configuration rewrites.
      */
     static String imapLogin(String host, int port, X509Certificate pinned, String login, String password, int timeoutMs) {
         String user = imapQuoted(login), pass = imapQuoted(password);
@@ -97,8 +97,8 @@ final class MailProbes {
     }
 
     /**
-     * La consegna come la fa Postfix, fermata prima del messaggio: LHLO, MAIL FROM:<>, RCPT TO:<casella>. Il 250 sul
-     * destinatario vuol dire che Dovecot ha trovato la casella con il suo userdb; niente arriva nella casella.
+     * The delivery as Postfix does it, stopped before the message: LHLO, MAIL FROM:<>, RCPT TO:<mailbox>. The 250 on
+     * the recipient means that Dovecot found the mailbox with its userdb; nothing arrives in the mailbox.
      */
     static String lmtpRecipient(String host, int port, String recipient, int timeoutMs) {
         if (recipient == null || !MAILBOX.matcher(recipient).matches()) return "the mailbox address is not valid";
@@ -112,15 +112,15 @@ final class MailProbes {
     }
 
     /**
-     * Lo stesso sul socket Unix con cui Postfix consegna (lmtp:unix:private/dovecot-lmtp, reperto 234). Il socket e'
-     * 0600 di postfix: questa prova la fa root.
+     * The same on the Unix socket Postfix delivers through (lmtp:unix:private/dovecot-lmtp, finding 234). The socket
+     * is 0600 owned by postfix: root runs this test.
      */
     static String lmtpRecipient(Path socket, String recipient, int timeoutMs) {
         if (recipient == null || !MAILBOX.matcher(recipient).matches()) return "the mailbox address is not valid";
         return lmtpUnix(socket, recipient, timeoutMs);
     }
 
-    /** Solo il saluto e LHLO, sul socket: quando non c'e' ancora nessuna casella da provare. */
+    /** Only the greeting and LHLO, on the socket: when there is no mailbox to test yet. */
     static String lmtpHello(Path socket, int timeoutMs) {
         return lmtpUnix(socket, null, timeoutMs);
     }
@@ -154,7 +154,10 @@ final class MailProbes {
         }
     }
 
-    /** Il dialogo, uguale sui due trasporti: null se Dovecot accetta il destinatario (senza destinatario: solo LHLO). */
+    /**
+     * The dialogue, the same on both transports: null if Dovecot accepts the recipient (without a recipient: only
+     * LHLO).
+     */
     private static String lmtpDialog(BufferedReader in, OutputStream out, String recipient) throws IOException {
         String r = reply(in);
         if (!r.startsWith("220")) return "LMTP greeting: " + shown(r);
@@ -178,9 +181,10 @@ final class MailProbes {
     }
 
     /**
-     * Il saluto di POP3 in chiaro (110): «+OK», poi QUIT, senza credenziali. Sulla 2.4 un reload che accende POP3 lascia
-     * la porta aperta ma pop3-login muore a ogni connessione («net_listen_unix(/var/run/dovecot/srv.pop3-login/...)
-     * failed», misurato sulla VM il 09/11/2026): la porta in ascolto non basta, serve il saluto.
+     * The plain-text POP3 greeting (110): "+OK", then QUIT, without credentials. On 2.4 a reload that turns POP3 on
+     * leaves the port open but pop3-login dies at every connection
+     * ("net_listen_unix(/var/run/dovecot/srv.pop3-login/...) failed", measured on the VM on 2026-11-09): the listening
+     * port is not enough, the greeting is needed.
      */
     static String pop3Greeting(String host, int port, int timeoutMs) {
         try (Socket s = new Socket()) {
@@ -197,8 +201,8 @@ final class MailProbes {
     }
 
     /**
-     * Le estensioni Sieve che ManageSieve annuncia nel saluto, ordinate: le regole che gli utenti hanno scritto le
-     * usano, e una che sparisse dopo il passaggio le romperebbe. Null se non risponde come ManageSieve.
+     * The Sieve extensions ManageSieve announces in its greeting, sorted: the rules users have written use them, and
+     * one that disappeared after the move would break them. Null if it does not answer like ManageSieve.
      */
     static Set<String> sieveExtensions(String host, int port, int timeoutMs) {
         try (Socket s = new Socket()) {
@@ -227,9 +231,9 @@ final class MailProbes {
     }
 
     /**
-     * Il socket di autenticazione di Dovecot che Postfix usa per l'invio (smtpd_sasl_path): ci si collega e si legge il
-     * saluto del protocollo di autenticazione fino a DONE, con almeno un meccanismo. Senza questo socket nessuno
-     * spedisce dalla 587, anche con IMAP che funziona.
+     * The Dovecot authentication socket Postfix uses for sending (smtpd_sasl_path): it connects and reads the
+     * authentication protocol greeting up to DONE, with at least one mechanism. Without this socket nobody can send
+     * from 587, even with IMAP working.
      */
     static String authSocket(Path socket, int timeoutMs) {
         if (!Files.exists(socket)) return socket + " does not exist";
@@ -274,9 +278,9 @@ final class MailProbes {
     }
 
     /**
-     * Gli indirizzi TCP su cui ascolta Dovecot, da «sockstat -46lq -P tcp»: «tcp4 *:993», «tcp4 127.0.0.1:24». Il
-     * passaggio pretende gli stessi prima e dopo: uno in meno e' un servizio perso, uno in piu' una porta aperta che
-     * nessuno ha chiesto.
+     * The TCP addresses Dovecot listens on, from "sockstat -46lq -P tcp": "tcp4 *:993", "tcp4 127.0.0.1:24". The
+     * move requires the same ones before and after: one fewer is a lost service, one more is an open port nobody asked
+     * for.
      */
     static Set<String> dovecotListeners(String sockstat) {
         Set<String> out = new TreeSet<>();
@@ -314,7 +318,7 @@ final class MailProbes {
         out.flush();
     }
 
-    /** La risposta etichettata di un comando IMAP, saltando le righe «*» che vengono prima. */
+    /** The tagged response of an IMAP command, skipping the "*" lines that come before it. */
     private static String tagged(BufferedReader in, String tag) throws IOException {
         for (int i = 0; i < 200; i++) {
             String l = in.readLine();
@@ -324,7 +328,10 @@ final class MailProbes {
         return "no answer to " + tag;
     }
 
-    /** Una risposta SMTP/LMTP, anche su piu' righe (250-...): l'ultima, quella col codice seguito da uno spazio. */
+    /**
+     * An SMTP/LMTP response, even over several lines (250-...): the last one, the one with the code followed by a
+     * space.
+     */
     private static String reply(BufferedReader in) throws IOException {
         for (int i = 0; i < 100; i++) {
             String l = in.readLine();

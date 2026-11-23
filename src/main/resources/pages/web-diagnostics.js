@@ -1,4 +1,4 @@
-        // ---------- Cosa espone il web server ----------
+        // ---------- What the web server exposes ----------
         async function webDiag() {
             const el = document.getElementById('upd-web');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('wd.reading')) + '';

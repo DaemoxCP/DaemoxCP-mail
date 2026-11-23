@@ -1,5 +1,5 @@
 // The notice of the interrupted reinstallation in the Updates page, in Chromium, with the simulated
-// server (reperto 170), on the English page: the "Go back to the server before the reinstallation"
+// server (finding 170), on the English page: the "Go back to the server before the reinstallation"
 // button is there only for the reinstallation with its way back; it asks for confirmation; it sends
 // action, name and confirmation; it says the outcome and the restart; a refusal from the server can
 // be read; cancelling sends nothing; the name is shown as text (not as HTML). The real function is
@@ -57,7 +57,7 @@ async function served(route) {
 }
 
 // The notice must appear at load time, even if other slow requests (branch_status,
-// packages_overview) start first: updApi's guard turned it away without asking (reperto 176).
+// packages_overview) start first: updApi's guard turned it away without asking (finding 176).
 async function open(page) {
     await page.goto(BASE + '/updates');
     const shown = await page.waitForFunction(() => document.getElementById('upd-interrupted')
@@ -90,7 +90,7 @@ async function open(page) {
     real('the button is there, with the name of the way back', await btn.count() === 1 && (await btn.textContent()).includes(WAY_BACK));
 
     console.log('\n== Cancelling the confirmation sends nothing ==');
-    // The panel's window (reperto 197): what it says, then "Cancel".
+    // The panel's window (finding 197): what it says, then "Cancel".
     const before = requests.filter(r => r.body && r.body.action === 'reinstall_way_back').length;
     await btn.click();
     await page.waitForSelector('#panelAskModal.show');

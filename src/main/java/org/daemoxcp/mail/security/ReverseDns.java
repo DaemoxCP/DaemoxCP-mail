@@ -5,33 +5,33 @@ import java.util.Locale;
 import java.util.function.BiFunction;
 
 /**
- * Il DNS inverso di un indirizzo, IPv4 o IPv6, e la sua conferma all'andata: il nome che il PTR dice deve essere quello
- * del server di posta, e quel nome deve puntare di nuovo allo stesso indirizzo (A per l'IPv4, AAAA per l'IPv6).
+ * The reverse DNS of an address, IPv4 or IPv6, and its forward confirmation: the name the PTR gives must be that
+ * of the mail server, and that name must point back to the same address (A for IPv4, AAAA for IPv6).
  *
- * Gmail lo pretende da chi spedisce (support.google.com/a/answer/81126: «550 5.7.1 This message does not meet IPv6
- * sending guidelines regarding PTR records and authentication»), Microsoft 365 anche (450 4.7.25 senza PTR per l'IPv6).
- * Il controllo di prima (DnsRecordsGenerator.checkPtrAndFcrdns) cercava sempre un record A: per un IPv6 non poteva mai
- * tornare. Questo vale per tutte e due le famiglie.
+ * Gmail requires it from senders (support.google.com/a/answer/81126: "550 5.7.1 This message does not meet IPv6 sending
+ * guidelines regarding PTR records and authentication"), Microsoft 365 too (450 4.7.25 without a PTR for IPv6). The
+ * previous check (DnsRecordsGenerator.checkPtrAndFcrdns) always looked for an A record: for an IPv6 address it could
+ * never match. This one works for both families.
  *
- * Le domande vanno ai server che pubblicano i record (FreshDns), non alla memoria del risolutore del server: il DNS
- * inverso appena salvato dall'amministratore si vede subito.
+ * The queries go to the servers that publish the records (FreshDns), not to the cache of the server's resolver: the reverse
+ * DNS just saved by the administrator is visible at once.
  */
 public final class ReverseDns {
 
-    /** Esito: va bene o no, il PTR trovato (o null), e il motivo come chiave della lingua (null se va bene). */
+    /** Outcome: fine or not, the PTR found (or null), and the reason as a language key (null if fine). */
     public record Check(boolean ok, String ptr, String reason) {
         /**
-         * Il DNS inverso da' il nome del server di posta, anche se quel nome non torna ancora all'indirizzo. E' il
-         * passo dell'amministratore nella guida: il ritorno (il record A o AAAA) lo scrive il pannello DOPO, e chi lo
-         * pretendesse qui bloccherebbe la guida per sempre (visto sul server vero: DNS inverso IPv6 giusto, nessun
-         * AAAA ancora, passo fermo). Il controllo intero (ok) resta quello che serve prima di spedire.
+         * The reverse DNS gives the mail server's name, even if that name does not lead back to the address yet. It is
+         * the administrator's step in the guide: the way back (the A or AAAA record) is written by the panel
+         * AFTERWARDS, and requiring it here would block the guide forever (seen on the production server: IPv6 reverse
+         * DNS right, no AAAA yet, step stuck). The full check (ok) remains the one needed before sending.
          */
         public boolean givesName() {
             return ok || "server.rdns.notBack".equals(reason);
         }
     }
 
-    /** La domanda al DNS (tipo, nome): ai server che pubblicano il record (FreshDns), oppure un finto nelle prove. */
+    /** The DNS query (type, name): to the servers that publish the record (FreshDns), or a fake one in tests. */
     static BiFunction<String, String, String> lookup = FreshDns::query;
 
     private ReverseDns() {}
@@ -48,7 +48,7 @@ public final class ReverseDns {
         return new Check(true, ptr, null);
     }
 
-    /** Il primo nome di un'uscita di dig +short, senza il punto finale; null se non c'e'. */
+    /** The first name in a dig +short output, without the trailing dot; null if there is none. */
     static String firstName(String out) {
         if (out == null) return null;
         for (String line : out.split("\n")) {

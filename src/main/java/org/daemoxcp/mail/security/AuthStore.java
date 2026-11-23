@@ -24,46 +24,46 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Il database dell'accesso senza password: amministratori, passkey e codici monouso (MySQL).
+ * The database of passwordless access: administrators, passkeys and one-time codes (MySQL).
  *
- *  - nessuna password e nessun hash di password: le colonne non esistono piu';
- *  - l'email dell'amministratore e' cifrata (DataCrypto) e si cerca solo col suo indice cieco;
- *  - ogni flusso di codici ha la sua tabella, e nel database c'e' solo l'impronta HMAC del codice;
- *  - le date sono in UTC, colonne DATETIME, scritte da qui (mai NOW() col fuso del server);
- *  - solo PreparedStatement: le istruzioni sono costanti, i valori sono parametri;
- *  - l'unicita' (email, user handle, credenziale) la garantiscono i vincoli UNIQUE.
+ *  - no password and no password hash: the columns no longer exist;
+ *  - the administrator's email is encrypted (DataCrypto) and is looked up only by its blind index;
+ *  - every code flow has its own table, and the database holds only the HMAC fingerprint of the code;
+ *  - dates are in UTC, DATETIME columns, written from here (never NOW() with the server's time zone);
+ *  - only PreparedStatement: the statements are constants, the values are parameters;
+ *  - uniqueness (email, user handle, credential) is guaranteed by the UNIQUE constraints.
  */
 public final class AuthStore {
 
     private static final Logger LOGGER = Logger.getLogger(AuthStore.class.getName());
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    /** La connessione MySQL del pannello; i test ne passano una loro. */
+    /** The panel's MySQL connection; the tests pass one of their own. */
     public static Supplier<Connection> connection = () -> org.daemoxcp.mail.Main.mailDatabase.getConnection();
 
-    /** L'orologio: i test lo spostano per provare le scadenze. */
+    /** The clock: the tests move it to test expirations. */
     static Supplier<Instant> clock = Instant::now;
 
     private AuthStore() {}
 
     static Instant now() { return clock.get(); }
 
-    /** Un istante come lo scrive una colonna DATETIME in UTC. */
+    /** An instant written the way a DATETIME column in UTC writes it. */
     public static LocalDateTime utc(Instant i) { return LocalDateTime.ofInstant(i, ZoneOffset.UTC); }
 
     private static Connection db() { return connection.get(); }
 
-    // ===================== Permessi =====================
+    // ===================== Permissions =====================
 
     /**
-     * Cosa puo' fare ciascun ruolo. Le rotte chiedono un permesso per nome (Access, controllato
-     * prima del gestore), mai un livello di ruolo: un ruolo nuovo si scrive solo qui.
+     * What each role can do. Routes ask for a permission by name (Access, checked
+     * before the handler), never for a role level: a new role is written only here.
      *
-     *  - "x.view": vedere le pagine e gli stati di quell'area, senza cambiare niente;
-     *  - "x.manage": cambiare. Rivelare la password di una casella, aprire la sua webmail e
-     *    leggere un messaggio in coda sono "manage": vuol dire leggere la posta di qualcuno;
-     *  - sicurezza, sistema, impostazioni, amministratori, vault e chiavi SSH di root sono solo del superadmin: chi
-     *    li ha (firewall, aggiornamenti come root) puo' darsi qualunque altro permesso.
+     *  - "x.view": see the pages and the states of that area, without changing anything;
+     *  - "x.manage": change. Revealing the password of a mailbox, opening its webmail and
+     *    reading a queued message are "manage": it means reading someone's mail;
+     *  - security, system, settings, administrators, vault and root's SSH keys belong only to the superadmin: whoever
+     *    has them (firewall, updates as root) can give themselves any other permission.
      */
     private static final Map<String, Set<String>> PERMISSIONS;
     static {
@@ -86,7 +86,7 @@ public final class AuthStore {
         return Set.copyOf(u);
     }
 
-    /** Vero se l'amministratore ha il permesso. Un ruolo sconosciuto non ne ha nessuno. */
+    /** True if the administrator has the permission. An unknown role has none. */
     public static boolean may(Admin admin, String permission) {
         return admin != null && permission != null && permissionsOf(admin.role()).contains(permission);
     }
@@ -95,18 +95,18 @@ public final class AuthStore {
         return role == null ? Set.of() : PERMISSIONS.getOrDefault(role, Set.of());
     }
 
-    /** I ruoli, dal piu' ampio al piu' ristretto (l'ordine delle pagine). */
+    /** The roles, from the broadest to the narrowest (the order of the pages). */
     public static final List<String> ROLES = List.copyOf(PERMISSIONS.keySet());
 
-    /** Ogni permesso che qualche ruolo da': le rotte possono chiedere solo uno di questi. */
+    /** Every permission that some role grants: routes can ask only for one of these. */
     public static final Set<String> ALL_PERMISSIONS = PERMISSIONS.get("superadmin");
 
-    // ===================== Migrazione =====================
+    // ===================== Migration =====================
 
     /**
-     * All'avvio, prima che il server risponda. Si puo' ripetere. Le colonne le sistema
-     * MailDatabase.ensurePasswordlessSchema; qui i dati: lo user handle di chi non l'ha, le
-     * passkey di prima legate al loro, almeno un superadmin.
+     * At startup, before the server answers. It can be repeated. The columns are fixed by
+     * MailDatabase.ensurePasswordlessSchema; here the data: the user handle for those who lack it, the
+     * earlier passkeys tied to theirs, at least one superadmin.
      */
     public static void migrate() throws SQLException {
         PanelSecrets.ensureKeys();
@@ -118,9 +118,9 @@ public final class AuthStore {
     }
 
     /**
-     * Ogni amministratore ha un identificativo per le passkey (user handle). A quelli che c'erano
-     * gia' si da' quello della vecchia registrazione, l'id in quattro byte: le passkey gia' create
-     * continuano a funzionare.
+     * Every administrator has an identifier for passkeys (user handle). Those who were already there
+     * are given the one from the old registration, the id in four bytes: the passkeys already created
+     * keep working.
      */
     private static void assignUserHandles() throws SQLException {
         List<Long> ids = new ArrayList<>();
@@ -145,9 +145,9 @@ public final class AuthStore {
     }
 
     /**
-     * Gli amministratori li gestisce solo un superadmin. L'installazione di prima creava il primo
-     * amministratore con il ruolo "admin", e nessuno poteva gestire gli altri: se non c'e' un
-     * superadmin attivo, lo diventa il piu' vecchio.
+     * Administrators are managed only by a superadmin. The previous installation created the first
+     * administrator with the "admin" role, and nobody could manage the others: if there is no
+     * active superadmin, the oldest one becomes one.
      */
     private static void ensureSuperadmin() throws SQLException {
         try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_ENSURE_SUPERADMIN);
@@ -159,11 +159,11 @@ public final class AuthStore {
         }
     }
 
-    // ===================== Amministratori =====================
+    // ===================== Administrators =====================
 
     public record Admin(long id, String username, String role, boolean active, String emailEnc, String userHandle,
                         LocalDateTime createdAt, LocalDateTime lastLogin) {
-        /** L'email in chiaro, o "" se non e' impostata o non si decifra. */
+        /** The email in plaintext, or "" if it is not set or cannot be decrypted. */
         public String email() { return DataCrypto.decryptOrEmpty(emailEnc); }
         public boolean hasEmail() { return emailEnc != null && !emailEnc.isEmpty(); }
         public ByteArray userHandleBytes() {
@@ -171,7 +171,7 @@ public final class AuthStore {
         }
     }
 
-    // Le colonne lette da admin(): SqlCatalog.AUTH_ADMIN_SELECT, in quest'ordine.
+    // The columns read by admin(): SqlCatalog.AUTH_ADMIN_SELECT, in this order.
     private static Admin admin(ResultSet r) throws SQLException {
         return new Admin(r.getLong(1), r.getString(2), r.getString(3), r.getBoolean(4), r.getString(5), r.getString(6),
                 r.getObject(7, LocalDateTime.class), r.getObject(8, LocalDateTime.class));
@@ -194,7 +194,7 @@ public final class AuthStore {
         return out;
     }
 
-    /** Un amministratore attivo, per id. */
+    /** An active administrator, by id. */
     public static Optional<Admin> adminById(long id) {
         try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_ADMIN_BY_ID)) {
             p.setLong(1, id);
@@ -243,8 +243,8 @@ public final class AuthStore {
     public record Created(CreateResult result, long id) {}
 
     /**
-     * Un amministratore nuovo, senza password: entra con un codice mandato alla sua email e
-     * registra una passkey. Nome ed email unici per vincolo UNIQUE, non per un controllo prima.
+     * A new administrator, without a password: they log in with a code sent to their email and
+     * register a passkey. Name and email unique by a UNIQUE constraint, not by a check beforehand.
      */
     public static Created createAdmin(String username, String email, String role) {
         byte[] handle = new byte[16];
@@ -267,7 +267,7 @@ public final class AuthStore {
         }
     }
 
-    /** Quale vincolo UNIQUE ha fermato un INSERT o un UPDATE (codice MySQL 1062). */
+    /** Which UNIQUE constraint stopped an INSERT or an UPDATE (MySQL code 1062). */
     private static CreateResult duplicateOf(SQLException e) {
         if (e.getErrorCode() == 1062 && e.getMessage() != null) {
             if (e.getMessage().contains("email_index")) return CreateResult.EMAIL_TAKEN;
@@ -277,7 +277,7 @@ public final class AuthStore {
         return CreateResult.FAILED;
     }
 
-    /** Cambia il nome. NAME_TAKEN se e' gia' di un altro (vincolo UNIQUE). */
+    /** Changes the name. NAME_TAKEN if it already belongs to someone else (UNIQUE constraint). */
     public static CreateResult renameAdmin(long adminId, String username) {
         try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_RENAME_ADMIN)) {
             p.setString(1, username);
@@ -288,7 +288,7 @@ public final class AuthStore {
         }
     }
 
-    /** Imposta l'email (cifrata, con l'indice cieco). EMAIL_TAKEN se e' gia' di un altro amministratore. */
+    /** Sets the email (encrypted, with the blind index). EMAIL_TAKEN if it already belongs to another administrator. */
     public static CreateResult setEmail(long adminId, String email) {
         try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_SET_EMAIL)) {
             p.setString(1, DataCrypto.encrypt(email.trim()));
@@ -312,7 +312,7 @@ public final class AuthStore {
         }
     }
 
-    /** Toglie un amministratore: con lui (ON DELETE CASCADE) le sue passkey, sessioni e codici. */
+    /** Removes an administrator: along with it (ON DELETE CASCADE), its passkeys, sessions and codes. */
     public static boolean deleteAdmin(long adminId) {
         try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_DELETE_ADMIN)) {
             p.setLong(1, adminId);
@@ -323,7 +323,7 @@ public final class AuthStore {
         }
     }
 
-    /** Quanti superadmin attivi ci sono: l'ultimo non si toglie e non si declassa. */
+    /** How many active superadmins there are: the last one cannot be removed or demoted. */
     public static int activeSuperadmins() {
         try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_ACTIVE_SUPERADMINS);
              ResultSet r = p.executeQuery()) {
@@ -349,7 +349,7 @@ public final class AuthStore {
     public record Passkey(long id, long adminId, ByteArray credentialId, ByteArray publicKeyCose, long signCount,
                           String name, LocalDateTime createdAt, LocalDateTime lastUsed, String userHandle) {}
 
-    // Le colonne lette da passkeys(): SqlCatalog.AUTH_PASSKEY_SELECT, in quest'ordine.
+    // The columns read by passkeys(): SqlCatalog.AUTH_PASSKEY_SELECT, in this order.
     private static List<Passkey> passkeys(PreparedStatement p) throws SQLException {
         List<Passkey> out = new ArrayList<>();
         try (ResultSet r = p.executeQuery()) {
@@ -379,7 +379,7 @@ public final class AuthStore {
         }
     }
 
-    /** Salva una passkey. Falso anche se la credenziale c'e' gia' (vincolo UNIQUE). */
+    /** Saves a passkey. False also if the credential is already there (UNIQUE constraint). */
     public static boolean addPasskey(long adminId, ByteArray credentialId, ByteArray publicKeyCose, long signCount,
                                      String name, String rpId, String userHandle) {
         try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_ADD_PASSKEY)) {
@@ -432,11 +432,11 @@ public final class AuthStore {
         }
     }
 
-    // ===================== Codici monouso, una tabella per flusso =====================
+    // ===================== One-time codes, one table per flow =====================
 
     /**
-     * I flussi, ognuno con la sua tabella e le sue istruzioni, fisse nel catalogo: una tabella non e'
-     * un parametro, e il nome non si compone piu' qui.
+     * The flows, each with its own table and its own statements, fixed in the catalog: a table is not
+     * a parameter, and the name is no longer composed here.
      */
     public enum CodeFlow {
         EMAIL_LOGIN(SqlCatalog.AUTH_CODE_EMAIL_LOGIN_INVALIDATE, SqlCatalog.AUTH_CODE_EMAIL_LOGIN_INSERT, SqlCatalog.AUTH_CODE_EMAIL_LOGIN_ACTIVE_OF, SqlCatalog.AUTH_CODE_EMAIL_LOGIN_ACTIVE_ALL,
@@ -463,7 +463,7 @@ public final class AuthStore {
 
     public record CodeRow(long id, long adminId, String codeHash, int attempts, String targetEnc, String targetIndex) {}
 
-    /** Salva un codice nuovo e annulla quelli ancora validi dello stesso amministratore. */
+    /** Saves a new code and cancels those of the same administrator that are still valid. */
     public static boolean saveCode(CodeFlow flow, long adminId, String codeHash, Instant expires, String targetEnc, String targetIndex) {
         LocalDateTime now = utc(now());
         try (PreparedStatement inv = db().prepareStatement(flow.invalidate);
@@ -486,7 +486,7 @@ public final class AuthStore {
         }
     }
 
-    /** I codici ancora validi di un amministratore (adminId >= 0) o di tutti (adminId < 0). */
+    /** The still valid codes of one administrator (adminId >= 0) or of all of them (adminId < 0). */
     public static List<CodeRow> activeCodes(CodeFlow flow, long adminId) {
         LocalDateTime now = utc(now());
         String active = adminId >= 0 ? flow.activeOf : flow.activeAll;
@@ -514,8 +514,8 @@ public final class AuthStore {
     }
 
     /**
-     * Usa il codice: vero solo per la prima richiesta che ci riesce (una riga aggiornata), e solo
-     * se i tentativi non hanno superato il massimo nel frattempo.
+     * Uses the code: true only for the first request that succeeds (one row updated), and only
+     * if the attempts have not exceeded the maximum in the meantime.
      */
     public static boolean consumeCode(CodeFlow flow, long id, int maxAttempts) {
         try (PreparedStatement p = db().prepareStatement(flow.consume)) {
@@ -529,7 +529,7 @@ public final class AuthStore {
         }
     }
 
-    /** Toglie i codici scaduti da piu' di un giorno e le sessioni scadute. */
+    /** Removes the codes that expired more than a day ago and the expired sessions. */
     public static void purgeExpired() {
         LocalDateTime limit = utc(now().minusSeconds(86400));
         for (CodeFlow f : CodeFlow.values()) {

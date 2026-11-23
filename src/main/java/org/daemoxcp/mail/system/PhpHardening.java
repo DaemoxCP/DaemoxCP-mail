@@ -15,23 +15,24 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
- * PHP come lo scrive l'installatore anche sui server installati prima (reperto 238).
+ * PHP as the installer writes it, on the servers installed earlier too (finding 238).
  *
- * <p>Il pacchetto php84 non installa un php.ini: ci sono solo i campioni php.ini-production e php.ini-development. Il
- * server vero era stato installato prima che l'installatore lo scrivesse, e misurato il 16/11/2026 in sola lettura PHP
- * girava sui valori compilati dentro: «Loaded Configuration File => (none)», expose_php On (la versione di PHP in ogni
- * risposta della webmail, «X-Powered-By: PHP/8.4...»), display_errors sull'uscita, sessioni in /tmp, nessun fuso. Qui,
- * se manca, si scrive {@link #INI}, lo stesso testo dell'installatore (che lo prende da qui), con la cartella delle
- * sessioni, il registro degli errori e la sua rotazione.
+ * <p>The php84 package does not install a php.ini: there are only the samples php.ini-production and
+ * php.ini-development. The production server had been installed before the installer wrote it, and, measured
+ * read-only on 2026-11-16, PHP was running on the values compiled in: "Loaded Configuration File => (none)",
+ * expose_php On (the PHP version in every webmail response, "X-Powered-By: PHP/8.4..."), display_errors on the
+ * output, sessions in /tmp, no time zone. Here, if it is missing, {@link #INI} is written, the same text as the
+ * installer's (which takes it from here), with the sessions folder, the error log and its rotation.
  *
- * <p>In piu' due righe che la guida di PHP indica per un server di produzione: session.upload_progress.enabled = Off
- * (Roundcube non lo usa, e scrive nel file di sessione un nome scelto da chi carica) e, nel pool di Roundcube,
- * security.limit_extensions = .php: il predefinito di php-fpm e' «.php .phar», e la webmail esegue solo .php.
+ * <p>In addition, two lines that the PHP guide recommends for a production server:
+ * session.upload_progress.enabled = Off (Roundcube does not use it, and it writes into the session file a name
+ * chosen by whoever uploads) and, in the Roundcube pool, security.limit_extensions = .php: the php-fpm default is
+ * ".php .phar", and the webmail runs only .php.
  *
- * <p>Dopo: php-fpm -t, il reload, e la pagina d'accesso della webmail che risponde su ogni sito di nginx che la serve;
- * se php.ini era mancante, senza piu' X-Powered-By (la prova che php-fpm legge davvero il file). Un errore rimette
- * tutto com'era. Un php.ini che c'e' non si tocca: e' dell'installatore o dell'amministratore; il pool solo se l'ha
- * scritto il pannello.
+ * <p>Afterwards: php-fpm -t, the reload, and the webmail login page answering on every nginx site that serves it;
+ * if php.ini was missing, with no X-Powered-By any more (the proof that php-fpm really reads the file). An error
+ * puts everything back as it was. A php.ini that exists is not touched: it belongs to the installer or to the
+ * administrator; the pool is touched only if the panel wrote it.
  */
 public final class PhpHardening {
 
@@ -43,7 +44,7 @@ public final class PhpHardening {
     static final Path POOL = Path.of(RoundcubeUser.FPM_DIR, RoundcubeUser.POOL + ".conf");
     static final Path ROTATION = Path.of(RoundcubeUser.NEWSYSLOG_DIR, "php-errors.conf");
 
-    /** Il php.ini del pannello: l'installatore lo scrive da qui, e qui lo prende la riparazione. */
+    /** The panel's php.ini: the installer writes it from here, and the repair takes it from here. */
     public static final String INI = """
             [PHP]
             engine = On
@@ -123,31 +124,31 @@ public final class PhpHardening {
         return HAS_LIMIT.matcher(pool).find();
     }
 
-    /** Il pool con la riga in fondo (c'e' una sezione sola, [roundcube]). Pura. */
+    /** The pool with the line at the end (there is only one section, [roundcube]). Pure. */
     static String withLimit(String pool) {
         return pool + (pool.endsWith("\n") ? "" : "\n") + LIMIT_COMMENT + LIMIT;
     }
 
-    /** Un sito di nginx che serve la webmail. */
+    /** An nginx site that serves the webmail. */
     record Site(String name, String port) {}
 
-    /** Quello che serve, per provarlo senza PHP, php-fpm e nginx. */
+    /** What is needed, so that it can be tested without PHP, php-fpm and nginx. */
     interface Services {
-        /** Il file, o null se non c'e'. */
+        /** The file, or null if it is not there. */
         String read(Path file) throws IOException;
-        /** Un file nuovo, root:wheel 0644. */
+        /** A new file, root:wheel 0644. */
         void create(Path file, String text) throws IOException;
-        /** Al posto del file, con proprietario e permessi di prima. */
+        /** In place of the file, with the previous owner and permissions. */
         void write(Path file, String text) throws IOException;
         void delete(Path file) throws IOException;
-        /** La cartella delle sessioni e il registro degli errori, se mancano, dell'utente di Roundcube. */
+        /** The sessions folder and the error log, if missing, owned by the Roundcube user. */
         void prepare() throws IOException;
         boolean fpmTest();
         void fpmReload();
         List<Site> sites();
-        /** Intestazioni e pagina della webmail, o null se non risponde con la pagina d'accesso. */
+        /** Headers and page of the webmail, or null if it does not answer with the login page. */
         String webmail(Site site);
-        /** Una pausa fra un controllo e l'altro (nella prova non aspetta). */
+        /** A pause between one check and the next (in the test it does not wait). */
         void pause();
     }
 
@@ -159,7 +160,7 @@ public final class PhpHardening {
         return Pattern.compile("(?im)^x-powered-by:").matcher(page).find();
     }
 
-    /** Il passaggio, puro rispetto a {@link Services}. */
+    /** The switchover, pure with respect to {@link Services}. */
     static Result run(Services sv, Path ini, Path pool, Path rotation, int waitSeconds) {
         String i, p, rot;
         try {
@@ -232,7 +233,7 @@ public final class PhpHardening {
                 why + (ok ? ": everything as it was" : "; and putting the files back failed"));
     }
 
-    // ===================== Il server vero =====================
+    // ===================== The production server =====================
 
     static Services real() {
         return new Services() {
@@ -259,8 +260,9 @@ public final class PhpHardening {
                 }
                 if (!Files.exists(log, LinkOption.NOFOLLOW_LINKS)) {
                     Files.createFile(log, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-r-----")));
-                    // I permessi chiesti a createFile passano dall'umask del pannello (077 quando lo avvia
-                    // upgrade-panel.sh): sul server vero il registro nasceva 0600, e RoundcubeUser lo rimetteva.
+                    // The permissions asked of createFile go through the panel's umask (077 when
+                    // upgrade-panel.sh starts it): on the production server the log was created 0600,
+                    // and RoundcubeUser was putting it right.
                     Shell.run(Duration.ofSeconds(10), "chmod", "640", log.toString());
                     Shell.run(Duration.ofSeconds(10), "chown", owner, log.toString());
                 }
@@ -295,7 +297,7 @@ public final class PhpHardening {
         };
     }
 
-    /** All'avvio della parte root, prima di RoundcubeUser (che ripassa i proprietari della cartella e del registro). */
+    /** At root part startup, before RoundcubeUser (which re-applies the owners of the folder and of the log). */
     public static void ensureAtBoot() {
         try {
             if (!Files.isDirectory(Path.of(RoundcubeUser.ROUNDCUBE_DIR))) return;

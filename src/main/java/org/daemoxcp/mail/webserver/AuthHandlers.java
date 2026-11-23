@@ -21,29 +21,29 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * L'accesso senza password e la scheda Account delle Impostazioni.
+ * Passwordless login and the Account tab of the Settings.
  *
- * Si entra in tre modi (POST /api/login, campo action):
- *  - con una passkey (WebAuthn, verificata da PasskeyService), senza scrivere il nome utente;
- *  - con un codice monouso mandato all'email dell'amministratore (LoginCodes);
- *  - con un codice generato dalla console del server (java -jar ... --access-code), per il
- *    primo accesso o quando l'email non arriva.
+ * There are three ways in (POST /api/login, action field):
+ *  - with a passkey (WebAuthn, verified by PasskeyService), without typing the username;
+ *  - with a one-time code sent to the administrator's email (LoginCodes);
+ *  - with a code generated from the server console (java -jar ... --access-code), for the
+ *    first login or when the email does not arrive.
  *
- * Prima del login il token CSRF e' quello della pagina, legato al browser dal cookie
- * __Host-DaemoxCPMailPre. Chiedere un codice per un'email risponde sempre allo stesso modo e nello
- * stesso tempo, che l'indirizzo sia di qualcuno o no; anche la verifica di un codice sbagliato. Dopo il
- * login valgono la sessione nel database e il suo token CSRF, controllato dal filtro di ogni rotta.
+ * Before login the CSRF token is the page's, tied to the browser by the
+ * __Host-DaemoxCPMailPre cookie. Asking for a code for an email always responds the same way and in the
+ * same time, whether the address belongs to someone or not; so does verifying a wrong code. After
+ * login, the session in the database and its CSRF token apply, checked by the filter of every route.
  *
- * /api/account (solo con una sessione): GET i dati dell'amministratore collegato (email, passkey,
- * sessioni); POST le azioni sulla propria utenza: email, nome, passkey, sessioni, conferma.
+ * /api/account (only with a session): GET the data of the logged-in administrator (email, passkeys,
+ * sessions); POST the actions on one's own account: email, name, passkeys, sessions, confirmation.
  */
 final class AuthHandlers {
 
     private static final Logger LOGGER = Logger.getLogger(AuthHandlers.class.getName());
     private static final int MAX_BODY = 32 * 1024;
-    /** Il tempo minimo di risposta di "mandami un codice" e delle verifiche: non dice se l'indirizzo esiste. */
+    /** The minimum response time of "send me a code" and of the checks: it does not tell whether the address exists. */
     static long codeRequestMinMs = 900;   // i test lo abbassano
-    /** Per quanto vale una conferma (passkey o codice) per le operazioni delicate. */
+    /** How long a confirmation (passkey or code) lasts for sensitive operations. */
     static final long REAUTH_SECONDS = 300;
     private static final java.util.regex.Pattern PASSKEY_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9 ._()-]{1,40}");
 
@@ -64,7 +64,7 @@ final class AuthHandlers {
         return new JSONObject().put("success", false).put("error", I18n.tr(key));
     }
 
-    /** Il corpo JSON, o null se manca, non e' JSON o e' troppo grande. */
+    /** The JSON body, or null if it is missing, is not JSON or is too large. */
     static JSONObject body(HttpExchange ex) {
         try (InputStream in = ex.getRequestBody()) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -90,18 +90,18 @@ final class AuthHandlers {
         return h == null ? "" : h.trim();
     }
 
-    /** Aspetta fino a codeRequestMinMs da start: la risposta non dice quanto lavoro c'e' stato. */
+    /** Waits until codeRequestMinMs from start: the response does not tell how much work there was. */
     static void padTo(long start) throws InterruptedException {
         long wait = codeRequestMinMs - (System.currentTimeMillis() - start);
         if (wait > 0) Thread.sleep(wait);
     }
 
-    /** Una data UTC per le pagine (ISO con la Z): la convertono nel fuso del browser. */
+    /** A UTC date for the pages (ISO with the Z): they convert it to the browser's time zone. */
     static String iso(LocalDateTime t) {
         return t == null ? "" : t.withNano(0) + "Z";
     }
 
-    /** Dopo un login riuscito: la sessione nel database, il cookie, dove andare. */
+    /** After a successful login: the session in the database, the cookie, where to go. */
     private JSONObject startSession(HttpExchange ex, AuthStore.Admin admin, String how) {
         String ip = server.getClientIp(ex);
         String token = Main.sessions.create(admin.id(), userAgent(ex), ip);
@@ -113,7 +113,7 @@ final class AuthHandlers {
                 .put("redirect", noPasskey ? "/account?setup=passkey" : "/home");
     }
 
-    // ===================== Prima del login =====================
+    // ===================== Before login =====================
 
     /** POST /api/login. */
     void handleLogin(HttpExchange ex) throws IOException {
@@ -121,8 +121,9 @@ final class AuthHandlers {
     }
 
     /**
-     * L'accesso. Col pannello separato lo serve la parte root (A), a cui la web lo passa dopo aver controllato
-     * lei il token CSRF della pagina: il cookie che lo lega al browser resta alla web (checkPageToken falso).
+     * The login. With the separated panel it is served by the root part (A), to which the web part passes it after
+     * checking the page's CSRF token itself: the cookie that ties it to the browser stays with the web part
+     * (checkPageToken false).
      */
     void handleLogin(HttpExchange ex, boolean checkPageToken) throws IOException {
         try {
@@ -166,7 +167,7 @@ final class AuthHandlers {
                 case "code_request" -> {
                     long start = System.currentTimeMillis();
                     String email = req.optString("email", "").trim();
-                    // Solo la forma dell'indirizzo: se e' di qualcuno non lo dice nessuna risposta.
+                    // Only the shape of the address: no response says whether it belongs to someone.
                     if (!LoginCodes.validEmail(email)) { send(ex, 400, error("server.login.badEmail")); return; }
                     LoginCodes.requestEmailLogin(email, ip);
                     padTo(start);
@@ -175,7 +176,7 @@ final class AuthHandlers {
                 case "code_verify" -> {
                     long start = System.currentTimeMillis();
                     Optional<AuthStore.Admin> admin = LoginCodes.verifyEmailLogin(req.optString("email", "").trim(), req.optString("code", ""), ip);
-                    // Un indirizzo di nessuno non tocca il database, uno vero si': lo stesso tempo per tutti e due.
+                    // An address nobody owns does not touch the database, a real one does: the same time for both.
                     padTo(start);
                     if (admin.isEmpty()) {
                         server.logAudit("LOGIN_FAILURE", ip, "email code refused");
@@ -203,9 +204,9 @@ final class AuthHandlers {
         }
     }
 
-    // ===================== Dopo il login: l'account =====================
+    // ===================== After login: the account =====================
 
-    /** GET/POST /api/account. Il token CSRF delle POST lo controlla il filtro della rotta. */
+    /** GET/POST /api/account. The CSRF token of the POSTs is checked by the route filter. */
     void handleAccount(HttpExchange ex) throws IOException {
         try {
             server.addSecurityHeaders(ex);
@@ -282,7 +283,7 @@ final class AuthHandlers {
                 }
                 case "passkey_delete" -> {
                     long id = req.optLong("id", -1);
-                    // Senza un'email per i codici, l'ultima passkey e' l'unico modo di rientrare (oltre alla console).
+                    // Without an email for the codes, the last passkey is the only way back in (besides the console).
                     if (AuthStore.passkeysOf(me.id()).size() <= 1 && !me.hasEmail()) { send(ex, 409, error("server.passkey.lastOne")); return; }
                     if (!AuthStore.deletePasskey(id, me.id())) { send(ex, 404, error("server.account.badId")); return; }
                     server.logAudit("PASSKEY_DELETED", ip, "user=" + me.username() + " passkey_id=" + id);
@@ -335,8 +336,8 @@ final class AuthHandlers {
                     send(ex, 200, new JSONObject().put("success", true));
                 }
                 case "stepup_console_verify" -> {
-                    // La strada di chi non ha una passkey e non riceve l'email (porta 25 chiusa, nessuna email):
-                    // un codice di --access-code per se stesso, come all'accesso, con la stessa attesa costante.
+                    // The way for someone with no passkey who does not receive the email (port 25 closed, no email):
+                    // a --access-code code for themselves, as at login, with the same constant wait.
                     long start = System.currentTimeMillis();
                     boolean ok = LoginCodes.verifyConsoleStepUp(me, req.optString("code", ""), ip);
                     padTo(start);
@@ -357,7 +358,7 @@ final class AuthHandlers {
         }
     }
 
-    /** Nome, ruolo, email di accesso, passkey e sessioni dell'amministratore collegato. */
+    /** Name, role, login email, passkeys and sessions of the logged-in administrator. */
     private JSONObject info(HttpExchange ex, WebSessions.Current s) {
         AuthStore.Admin me = s.admin();
         JSONArray keys = new JSONArray();
@@ -375,7 +376,7 @@ final class AuthHandlers {
                 .put("reauthenticated", s.reauthenticatedWithin(REAUTH_SECONDS));
     }
 
-    /** I parametri di un testo, per chi costruisce messaggi con valori. */
+    /** The parameters of a text, for whoever builds messages with values. */
     static Map<String, Object> params(Object... kv) {
         Map<String, Object> m = new java.util.HashMap<>();
         for (int i = 0; i + 1 < kv.length; i += 2) m.put((String) kv[i], kv[i + 1]);

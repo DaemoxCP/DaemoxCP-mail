@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Every mailbox's Dovecot home in its own folder, home/, not the mail root (reperto 217).
+ * Every mailbox's Dovecot home in its own folder, home/, not the mail root (finding 217).
  *
  * With home = the Maildir root (/var/vmail/domain/user), the files Dovecot keeps in the home showed up as mail folders:
  * after one autoreply IMAP LIST gave "dovecot", "dovecot.lda-dupes" and "dovecot.lda-dupes.locks" (measured on the VM).

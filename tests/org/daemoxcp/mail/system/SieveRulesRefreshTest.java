@@ -10,15 +10,15 @@ import java.util.Map;
 
 /**
  * The panel's Sieve rules already written are written again from the database when what the panel writes changed
- * (reperto 229: move and copy now create a missing folder, fileinto :create).
+ * (finding 229: move and copy now create a missing folder, fileinto :create).
  *
  * <p>With a fake store of rule files and the real generator on fake database rows:
  * <ul>
- *   <li>a file written before reperto 229 (no "mailbox", no :create) is written again, once; the second run writes
+ *   <li>a file written before finding 229 (no "mailbox", no :create) is written again, once; the second run writes
  *       nothing;</li>
  *   <li>a file already as the panel writes it now: nothing;</li>
  *   <li>a file that is not the panel's (another require line, a script written by hand): left as it is;</li>
- *   <li>no file but rules in the database (a write refused before, reperto 223): written; no file and no rules:
+ *   <li>no file but rules in the database (a write refused before, finding 223): written; no file and no rules:
  *       nothing;</li>
  *   <li>a write that fails: counted by the mailbox's number, the others still written.</li>
  * </ul>

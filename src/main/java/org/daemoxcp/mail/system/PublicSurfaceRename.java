@@ -23,58 +23,59 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * All'avvio: la superficie pubblica sulla 443 passa da "mailpanel-pubblico" a "mailpanel-public"
- * sui server installati prima della rinomina (r26, 30/10/2026).
+ * At startup: the public surface on 443 moves from `mailpanel-pubblico` to "mailpanel-public"
+ * on the servers installed before the rename (r26, 2026-10-30).
  *
- * <p>PathMigration sposta i file che legge solo il pannello. Questi no: il nome viaggia fra tre
- * servizi. nginx include NOME.conf e scrive /var/log/nginx/NOME-access.log; fail2ban legge quel
- * log con filter.d/NOME.conf e jail.d/NOME.conf, e banna in pf nell'ancora f2b/NOME, tabella
- * f2b-NOME. Se se ne sposta uno solo la jail guarda un log che nessuno scrive piu', e non banna
- * niente senza dare nessun errore. Quindi tutto o niente.
+ * <p>PathMigration moves the files that only the panel reads. Not these: the name travels
+ * between three services. nginx includes NAME.conf and writes /var/log/nginx/NAME-access.log;
+ * fail2ban reads that log with filter.d/NAME.conf and jail.d/NAME.conf, and bans in pf in the
+ * anchor f2b/NAME, table f2b-NAME. If only one of them is moved, the jail watches a log that
+ * nobody writes any more, and bans nothing without giving any error. So all or nothing.
  *
- * <p>Come si comporta:
+ * <p>How it behaves:
  * <ul>
- *   <li>niente col nome vecchio: non fa niente, e non lancia neanche nginx -T (e' il caso di
- *       ogni avvio dopo il primo);</li>
- *   <li>un file vecchio che non ha scritto il pannello (manca la firma, vedi PanelMarker), il
- *       nome nuovo gia' presente accanto al vecchio, o due file vecchi in due cartelle di nginx:
- *       non tocca niente e lo scrive nel log, come PathMigration: scegliere non e' compito suo;</li>
- *   <li>altrimenti: sposta il log con le sue copie ruotate e i tre file cambiando il nome dentro;
- *       poi nginx -t e reload di nginx; sposta lo stato della jail nel database di fail2ban; reload
- *       di fail2ban, e chiede a fail2ban se la jail nuova c'e'. Al primo passo che fallisce
- *       rimette tutto com'era, stato compreso, e ricarica: al prossimo avvio ci riprova.</li>
+ *   <li>nothing with the old name: it does nothing, and does not even run nginx -T (that is the
+ *       case of every startup after the first);</li>
+ *   <li>an old file not written by the panel (the signature is missing, see PanelMarker), the
+ *       new name already present next to the old one, or two old files in two nginx folders:
+ *       it touches nothing and writes so in the log, like PathMigration: choosing is not its job;</li>
+ *   <li>otherwise: it moves the log with its rotated copies and the three files, changing the
+ *       name inside; then nginx -t and nginx reload; it moves the jail state in the fail2ban
+ *       database; fail2ban reload, and it asks fail2ban whether the new jail exists. At the first
+ *       step that fails it puts everything back as it was, state included, and reloads: at the
+ *       next startup it tries again.</li>
  * </ul>
  *
- * <p>Il contenuto dei file vecchi resta quello, cambiato solo nel nome e nella firma (che passa
- * all'inglese come fa PanelMarker per i file gia' rinominati): e' una rinomina, non una
- * riparazione (quella la fanno installJail e BanActionRepair). Nei file scritti dal pannello il
- * nome vecchio compare solo dove e' un nome.
+ * <p>The content of the old files stays the same, changed only in the name and in the signature
+ * (which moves to English as PanelMarker does for the files already renamed): it is a rename, not
+ * a repair (that is done by installJail and BanActionRepair). In the files written by the panel
+ * the old name appears only where it is a name.
  *
- * <p>Con la superficie si sposta anche la cartella dei suoi file, /var/db/daemoxcp-mail/pubblico ->
- * public: nginx la legge (alias .../mta-sts.txt), quindi non sta in PathMigration ma qui, nello
- * stesso tutto-o-niente, e il percorso dentro il file di nginx cambia con lei. Misurato sul server
- * vero il 31/10/2026: con la cartella spostata da PathMigration e il file di nginx che citava
- * ancora quella vecchia, la politica MTA-STS sarebbe diventata un 404. Se la cartella e' gia'
- * quella nuova e il file di nginx (gia' rinominato) cita ancora la vecchia, si riscrive solo lui.
+ * <p>Together with the surface, the folder of its files moves too, `/var/db/daemoxcp-mail/pubblico`
+ * -> public: nginx reads it (alias .../mta-sts.txt), so it is not in PathMigration but here, in
+ * the same all-or-nothing, and the path inside the nginx file changes with it. Measured on the
+ * production server on 2026-10-31: with the folder moved by PathMigration and the nginx file still
+ * citing the old one, the MTA-STS policy would have become a 404. If the folder is already the new
+ * one and the nginx file (already renamed) still cites the old one, only that file is rewritten.
  *
- * <p>I ban: fail2ban li tiene per jail, nel suo database, e quando una jail parte rimette quelli
- * non ancora scaduti. Una jail con un altro nome partirebbe vuota. Quindi prima del reload si
- * passano alla jail nuova, nel database, i ban e la posizione raggiunta nel log: la jail nuova li
- * riprende col tempo che restava, e non rilegge da capo il log gia' letto. NON si ribannano con
- * "banip": ogni ban scrive una riga «Ban» nel log di fail2ban, e la jail recidive le conta (tre in
- * un giorno: una settimana su tutte le porte). Ribannare per una rinomina avrebbe potuto chiudere
- * fuori per una settimana, posta compresa, un indirizzo che aveva gia' due ban: e' successo al Mac
- * nella prova sulla VM del 30/10/2026. Se il database non si puo' aggiornare la rinomina va avanti
- * lo stesso, e i ban della jail vecchia scadono entro l'ora.
+ * <p>The bans: fail2ban keeps them per jail, in its database, and when a jail starts it restores
+ * those not yet expired. A jail with another name would start empty. So before the reload the bans
+ * and the position reached in the log are handed over to the new jail, in the database: the new
+ * jail picks them up with the time that was left, and does not read the already-read log again from
+ * the start. They are NOT banned again with "banip": every ban writes a "Ban" line in the fail2ban
+ * log, and the recidive jail counts them (three in a day: one week on all ports). Banning again for
+ * a rename could have locked out for a week, mail included, an address that already had two bans:
+ * it happened to the Mac in the test on the VM on 2026-10-30. If the database cannot be updated the
+ * rename goes ahead all the same, and the bans of the old jail expire within the hour.
  */
 public final class PublicSurfaceRename {
 
     private static final Logger LOGGER = Logger.getLogger(PublicSurfaceRename.class.getName());
 
-    /** Il nome di prima, dal file di dati: serve solo a trovarlo sul disco. */
+    /** The previous name, from the data file: it is needed only to find it on disk. */
     static String OLD_NAME = LegacyNames.single("publicSurface");
     static final String NEW_NAME = WebProtection.NAME;
-    /** La cartella dei file pubblici: quella di prima dal file di dati, quella di adesso da WebProtection. */
+    /** The folder of the public files: the previous one from the data file, the current one from WebProtection. */
     static final String OLD_FOLDER = LegacyNames.single("publicFolder");
     static final String NEW_FOLDER = WebProtection.PUBLIC_DIR;
 
@@ -84,23 +85,23 @@ public final class PublicSurfaceRename {
 
     record Report(Outcome outcome, String detail) {}
 
-    /** Dove stanno i file: fissi sul server, cartelle temporanee nella prova. */
+    /** Where the files are: fixed on the server, temporary folders in the test. */
     record Places(Path f2bDir, Path logDir, Path defaultNginxFolder, Path oldFolder, Path newFolder) {}
 
-    /** Quello che serve da nginx e fail2ban, separato per provarlo senza i servizi veri. */
+    /** What is needed from nginx and fail2ban, kept apart so that it can be tested without the real services. */
     interface Services {
-        /** Le cartelle che nginx include (nginx -T); vuota senza nginx, null se nginx non risponde. */
+        /** The folders nginx includes (nginx -T); empty without nginx, null if nginx does not answer. */
         List<String> nginxFolders();
         boolean nginxRunning();
         Shell.Result nginxTest();
         Shell.Result nginxReload();
         boolean fail2banRunning();
         Shell.Result fail2banReload();
-        /** Gli indirizzi bannati dalla jail, o null se fail2ban non ha quella jail. */
+        /** The addresses banned by the jail, or null if fail2ban does not have that jail. */
         List<String> banned(String jail);
         /**
-         * Nel database di fail2ban, i ban e la posizione nel log della jail {@code from} passano a
-         * {@code to} (col log {@code toLog} al posto di {@code fromLog}). Falso se non si e' potuto.
+         * In the fail2ban database, the bans and the log position of the jail {@code from} move to
+         * {@code to} (with the log {@code toLog} in place of {@code fromLog}). False if it could not be done.
          */
         boolean moveJailState(String from, String to, String fromLog, String toLog);
     }
@@ -109,8 +110,8 @@ public final class PublicSurfaceRename {
         try {
             Places at = new Places(Path.of(WebProtection.F2B_DIR), Path.of(WebProtection.LOG_DIR),
                     Path.of(WebProtection.PROPOSED_FOLDER), OLD_FOLDER.isEmpty() ? null : Path.of(OLD_FOLDER), Path.of(NEW_FOLDER));
-            // Ogni nome di prima, nell'ordine del file di dati: in italiano, poi col nome di prima del prodotto
-            // (mailpanel-public, fino al 17/11/2026). Un server ne ha al piu' uno.
+            // Every previous name, in the order of the data file: in Italian, then with the previous
+            // product name (mailpanel-public, until 2026-11-17). A server has at most one of them.
             for (String[] p : LegacyNames.pairs("publicSurface")) {
                 OLD_NAME = p[0];
                 Report r = migrate(at, new RealServices());
@@ -125,8 +126,8 @@ public final class PublicSurfaceRename {
 
     static Report migrate(Places at, Services sv) throws IOException {
         if (OLD_NAME.isEmpty()) return new Report(Outcome.NOTHING, "");
-        // Una passata di rinomina sul codice puo' cambiare ANCHE il nome vecchio qui dentro:
-        // senza questa guardia il risultato sarebbe un "niente da fare" falso.
+        // A rename pass over the code can ALSO change the old name in here:
+        // without this guard the result would be a false "nothing to do".
         if (OLD_NAME.equals(NEW_NAME))
             return new Report(Outcome.SAME_NAMES, "old and new name are the same: the old name was renamed too");
 
@@ -143,7 +144,7 @@ public final class PublicSurfaceRename {
         if (!exists(oldJail) && !exists(oldFilter) && oldLogs.isEmpty() && !exists(defaultConf) && !folderMoves && !staleDefault)
             return new Report(Outcome.NOTHING, "");
 
-        // Il file di nginx sta in una delle cartelle che nginx include: si chiede a nginx quali.
+        // The nginx file is in one of the folders nginx includes: nginx is asked which ones.
         List<String> folders = sv.nginxFolders();
         if (folders == null)
             return new Report(Outcome.NGINX_UNREADABLE, "nginx -T failed: nothing moved, retrying at the next start");
@@ -156,7 +157,7 @@ public final class PublicSurfaceRename {
         if (confs.size() > 1)
             return new Report(Outcome.AMBIGUOUS, "more than one " + OLD_NAME + ".conf for nginx " + confs + ": nothing moved");
         Path oldConf = confs.isEmpty() ? null : confs.iterator().next();
-        // Il file col nome nuovo che cita ancora la cartella vecchia: si riscrive al suo posto.
+        // The file with the new name that still cites the old folder: it is rewritten in place.
         Path staleConf = null;
         if (oldConf == null && oldFolder != null) {
             Set<Path> stale = new LinkedHashSet<>();
@@ -170,7 +171,7 @@ public final class PublicSurfaceRename {
             staleConf = stale.isEmpty() ? null : stale.iterator().next();
         }
 
-        // Le coppie da spostare: vecchio -> nuovo, e come cambia il contenuto (null: non cambia).
+        // The pairs to move: old -> new, and how the content changes (null: it does not change).
         java.util.function.UnaryOperator<String> rewrite = c -> renamed(c, oldFolder, newFolder);
         List<Move> moves = new ArrayList<>();
         for (Path p : oldLogs)
@@ -183,7 +184,7 @@ public final class PublicSurfaceRename {
         if (jailMoves) moves.add(new Move(oldJail, newJail, rewrite));
         boolean confTouched = oldConf != null || staleConf != null;
 
-        // Prima si guarda tutto, poi si tocca: nessun passo parte se uno solo non puo' partire.
+        // First look at everything, then touch: no step starts if even one of them cannot start.
         for (Move m : moves) {
             if (!m.from().equals(m.to()) && exists(m.to()))
                 return new Report(Outcome.BOTH_NAMES, "both " + m.from() + " and " + m.to() + " exist: nothing moved");
@@ -253,9 +254,9 @@ public final class PublicSurfaceRename {
     }
 
     /**
-     * Rimette ogni file com'era, nell'ordine inverso, e ricarica i servizi gia' ricaricati. Lo
-     * stato della jail nel database di fail2ban l'ha gia' rimesso il chiamante: ripartendo, la
-     * jail vecchia riprende i suoi ban da li'.
+     * Puts every file back as it was, in reverse order, and reloads the services already reloaded.
+     * The jail state in the fail2ban database has already been restored by the caller: on restarting,
+     * the old jail picks up its bans from there.
      */
     private static Report rollBack(Deque<Move> done, Services sv,
                                    boolean reloadNginx, boolean reloadF2b, String why) {
@@ -277,8 +278,8 @@ public final class PublicSurfaceRename {
     }
 
     /**
-     * Uno spostamento (un file o una cartella), con quello che serve per disfarlo. Non segue i link.
-     * from uguale a to: il file resta dov'e' e cambia solo dentro.
+     * A move (a file or a folder), with what is needed to undo it. Does not follow links.
+     * from equal to to: the file stays where it is and changes only inside.
      */
     private static final class Move {
         private final Path from, to;
@@ -292,7 +293,7 @@ public final class PublicSurfaceRename {
 
         void apply() throws IOException {
             if (rewrite != null) before = Files.readString(from, StandardCharsets.UTF_8);
-            // Si sposta il file invece di scriverne uno nuovo: proprietario e permessi restano.
+            // The file is moved instead of writing a new one: owner and permissions stay.
             if (!from.equals(to)) Files.move(from, to);
             if (rewrite != null) Files.writeString(to, rewrite.apply(before), StandardCharsets.UTF_8);
         }
@@ -303,7 +304,7 @@ public final class PublicSurfaceRename {
         }
     }
 
-    /** Il contenuto col nome nuovo, la firma di adesso e, se c'e', la cartella nuova al posto della vecchia. */
+    /** The content with the new name, the current signature and, if present, the new folder in place of the old one. */
     static String renamed(String content, Path oldFolder, Path newFolder) {
         String c = content.replace(OLD_NAME, NEW_NAME);
         if (oldFolder != null && newFolder != null)
@@ -311,7 +312,7 @@ public final class PublicSurfaceRename {
         return PanelMarker.current(c, PanelMarker.SIGNATURE);
     }
 
-    /** La cartella come percorso intero: seguita da "/", da un separatore o dalla fine, non da altre lettere. */
+    /** The folder as a whole path: followed by "/", by a separator or by the end, not by other letters. */
     private static Pattern folderReference(Path folder) {
         return Pattern.compile(Pattern.quote(folder.toString()) + "(?=[/;\\s\"']|$)", Pattern.MULTILINE);
     }
@@ -320,7 +321,7 @@ public final class PublicSurfaceRename {
         return folderReference(folder).matcher(content).find();
     }
 
-    /** NOME-access.log e le sue copie ruotate (NOME-access.log.0.bz2, ...), non quelle di altri. */
+    /** NAME-access.log and its rotated copies (NAME-access.log.0.bz2, ...), not those of others. */
     static List<Path> logsNamed(Path dir, String name) throws IOException {
         if (!Files.isDirectory(dir)) return List.of();
         String log = name + "-access.log";
@@ -336,7 +337,7 @@ public final class PublicSurfaceRename {
         return Files.exists(p, LinkOption.NOFOLLOW_LINKS);
     }
 
-    /** Il file del database dall'uscita di "fail2ban-client get dbfile", o null se non ne usa uno. */
+    /** The database file from the output of "fail2ban-client get dbfile", or null if it does not use one. */
     static String fail2banDatabase(String output) {
         if (output == null) return null;
         for (String line : output.split("\n")) {
@@ -348,7 +349,7 @@ public final class PublicSurfaceRename {
 
     private static final Pattern BANNED = Pattern.compile("Banned IP list:\\s*(.*)");
 
-    /** Gli indirizzi dalla riga "Banned IP list:" di fail2ban-client status. */
+    /** The addresses from the "Banned IP list:" line of fail2ban-client status. */
     static List<String> bannedFrom(String status) {
         Matcher m = BANNED.matcher(status == null ? "" : status);
         if (!m.find()) return List.of();
@@ -365,7 +366,7 @@ public final class PublicSurfaceRename {
             Shell.Result r = Shell.run(SHORT, "nginx", "-T");
             return r.success() ? WebProtection.includedFolders(r.output()) : null;
         }
-        // "one": funzionano anche se nginx_enable non e' YES in rc.conf.
+        // "one": they work even if nginx_enable is not YES in rc.conf.
         @Override public boolean nginxRunning() { return Shell.run(SHORT, "service", "nginx", "onestatus").success(); }
         @Override public Shell.Result nginxTest() { return Shell.run(SHORT, "nginx", "-t"); }
         @Override public Shell.Result nginxReload() { return Shell.run(SHORT, "service", "nginx", "onereload"); }
@@ -375,7 +376,7 @@ public final class PublicSurfaceRename {
         @Override public Shell.Result fail2banReload() { return Shell.run(LONG, "fail2ban-client", "reload"); }
         @Override public List<String> banned(String jail) {
             Shell.Result r = Shell.run(SHORT, "fail2ban-client", "status", jail);
-            // Come in BanActionRepair: "non esiste" si legge anche nel testo, non solo nel codice.
+            // As in BanActionRepair: "does not exist" is read in the text too, not only in the exit code.
             return r.success() && !r.output().contains("does not exist") ? bannedFrom(r.output()) : null;
         }
         @Override public boolean moveJailState(String from, String to, String fromLog, String toLog) {
@@ -384,8 +385,9 @@ public final class PublicSurfaceRename {
     }
 
     /**
-     * Nel database di fail2ban, i ban e la posizione nel log della jail {@code from} passano a {@code to}: la jail
-     * rinominata riparte coi ban che aveva, senza ribannare (vedi sopra, recidive). Anche per AuthJailRename.
+     * In the fail2ban database, the bans and the log position of the jail {@code from} move to {@code to}: the
+     * renamed jail restarts with the bans it had, without banning again (see above, recidive). Also used by
+     * AuthJailRename.
      */
     static boolean moveFail2banJailState(String from, String to, String fromLog, String toLog, String who) {
         String db = fail2banDatabase(Shell.run(Duration.ofSeconds(20), "fail2ban-client", "get", "dbfile").output());
@@ -395,11 +397,11 @@ public final class PublicSurfaceRename {
         }
         try (java.sql.Connection c = org.daemoxcp.mail.database.CatalogGuard.open("jdbc:sqlite:" + db);
              java.sql.Statement st = c.createStatement()) {
-            // fail2ban tiene il database aperto: si aspetta il suo turno invece di fallire.
+            // fail2ban keeps the database open: we wait for our turn instead of failing.
             st.execute(SqlCatalog.RENAME_BUSY_TIMEOUT);
             c.setAutoCommit(false);
             try {
-                // Lo schema e' quello di fail2ban (server/database.py): jails, bips, bans, logs.
+                // The schema is fail2ban's (server/database.py): jails, bips, bans, logs.
                 exec(c, SqlCatalog.RENAME_ADD_JAIL, to);
                 exec(c, SqlCatalog.RENAME_MOVE_JAIL_BIPS, to, from);
                 exec(c, SqlCatalog.RENAME_MOVE_JAIL_BANS, to, from);

@@ -9,25 +9,25 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
 /**
- * Quale OpenSSL usa davvero questo server, e per quanto tempo ancora riceve correzioni.
+ * Which OpenSSL this server really uses, and for how much longer it receives fixes.
  *
- * Il motivo per cui la domanda non si risponde leggendo le note di rilascio: le note dicono
- * cosa c'era il giorno della release, non cosa gira adesso su QUESTA macchina. Un port
- * installato, un aggiornamento a meta', un sistema piu' vecchio di quel che si crede: sono
- * tutte cose che si vedono solo chiedendo al binario che versione ha.
+ * Why the question cannot be answered by reading the release notes: the notes say what
+ * was there on the day of the release, not what runs now on THIS machine. An installed
+ * port, an update left halfway, a system older than one believes: these are all things
+ * that can be seen only by asking the binary which version it has.
  *
- * Le date sono quelle della strategia di rilascio ufficiale di OpenSSL, lette il 01/09/2026.
- * Non sono calcolate: sono trascritte, perche' inventare una regola ("ogni LTS dura 5 anni")
- * produrrebbe date plausibili e sbagliate.
+ * The dates are those of OpenSSL's official release strategy, read on 2026-09-01.
+ * They are not computed: they are transcribed, because inventing a rule ("every LTS lasts
+ * 5 years") would produce dates that are plausible and wrong.
  *
- * Attenzione a una distinzione che cambia il verdetto: **OpenSSL della base non e' il port.**
- * Quello della base lo mantiene il progetto FreeBSD, che pubblica correzioni per le release
- * supportate; il port segue il calendario di upstream. Confonderli fa suonare un allarme che
- * non c'e', o tacere uno che c'e'.
+ * Beware of a distinction that changes the verdict: **the base system's OpenSSL is not the
+ * port.** The base one is maintained by the FreeBSD project, which publishes fixes for the
+ * supported releases; the port follows upstream's calendar. Confusing them sounds an alarm
+ * that is not there, or silences one that is.
  */
 public class OpensslExpiry {
 
-    /** ramo -> fine del supporto upstream. Trascritte da openssl-library.org. */
+    /** branch -> end of upstream support. Transcribed from openssl-library.org. */
     private static final String[][] DEADLINES = {
         { "4.0",   "2027-05-14", "no"  },
         { "3.6",   "2026-11-01", "no"  },
@@ -43,11 +43,13 @@ public class OpensslExpiry {
 
     private OpensslExpiry() {}
 
-    /* ===================================================================
-     * Parte pura, provabile senza server
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Pure part, testable without a server
+     * ===================================================================
+     */
 
-    /** Il ramo di una versione: "3.5.6" -> "3.5", "1.1.1w" -> "1.1.1". */
+    /** The branch of a version: "3.5.6" -> "3.5", "1.1.1w" -> "1.1.1". */
     public static String branch(String version) {
         if (version == null) return null;
         String v = version.trim();
@@ -66,7 +68,7 @@ public class OpensslExpiry {
         return sb.toString();
     }
 
-    /** La data di fine supporto di quel ramo, o null se il ramo non e' in tabella. */
+    /** The end-of-support date of that branch, or null if the branch is not in the table. */
     public static String endOfSupport(String version) {
         String r = branch(version);
         if (r == null) return null;
@@ -81,7 +83,7 @@ public class OpensslExpiry {
         return false;
     }
 
-    /** Giorni che mancano. Negativi se la data e' passata. "oggi" si passa: cosi' si prova. */
+    /** Days left. Negative if the date has passed. "today" is passed in: that way it can be tested. */
     public static Long daysLeft(String version, LocalDate today) {
         String f = endOfSupport(version);
         if (f == null || today == null) return null;
@@ -92,7 +94,7 @@ public class OpensslExpiry {
         }
     }
 
-    /** 0 = a posto, 1 = scade presto (entro 90 giorni), 2 = scaduto, 3 = non lo so. */
+    /** 0 = fine, 1 = expires soon (within 90 days), 2 = expired, 3 = unknown. */
     public static int urgency(String version, LocalDate today) {
         Long g = daysLeft(version, today);
         if (g == null) return 3;
@@ -101,7 +103,7 @@ public class OpensslExpiry {
         return 0;
     }
 
-    /** La versione dentro l'uscita di "openssl version": "OpenSSL 3.5.6 30 Sep 2025" -> 3.5.6 */
+    /** The version inside the output of "openssl version": "OpenSSL 3.5.6 30 Sep 2025" -> 3.5.6 */
     public static String extractVersion(String output) {
         if (output == null) return null;
         for (String line : output.split("\n")) {
@@ -113,9 +115,11 @@ public class OpensslExpiry {
         return null;
     }
 
-    /* ===================================================================
-     * Parte che interroga il server
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Part that queries the server
+     * ===================================================================
+     */
 
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
@@ -129,14 +133,14 @@ public class OpensslExpiry {
                 I18n.tr("server.sslexp.port")));
         r.put("installs", found);
 
-        // Chi vince nel PATH del pannello: e' quello che finirebbe negli script.
+        // Whoever wins in the panel's PATH: it is the one that would end up in the scripts.
         RunResult which = run("sh", "-c", "command -v openssl");
         r.put("inPath", which.code == 0 ? which.output.trim() : "");
 
         RunResult fv = run("freebsd-version", "-k");
         if (fv.code == 0) r.put("freebsd", fv.output.trim());
 
-        // Il verdetto guarda solo cio' che c'e' davvero.
+        // The verdict looks only at what is really there.
         int worst = 0;
         boolean something = false;
         for (int i = 0; i < found.length(); i++) {

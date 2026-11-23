@@ -8,12 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Resetting the memory of the automatic replies, and the boot repair of what the old reset left (reperto 219).
+ * Resetting the memory of the automatic replies, and the boot repair of what the old reset left (finding 219).
  *
- * Until 10/11/2026 the panel's "reset tracking" also deleted the compiled binary beside the panel's Sieve rules and ran
+ * Until 2026-11-10 the panel's "reset tracking" also deleted the compiled binary beside the panel's Sieve rules and ran
  * `service dovecot restart`. Pigeonhole keeps the senders already answered in .dovecot.lda-dupes in the mailbox's home,
  * and nowhere else. Without a system:
- *  1. duplicatesOf(): the file is vmail/domain/user/home/.dovecot.lda-dupes (Dovecot's home, reperto 217), and an
+ *  1. duplicatesOf(): the file is vmail/domain/user/home/.dovecot.lda-dupes (Dovecot's home, finding 217), and an
  *     address that is not one gives nothing
  *     (it comes from MySQL, and root makes a path of it);
  *  2. reset() on a folder like /var/vmail: only that file goes; the mail, the lock folder beside it and the other

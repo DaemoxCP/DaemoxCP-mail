@@ -38,23 +38,23 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * I conteggi di posta mandata e ricevuta, letti dal registro di Postfix: prima la tabella email_statistics c'era, la
- * pagina Statistiche la leggeva, e nessuno la scriveva.
+ * The counts of mail sent and received, read from the Postfix log: before, the email_statistics table existed, the
+ * "Statistics" page read it, and nobody wrote it.
  *
- * <p>Ogni minuto la parte root legge le righe nuove di /var/log/maillog (dalla posizione salvata in {@link #STATE};
- * dopo la rotazione di mezzanotte, il resto del file vecchio: da maillog.0 finche' newsyslog non l'ha compresso, poi da
- * maillog.0.bz2) e conta, per giorno (UTC, r13), casella e dominio:
+ * <p>Every minute the root part reads the new lines of /var/log/maillog (from the position saved in {@link #STATE};
+ * after the midnight rotation, the rest of the old file: from maillog.0 until newsyslog has compressed it, then from
+ * maillog.0.bz2) and counts, per day (UTC, r13), mailbox and domain:
  * <ul>
- *   <li>ricevuti: le consegne riuscite a una casella (lmtp, status=sent);</li>
- *   <li>mandati: le consegne riuscite, a chiunque, di un messaggio mandato da una casella autenticata
- *       (sasl_username), una per destinatario;</li>
- *   <li>respinti (bounced): le consegne fallite per sempre, della casella che aveva mandato o, per la posta in arrivo,
- *       della casella che doveva ricevere;</li>
- *   <li>spam e virus: i messaggi che Rspamd ha rifiutato (milter-reject), della casella a cui erano diretti.</li>
+ *   <li>received: the successful deliveries to a mailbox (lmtp, status=sent);</li>
+ *   <li>sent: the successful deliveries, to anyone, of a message sent by an authenticated mailbox
+ *       (sasl_username), one per recipient;</li>
+ *   <li>bounced: the permanently failed deliveries, for the mailbox that had sent or, for incoming mail, the
+ *       mailbox that was to receive;</li>
+ *   <li>spam and virus: the messages Rspamd rejected (milter-reject), for the mailbox they were addressed to.</li>
  * </ul>
- * Si contano solo le caselle del pannello: un indirizzo esterno non finisce mai nella tabella. Alla prima lettura si
- * parte dalla fine del file: i conteggi cominciano da quando gira questa versione, senza contare due volte quello che
- * c'era. Le righe di email_statistics piu' vecchie di {@value #KEEP_DAYS} giorni si tolgono una volta al giorno.
+ * Only the panel's mailboxes are counted: an external address never ends up in the table. At the first read it
+ * starts from the end of the file: the counts begin from when this version runs, without counting twice what was
+ * there. The rows of email_statistics older than {@value #KEEP_DAYS} days are removed once a day.
  */
 public final class MailLogStats {
 
@@ -62,9 +62,9 @@ public final class MailLogStats {
 
     static final Path LOG = Path.of("/var/log/maillog");
     static final Path ROTATED = Path.of("/var/log/maillog.0.bz2");
-    /** Il file vecchio appena girato, prima che newsyslog lo comprima (flag J: aspetta circa 10 s, poi bzip2). */
+    /** The old file just rotated, before newsyslog compresses it (flag J: it waits about 10 s, then bzip2). */
     static final Path ROTATED_PLAIN = Path.of("/var/log/maillog.0");
-    /** Quanto si aspetta il file vecchio, intero o compresso, prima di lasciar perdere il suo resto. */
+    /** How long to wait for the old file, whole or compressed, before giving up on its remainder. */
     static final Duration ROTATION_WAIT = Duration.ofMinutes(10);
     static final Path STATE = Path.of("/var/db/daemoxcp-mail/maillog-position.txt");
     static final int KEEP_DAYS = 400;
@@ -72,9 +72,9 @@ public final class MailLogStats {
 
     private MailLogStats() {}
 
-    // ===================== le righe: si provano senza il registro vero =====================
+    // ===================== the lines: tested without the real log =====================
 
-    /** Un conteggio: il giorno (UTC), il tipo (sent, received, spam, virus, bounced), l'indirizzo, i byte. */
+    /** A count: the day (UTC), the type (sent, received, spam, virus, bounced), the address, the bytes. */
     record Event(LocalDate day, String type, String address, long bytes) {}
 
     private static final Pattern LINE = Pattern.compile(
@@ -86,7 +86,10 @@ public final class MailLogStats {
     private static final Pattern SASL = Pattern.compile("sasl_username=([^,\\s]+)");
     private static final DateTimeFormatter BSD = DateTimeFormatter.ofPattern("MMM d HH:mm:ss yyyy", Locale.ENGLISH);
 
-    /** Le righe una dopo l'altra: ricorda di ogni messaggio in coda chi l'ha mandato (autenticato) e quanto e' grande. */
+    /**
+     * The lines one after the other: for every queued message it remembers who sent it (authenticated) and how big
+     * it is.
+     */
     static final class Parser {
         private final ZoneId zone;
         private final LinkedHashMap<String, String[]> queue = new LinkedHashMap<>(16, 0.75f, false);
@@ -95,7 +98,7 @@ public final class MailLogStats {
             this.zone = zone;
         }
 
-        /** I conteggi di una riga (spesso nessuno). now serve a dare l'anno alle date di syslog, che non lo hanno. */
+        /** The counts of a line (often none). now is used to give the year to syslog dates, which lack it. */
         List<Event> line(String line, ZonedDateTime now) {
             Matcher m = LINE.matcher(line);
             if (!m.matches()) return List.of();
@@ -138,7 +141,7 @@ public final class MailLogStats {
             }
         }
 
-        /** Rspamd ha rifiutato il messaggio: spam, o virus se lo dice. Della casella a cui era diretto. */
+        /** Rspamd rejected the message: spam, or virus if it says so. Counted for the mailbox it was addressed to. */
         private List<Event> milterReject(String msg, String ts, ZonedDateTime now) {
             int at = msg.indexOf("milter-reject:");
             if (at < 0) return List.of();
@@ -151,12 +154,15 @@ public final class MailLogStats {
 
         private String[] info(String qid) {
             String[] i = queue.computeIfAbsent(qid, k -> new String[2]);
-            // Le code che non finiscono con «removed» (righe perse, un riavvio) non devono crescere senza fine.
+            // Queue entries that do not end with "removed" (lost lines, a restart) must not grow without end.
             if (queue.size() > 50_000) queue.remove(queue.keySet().iterator().next());
             return i;
         }
 
-        /** Il giorno UTC di una data di syslog (senza anno: l'anno di now, o quello prima se cadrebbe nel futuro). */
+        /**
+         * The UTC day of a syslog date (without a year: the year of now, or the one before if it would fall in the
+         * future).
+         */
         LocalDate day(String ts, ZonedDateTime now) {
             try {
                 if (Character.isDigit(ts.charAt(0))) return OffsetDateTime.parse(ts).withOffsetSameInstant(ZoneOffset.UTC).toLocalDate();
@@ -174,7 +180,7 @@ public final class MailLogStats {
         }
     }
 
-    /** I conteggi sommati per giorno, tipo e indirizzo: una scrittura per gruppo invece che per messaggio. */
+    /** The counts summed by day, type and address: one write per group instead of per message. */
     static Map<List<Object>, long[]> aggregate(List<Event> events) {
         Map<List<Object>, long[]> out = new LinkedHashMap<>();
         for (Event e : events) {
@@ -185,12 +191,12 @@ public final class MailLogStats {
         return out;
     }
 
-    // ===================== la lettura del registro =====================
+    // ===================== reading the log =====================
 
     private static final Parser PARSER = new Parser(systemZone());
     private static volatile LocalDate lastCleanup;
 
-    /** Il fuso del sistema (quello di syslog): /etc/localtime, non quello della JVM se qualcuno l'ha cambiato. */
+    /** The system time zone (the one syslog uses): /etc/localtime, not the JVM's if someone has changed it. */
     static ZoneId systemZone() {
         try {
             Path target = Files.readSymbolicLink(Path.of("/etc/localtime"));
@@ -218,14 +224,15 @@ public final class MailLogStats {
         }
     }
 
-    /** Una lettura: le righe nuove, i conteggi nel database, la posizione salvata. */
+    /** One read: the new lines, the counts into the database, the saved position. */
     static synchronized void collect() throws Exception {
         if (Main.mailDatabase == null || !Files.isRegularFile(LOG, LinkOption.NOFOLLOW_LINKS)) return;
         long inode = ((Number) Files.getAttribute(LOG, "unix:ino")).longValue();
         long size = Files.size(LOG);
         long[] saved = readState();
         if (saved == null) {
-            // La prima volta si parte dalla fine: quello che c'era non si conta (ne' due volte, se lo stato si perde).
+            // The first time it starts from the end: what was there is not counted (nor counted twice, if the state
+            // is lost).
             writeState(inode, size);
             LOGGER.info("[MailLogStats] Counting sent and received mail from now on (" + LOG + ")");
             return;
@@ -233,13 +240,14 @@ public final class MailLogStats {
         List<String> lines = new ArrayList<>();
         long offset = saved[1];
         if (saved[0] == inode && size < offset) {
-            // Lo stesso file, svuotato sul posto: non c'e' un file vecchio da finire (prima si leggeva il .bz2 di ieri
-            // da quella posizione, righe gia' contate o d'altri giorni).
+            // The same file, emptied in place: there is no old file to finish (before, yesterday's .bz2 was read
+            // from that position: lines already counted or from other days).
             offset = 0;
         } else if (saved[0] != inode) {
-            // Il file e' girato. Il resto di quello vecchio, se c'e' gia' (intero o compresso); se no si riprova al giro
-            // dopo, senza toccare la posizione: misurato sulla VM il 21/11/2026, newsyslog lascia maillog.0 intero per
-            // circa 10 s e solo dopo lo comprime, e alle 00:00:02 del server vero il .bz2 non c'era ancora.
+            // The file has rotated. The rest of the old one, if it is already there (whole or compressed); if not, it
+            // is tried again at the next round, without touching the position: measured on the VM on 2026-11-21,
+            // newsyslog leaves maillog.0 whole for about 10 s and only afterwards compresses it, and at 00:00:02 on the
+            // production server the .bz2 was not there yet.
             List<String> rest = rotatedRest(ROTATED_PLAIN, ROTATED, saved[0], offset);
             Instant now = Instant.now();
             if (rest == null) {
@@ -263,7 +271,7 @@ public final class MailLogStats {
         cleanupOnceADay();
     }
 
-    /** Le righe complete fra from e to (l'ultima riga a meta' resta per la prossima volta). Quanti byte ha consumato. */
+    /** The complete lines between from and to (a last half line stays for next time). How many bytes it consumed. */
     static long readLines(Path file, long from, long to, List<String> out) throws IOException {
         if (to <= from) return 0;
         byte[] buf = new byte[(int) (to - from)];
@@ -279,21 +287,23 @@ public final class MailLogStats {
         return last + 1;
     }
 
-    /** Da quando si aspetta il file vecchio dopo una rotazione (null: non si aspetta). */
+    /** Since when the old file has been awaited after a rotation (null: not waiting). */
     private static volatile Instant rotationWaitSince;
 
-    /** Si smette di aspettare il file vecchio dopo {@link #ROTATION_WAIT}. */
+    /** Waiting for the old file stops after {@link #ROTATION_WAIT}. */
     static boolean gaveUpWaiting(Instant since, Instant now) {
         return !now.isBefore(since.plus(ROTATION_WAIT));
     }
 
     /**
-     * Il resto del file di ieri dopo i byte gia' letti, o null se non c'e' ancora: si riprova al giro dopo.
+     * The rest of yesterday's file after the bytes already read, or null if it is not there yet: it is tried again
+     * at the next round.
      * <ul>
-     *   <li>plain c'e' ed e' proprio il file che si leggeva (stesso inode): da li', anche se bzip2 sta gia' scrivendo un
-     *       .bz2 a meta';</li>
-     *   <li>plain non c'e' piu' e c'e' il .bz2: bzip2 ha finito (toglie l'originale solo alla fine), dal .bz2;</li>
-     *   <li>altrimenti null.</li>
+     *   <li>plain is there and is exactly the file that was being read (same inode): from there, even if bzip2 is
+     *       already writing a half-done .bz2;</li>
+     *   <li>plain is gone and the .bz2 is there: bzip2 has finished (it removes the original only at the end), from
+     *       the .bz2;</li>
+     *   <li>otherwise null.</li>
      * </ul>
      */
     static List<String> rotatedRest(Path plain, Path bz2, long oldInode, long skip) {
@@ -312,7 +322,7 @@ public final class MailLogStats {
         return bz2Rest(bz2, skip);
     }
 
-    /** Il resto di un file compresso, dopo i byte gia' letti. */
+    /** The rest of a compressed file, after the bytes already read. */
     static List<String> bz2Rest(Path rotated, long skip) {
         List<String> out = new ArrayList<>();
         try {
@@ -333,7 +343,10 @@ public final class MailLogStats {
         return out;
     }
 
-    /** I conteggi nella tabella: casella, dominio e totale del server, come li somma la pagina. Solo le caselle del pannello. */
+    /**
+     * The counts into the table: mailbox, domain and server total, as the page sums them. Only the panel's
+     * mailboxes.
+     */
     static void write(Map<List<Object>, long[]> groups) throws Exception {
         if (groups.isEmpty()) return;
         Map<String, MailDatabase.Mailbox> boxes = new HashMap<>();

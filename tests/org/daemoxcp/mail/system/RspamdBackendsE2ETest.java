@@ -10,7 +10,7 @@ import org.daemoxcp.mail.security.PanelSecrets;
 import org.daemoxcp.mail.util.Shell;
 
 /**
- * Reperti 235-237 on the VM's real redis, clamd and rspamd, as root with -De2e.vm=yes. The VM must start as an
+ * Findings 235-237 on the VM's real redis, clamd and rspamd, as root with -De2e.vm=yes. The VM must start as an
  * installation of before: redis.conf as the package installs it, rspamd's local.d/redis.conf on 127.0.0.1, clamd.conf
  * without group or mode for the socket, no override.d/worker-controller.inc, rspamd outside the groups redis and clamav.
  *  1. before: port 6379 open and `nobody` gets PONG; clamd's socket 0666 and `nobody` gets its VERSION; the controller

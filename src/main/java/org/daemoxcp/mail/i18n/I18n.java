@@ -18,31 +18,31 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Le lingue dell'interfaccia: quelle che hanno un file in lang/ (oggi italiano e inglese).
+ * The interface languages: those that have a file in lang/ (today Italian and English).
  *
- * I testi stanno solo in lang/(codice).json, dentro il jar: it.json ed en.json completi e con le stesse chiavi
- * (lo controlla I18nTest), ogni altra lingua anche parziale. Una lingua nuova e' un file in piu' col codice ISO
- * 639-1 (es.json, fr.json): la si trova da sola all'avvio. Un testo che manca in una lingua si mostra in inglese,
- * e se manca anche li' in italiano (la lingua in cui il pannello e' scritto).
+ * The texts live only in lang/(code).json, inside the jar: it.json and en.json complete and with the same keys
+ * (I18nTest checks it), every other language even partial. A new language is one more file with the ISO
+ * 639-1 code (es.json, fr.json): it is found by itself at boot. A text missing in a language is shown in
+ * English, and if it is missing there too, in Italian (the language the panel is written in).
  *
- * Le pagine scrivono {{t:chiave}} dove va un testo e il server lo sostituisce a ogni richiesta, gia' come HTML
- * sicuro; gli script chiamano t('chiave') e leggono lo stesso dizionario da /i18n/(lingua).js, che il browser
- * tiene in cache.
+ * The pages write {{t:key}} where a text goes and the server replaces it at every request, already as safe
+ * HTML; the scripts call t('key') and read the same dictionary from /i18n/(language).js, which the browser
+ * caches.
  *
- * La lingua di una richiesta: quella salvata nell'account, se c'e' una sessione; poi il cookie
- * __Host-lang (la scelta fatta su questo browser, anche prima di entrare); poi la lingua del
- * browser (Accept-Language); e per un browser che non chiede ne' italiano ne' inglese, l'inglese.
+ * The language of a request: the one saved in the account, if there is a session; then the cookie
+ * __Host-lang (the choice made on this browser, even before logging in); then the browser's language
+ * (Accept-Language); and for a browser that asks for neither Italian nor English, English.
  */
 public final class I18n {
 
-    /** La lingua in cui il pannello e' scritto: l'ultima della catena dei testi che mancano. */
+    /** The language the panel is written in: the last in the chain for missing texts. */
     public static final String SOURCE_LANGUAGE = "it";
-    /** Per un browser che non chiede nessuna lingua del pannello, e la prima a cui si chiede un testo che manca. */
+    /** For a browser that asks for none of the panel's languages, and the first one asked for a missing text. */
     public static final String FALLBACK_LANGUAGE = "en";
-    /** Un codice di lingua ISO 639-1: due lettere minuscole, e nient'altro arriva mai a un percorso. */
+    /** An ISO 639-1 language code: two lowercase letters, and nothing else ever reaches a path. */
     static final Pattern LANGUAGE_CODE = Pattern.compile("[a-z]{2}");
 
-    /** Le lingue del pannello: italiano e inglese per primi, poi quelle che hanno un file in lang/, in ordine di codice. */
+    /** The panel's languages: Italian and English first, then those that have a file in lang/, in code order. */
     public static final List<String> LANGUAGES = discover(code -> I18n.class.getResource("/lang/" + code + ".json") != null);
     public static final String COOKIE = "__Host-lang";
 
@@ -57,7 +57,7 @@ public final class I18n {
     private static final ThreadLocal<String> CURRENT = new ThreadLocal<>();
 
     static {
-        // Prima l'italiano: l'inglese prende da li' i testi che non ha ancora.
+        // Italian first: English takes from there the texts it does not have yet.
         for (String lang : LANGUAGES) BUNDLES.put(lang, load(lang));
         for (String lang : LANGUAGES) {
             String script = buildScript(lang);
@@ -69,8 +69,9 @@ public final class I18n {
     private I18n() {}
 
     /**
-     * Le lingue che hanno un file: si provano i codici ISO 639-1 che Java conosce (Locale.getISOLanguages), mai un
-     * nome letto da fuori. Italiano e inglese per primi; il loro file c'e' sempre (se manca, problems() lo dice).
+     * The languages that have a file: the ISO 639-1 codes Java knows (Locale.getISOLanguages) are tried, never a
+     * name read from outside. Italian and English first; their file is always there (if it is missing, problems()
+     * says so).
      */
     static List<String> discover(java.util.function.Predicate<String> exists) {
         List<String> out = new ArrayList<>(List.of(SOURCE_LANGUAGE, FALLBACK_LANGUAGE));
@@ -81,12 +82,12 @@ public final class I18n {
         return List.copyOf(out);
     }
 
-    /** La catena dei testi di una lingua: lei, poi l'inglese, poi l'italiano (senza doppioni). */
+    /** The text chain of a language: itself, then English, then Italian (without duplicates). */
     static List<String> chain(String lang) {
         return chain(lang, LANGUAGES);
     }
 
-    /** La catena fra le lingue date: una lingua che non c'e' vale l'italiano, come normalize(). */
+    /** The chain among the given languages: a language that does not exist counts as Italian, like normalize(). */
     static List<String> chain(String lang, List<String> languages) {
         java.util.LinkedHashSet<String> c = new java.util.LinkedHashSet<>();
         c.add(lang != null && languages.contains(lang) ? lang : SOURCE_LANGUAGE);
@@ -95,7 +96,10 @@ public final class I18n {
         return List.copyOf(c);
     }
 
-    /** Il nome di una lingua nella lingua stessa, con la maiuscola («Italiano», «English», «Español»), per il selettore. */
+    /**
+     * The name of a language in the language itself, capitalised (`Italiano`, `English`, `Español`), for the
+     * selector.
+     */
     public static String nativeName(String code) {
         Locale l = Locale.of(code);
         String name = l.getDisplayLanguage(l);
@@ -104,19 +108,19 @@ public final class I18n {
     }
 
     /**
-     * La categoria del plurale per un numero intero, secondo le regole cardinali di CLDR 49 (unicode.org,
-     * cldr-core/supplemental/plurals.json, letto il 18/11/2026): una delle sei, che nei file di lingua sono i
-     * suffissi chiave.zero, chiave.one, chiave.two, chiave.few, chiave.many e chiave.other. Il pannello conta solo
-     * interi (v = 0, i = n): qui le regole ridotte a quel caso, per le lingue di PLURAL_RULES; ogni altra lingua
-     * segue l'inglese, che per molte e' sbagliato (hindi e persiano usano chiave.one anche per 0, il lituano
-     * chiave.few per 2..9): per questo I18nTest vuole ogni lingua del pannello in PLURAL_RULES, e la prova nel
-     * browser confronta queste risposte con quelle di Intl.PluralRules. Nei file di lingua chiave.(categoria); se
-     * una lingua non ha quella forma vale chiave.other. Negli script la stessa scelta la fa il browser.
+     * The plural category for an integer, according to the cardinal rules of CLDR 49 (unicode.org,
+     * cldr-core/supplemental/plurals.json, read on 2026-11-18): one of the six, which in the language files are the
+     * suffixes key.zero, key.one, key.two, key.few, key.many and key.other. The panel counts only
+     * integers (v = 0, i = n): here the rules reduced to that case, for the languages of PLURAL_RULES; every other
+     * language follows English, which for many is wrong (Hindi and Persian use key.one for 0 too, Lithuanian
+     * key.few for 2..9): this is why I18nTest wants every panel language in PLURAL_RULES, and the test in the
+     * browser compares these answers with those of Intl.PluralRules. In the language files key.(category); if
+     * a language does not have that form, key.other applies. In the scripts the browser makes the same choice.
      */
     public static String pluralCategory(String lang, long count) {
         long n = Math.abs(count), mod10 = n % 10, mod100 = n % 100;
         return switch (lang == null ? "" : lang) {
-            // one = i = 1 and v = 0; many = i != 0 and i % 1000000 = 0 (it, es, pt-PT; fr e pt con one = i = 0..1)
+            // one = i = 1 and v = 0; many = i != 0 and i % 1000000 = 0 (it, es, pt-PT; fr and pt with one = i = 0..1)
             case "it", "es" -> n == 1 ? "one" : n != 0 && n % 1_000_000 == 0 ? "many" : "other";
             case "fr", "pt" -> n <= 1 ? "one" : n % 1_000_000 == 0 ? "many" : "other";
             case "pl" -> n == 1 ? "one" : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? "few" : "many";
@@ -133,17 +137,17 @@ public final class I18n {
     }
 
     /**
-     * Le lingue di cui pluralCategory conosce la regola: quelle scritte qui sopra e quelle per cui la regola
-     * dell'inglese (uno, altrimenti altro) e' giusta anche per CLDR. Una lingua nuova del pannello deve stare qui.
+     * The languages whose rule pluralCategory knows: those written above and those for which the English rule
+     * (one, otherwise other) is right for CLDR too. A new panel language must be here.
      */
     public static final java.util.Set<String> PLURAL_RULES = java.util.Set.of(
             "it", "es", "fr", "pt", "pl", "ru", "uk", "cs", "sk", "ro", "ar", "he", "ja", "zh", "ko", "vi", "th", "id",
             "en", "de", "nl", "sv", "da", "nb", "fi", "et", "el", "hu", "tr", "bg");
 
     /**
-     * Un file di lingua. Se e' rotto il pannello non si ferma: si scrive il problema (le prove lo
-     * leggono da problems()) e si va avanti con quello che c'e', mostrando le chiavi al posto dei
-     * testi che mancano.
+     * A language file. If it is broken the panel does not stop: the problem is recorded (the tests
+     * read it from problems()) and it goes on with what there is, showing the keys in place of the
+     * missing texts.
      */
     private static Map<String, String> load(String lang) {
         String path = "/lang/" + lang + ".json";
@@ -168,22 +172,22 @@ public final class I18n {
         return Collections.unmodifiableMap(bundle);
     }
 
-    /** I problemi trovati leggendo i file di lingua: vuoto se e' tutto a posto. */
+    /** The problems found reading the language files: empty if everything is fine. */
     public static List<String> problems() {
         return List.copyOf(PROBLEMS);
     }
 
-    /** Il dizionario di una lingua, solo i testi che ha davvero (per le prove). */
+    /** The dictionary of a language, only the texts it really has (for the tests). */
     public static Map<String, String> bundle(String lang) {
         return BUNDLES.getOrDefault(lang, Map.of());
     }
 
-    /** La lingua se e' una di quelle del pannello, altrimenti quella in cui e' scritto. */
+    /** The language if it is one of the panel's, otherwise the one it is written in. */
     public static String normalize(String lang) {
         return lang != null && LANGUAGES.contains(lang) ? lang : SOURCE_LANGUAGE;
     }
 
-    /** Un testo nella lingua chiesta; se manca, in inglese, poi in italiano; se manca anche li', la chiave stessa. */
+    /** A text in the requested language; if missing, in English, then in Italian; if missing there too, the key itself. */
     public static String t(String lang, String key) {
         for (String l : chain(lang)) {
             String text = BUNDLES.getOrDefault(l, Map.of()).get(key);
@@ -192,13 +196,13 @@ public final class I18n {
         return key;
     }
 
-    /** Se la catena della lingua ha un testo per la chiave. */
+    /** Whether the language's chain has a text for the key. */
     static boolean has(String lang, String key) {
         for (String l : chain(lang)) if (BUNDLES.getOrDefault(l, Map.of()).containsKey(key)) return true;
         return false;
     }
 
-    /** Un testo con i suoi valori: {nome} diventa params.get("nome"). Il risultato non e' HTML. */
+    /** A text with its values: {name} becomes params.get("name"). The result is not HTML. */
     public static String t(String lang, String key, Map<String, ?> params) {
         return format(t(lang, key), params);
     }
@@ -216,16 +220,16 @@ public final class I18n {
     }
 
     /**
-     * Le sostituzioni di ogni pagina: {{t:chiave}} con il testo gia' come HTML sicuro (vale anche
-     * dentro un attributo), {{lang}} con la lingua, {{i18nVersion}} con l'impronta del dizionario
-     * (per l'indirizzo di /i18n/(lingua).js: quando cambia un testo cambia l'indirizzo, e il
-     * browser non usa quello vecchio in cache). Negli script non si usa {{t:...}}: li' t('chiave').
+     * The substitutions of every page: {{t:key}} with the text already as safe HTML (it also works
+     * inside an attribute), {{lang}} with the language, {{i18nVersion}} with the fingerprint of the dictionary
+     * (for the address of /i18n/(language).js: when a text changes the address changes, and the
+     * browser does not use the old one from its cache). In the scripts {{t:...}} is not used: there, t('key').
      *
-     * Le chiavi che finiscono in ".html" entrano cosi' come sono: sono frasi con dentro un
-     * grassetto o un comando (strong, em, code, kbd, br), che non si possono spezzare in pezzi
-     * perche' l'ordine delle parole cambia da una lingua all'altra. Stanno nei file di lingua del
-     * pannello, non arrivano mai da chi usa il pannello, e I18nTest controlla che non abbiano
-     * altri tag.
+     * The keys that end in ".html" go in as they are: they are sentences with something bold
+     * or a command inside (strong, em, code, kbd, br), which cannot be split into pieces
+     * because the word order changes from one language to another. They are in the panel's language
+     * files, never come from those who use the panel, and I18nTest checks that they have no
+     * other tags.
      */
     public static String render(String html, String lang) {
         String l = normalize(lang);
@@ -239,7 +243,7 @@ public final class I18n {
         return out.toString().replace("{{lang}}", l).replace("{{i18nVersion}}", VERSIONS.get(l));
     }
 
-    /** Il dizionario per gli script della pagina, con t() e tn(): e' quello che serve /i18n/(lingua).js. */
+    /** The dictionary for the page's scripts, with t() and tn(): it is what /i18n/(language).js serves. */
     public static String script(String lang) {
         return SCRIPTS.get(normalize(lang));
     }
@@ -249,7 +253,7 @@ public final class I18n {
     }
 
     private static String buildScript(String lang) {
-        // Completo, come t() qui sopra: l'italiano sotto, poi l'inglese, poi la lingua stessa.
+        // Complete, like t() above: Italian underneath, then English, then the language itself.
         List<String> c = new ArrayList<>(chain(lang));
         java.util.Collections.reverse(c);
         Map<String, String> all = new TreeMap<>();
@@ -260,10 +264,10 @@ public final class I18n {
     }
 
     /**
-     * t(chiave, valori) e tn(chiave, numero, valori) per gli script. tn sceglie la forma del plurale della lingua
-     * della pagina con Intl.PluralRules (le categorie di CLDR: chiave.one, chiave.few, chiave.many...), e se il
-     * file non ha quella forma usa chiave.other; il numero e' gia' fra i valori come {n}. I valori entrano cosi'
-     * come sono: il risultato e' testo, da mettere con textContent o da passare per escHtml() prima di innerHTML.
+     * t(key, values) and tn(key, number, values) for the scripts. tn picks the plural form of the page's language
+     * with Intl.PluralRules (the CLDR categories: key.one, key.few, key.many...), and if the file does not
+     * have that form it uses key.other; the number is already among the values as {n}. The values go in as they
+     * are: the result is text, to be set with textContent or passed through escHtml() before innerHTML.
      */
     private static final String T_FUNCTIONS = """
         function t(key, params) {
@@ -302,13 +306,13 @@ public final class I18n {
         }
         """;
 
-    // ---------- la lingua della richiesta in corso, per i messaggi del server ----------
+    // ---------- the language of the current request, for the server's messages ----------
 
     /**
-     * La lingua della richiesta che questo thread sta servendo: la fissa SSLMailServer all'ingresso
-     * di ogni handler (context) e la toglie all'uscita. Cosi' il codice del server traduce i suoi
-     * messaggi con tr() senza passarsi la lingua di funzione in funzione. Un lavoro che continua su
-     * un altro thread se la porta dietro: current() alla partenza, setCurrent() nel thread nuovo.
+     * The language of the request this thread is serving: SSLMailServer sets it on entering
+     * every handler (context) and removes it on exit. This way the server code translates its
+     * messages with tr() without passing the language from function to function. A job that continues on
+     * another thread carries it along: current() at the start, setCurrent() in the new thread.
      */
     public static void setCurrent(String lang) {
         CURRENT.set(normalize(lang));
@@ -318,34 +322,37 @@ public final class I18n {
         CURRENT.remove();
     }
 
-    /** La lingua del processo fuori da una richiesta: l'italiano, salvo la console, che fissa la sua (Main). */
+    /** The process language outside a request: Italian, except for the console, which sets its own (Main). */
     private static volatile String processLanguage = SOURCE_LANGUAGE;
 
     /**
-     * La lingua di questo processo fuori da una richiesta. La fissa una volta la console (il menu a schermo e i comandi
-     * da riga di comando, Main), con la lingua del pannello; il servizio no: le sue righe d'avvio sono registri.
+     * The language of this process outside a request. The console sets it once (the on-screen menu and the
+     * command-line commands, Main), with the panel's language; the service does not: its startup lines are logs.
      */
     public static void setProcessLanguage(String lang) {
         processLanguage = normalize(lang);
     }
 
-    /** La lingua della richiesta in corso; fuori da una richiesta, quella del processo (l'italiano, o la console). */
+    /** The language of the current request; outside a request, that of the process (Italian, or the console's). */
     public static String current() {
         String lang = CURRENT.get();
         return lang != null ? lang : processLanguage;
     }
 
-    /** Un testo nella lingua della richiesta in corso. */
+    /** A text in the language of the current request. */
     public static String tr(String key) {
         return t(current(), key);
     }
 
-    /** Un testo con i suoi valori nella lingua della richiesta in corso. Il risultato non e' HTML. */
+    /** A text with its values in the language of the current request. The result is not HTML. */
     public static String tr(String key, Map<String, ?> params) {
         return t(current(), key, params);
     }
 
-    /** Come tn() negli script: la forma del plurale della lingua (pluralCategory), o chiave.other; il numero entra come {n}. */
+    /**
+     * Like tn() in the scripts: the plural form of the language (pluralCategory), or key.other; the number goes in
+     * as {n}.
+     */
     public static String trn(String key, long count, Map<String, ?> params) {
         Map<String, Object> values = new java.util.HashMap<>(params);
         values.put("n", count);
@@ -354,8 +361,8 @@ public final class I18n {
     }
 
     /**
-     * Il lavoro con la lingua di chi l'ha chiesto, per un thread che parte adesso e finisce dopo
-     * (i lavori sul turno dei pacchetti, i lavori lunghi): i suoi messaggi escono in quella lingua.
+     * The job with the language of whoever requested it, for a thread that starts now and ends later
+     * (the jobs on the package turn, the long jobs): its messages come out in that language.
      */
     public static Runnable withCurrent(Runnable job) {
         String lang = current();
@@ -369,7 +376,7 @@ public final class I18n {
         };
     }
 
-    /** Come withCurrent, per un compito che restituisce un valore (CompletableFuture.supplyAsync). */
+    /** Like withCurrent, for a task that returns a value (CompletableFuture.supplyAsync). */
     public static <T> java.util.function.Supplier<T> withCurrentSupplier(java.util.function.Supplier<T> job) {
         String lang = current();
         return () -> {
@@ -382,7 +389,7 @@ public final class I18n {
         };
     }
 
-    /** Come withCurrent, per un compito dato a un ExecutorService. */
+    /** Like withCurrent, for a task given to an ExecutorService. */
     public static <T> java.util.concurrent.Callable<T> withCurrentCallable(java.util.concurrent.Callable<T> job) {
         String lang = current();
         return () -> {
@@ -395,11 +402,11 @@ public final class I18n {
         };
     }
 
-    // ---------- la lingua di una richiesta ----------
+    // ---------- the language of a request ----------
 
     /**
-     * La lingua di questa richiesta. saved e' quella dell'account (null prima di entrare o se non
-     * e' mai stata scelta): vince su tutto, cosi' la scelta segue l'amministratore su ogni browser.
+     * The language of this request. saved is the account's one (null before logging in or if it has
+     * never been chosen): it wins over everything, so the choice follows the administrator on every browser.
      */
     public static String languageOf(HttpExchange exchange, String saved) {
         if (saved != null && LANGUAGES.contains(saved)) return saved;
@@ -408,7 +415,7 @@ public final class I18n {
         return fromAcceptLanguage(exchange.getRequestHeaders().getFirst("Accept-Language"));
     }
 
-    /** Il valore del cookie della lingua, se e' una lingua del pannello. */
+    /** The value of the language cookie, if it is a panel language. */
     public static String fromCookie(List<String> cookieHeaders) {
         if (cookieHeaders == null) return null;
         for (String header : cookieHeaders) {
@@ -424,8 +431,8 @@ public final class I18n {
     }
 
     /**
-     * La lingua preferita dal browser fra quelle del pannello, secondo i pesi q ("it-IT,it;q=0.9,
-     * en;q=0.8"); a parita' vince quella scritta prima. Nessuna del pannello: l'inglese.
+     * The browser's preferred language among the panel's, according to the q weights ("it-IT,it;q=0.9,
+     * en;q=0.8"); on a tie the one written first wins. None of the panel's: English.
      */
     public static String fromAcceptLanguage(String header) {
         if (header == null || header.isBlank()) return FALLBACK_LANGUAGE;
@@ -455,8 +462,8 @@ public final class I18n {
     }
 
     /**
-     * Il cookie della lingua: un anno (e' una preferenza, non un accesso), solo su HTTPS, mai
-     * leggibile dagli script, mai mandato da un altro sito (Strict, come quelli della sessione).
+     * The language cookie: one year (it is a preference, not a login), HTTPS only, never
+     * readable by scripts, never sent by another site (Strict, like the session ones).
      */
     public static String cookieHeader(String lang) {
         return COOKIE + "=" + normalize(lang) + "; Path=/; Max-Age=31536000; Secure; HttpOnly; SameSite=Strict";

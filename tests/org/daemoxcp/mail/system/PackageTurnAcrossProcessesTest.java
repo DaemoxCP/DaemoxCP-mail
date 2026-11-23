@@ -27,7 +27,7 @@ import java.util.Map;
  *   - does not apply the locks rule while the other works, and says so (applyLockPolicy);
  * that, with the other killed by kill -9, the turn is free again and the list left is locked again
  * with the notice naming the interrupted job; that lockf and the panel exclude each other in both
- * directions (reperto 153); and that the turn part of the real script (taken from the text the
+ * directions (finding 153); and that the turn part of the real script (taken from the text the
  * panel writes, up to the checks on the protected packages, before stopping anything) starts only
  * when it should.
  *
@@ -131,7 +131,7 @@ public class PackageTurnAcrossProcessesTest {
         System.exit(failed == 0 ? 0 : 1);
     }
 
-    /** lockf(1) (flock) and the panel (fcntl): do they exclude each other? Measured in reperto 153, repeated here. */
+    /** lockf(1) (flock) and the panel (fcntl): do they exclude each other? Measured in finding 153, repeated here. */
     static void lockfAgainstThePanel() throws Exception {
         System.out.println("\n== lockf(1) against the panel ==");
         if (!Files.isExecutable(Path.of("/usr/bin/lockf"))) { check("lockf(1) is there (FreeBSD)", false); return; }

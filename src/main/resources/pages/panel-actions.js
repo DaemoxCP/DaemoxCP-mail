@@ -1,35 +1,35 @@
-// Le azioni e gli stili delle pagine senza codice in linea, per una Content-Security-Policy senza
-// 'unsafe-inline' (reperto 178).
+// The page actions and styles without inline code, for a Content-Security-Policy without
+// 'unsafe-inline' (finding 178).
 //
-// Prima ogni pulsante portava il suo gestore onclick in linea, e ogni elemento il suo attributo style: con
-// 'unsafe-inline' nella CSP, una stringa iniettata in una pagina (un nome di casella, una riga di
-// log) poteva eseguire codice qualunque. Adesso:
+// Before, every button carried its inline onclick handler, and every element its style attribute: with
+// 'unsafe-inline' in the CSP, a string injected into a page (a mailbox name, a log
+// line) could run arbitrary code. Now:
 //
-//  - data-on-<evento>="funzione(argomenti)" al posto di on<evento>="...": un solo ascoltatore per
-//    tipo di evento, su document, legge l'attributo e lo esegue. Non e' eval: e' un linguaggio
-//    minimo, che sa solo chiamare le funzioni DEL PANNELLO (dichiarate dagli script delle pagine,
-//    mai quelle del browser come fetch o alert) con argomenti letterali ('testo', 12, true, null),
-//    this e le sue proprieta' (this.value, this.dataset.id, this.closest('tr')), event,
-//    Number(...), === e !==, e "return" (return false = preventDefault). Piu' istruzioni con ";".
-//    Una forma che non conosce la scrive in console come errore e non fa niente.
-//  - data-style="..." al posto dell'attributo style: lo stesso stile, applicato con il CSSOM appena
-//    l'elemento entra nella pagina (anche quelli creati dopo con innerHTML). Il CSSOM la CSP non lo
-//    blocca, e cosi' lo stile resta uno stile dell'elemento: il codice che mostra e nasconde con
-//    el.style.display = '' o 'none' continua a funzionare (con una classe non funzionerebbe).
+//  - data-on-<event>="function(arguments)" instead of on<event>="...": a single listener per
+//    event type, on document, reads the attribute and runs it. It is not eval: it is a
+//    minimal language, which can only call the PANEL's functions (declared by the pages' scripts,
+//    never the browser's, like fetch or alert) with literal arguments ('text', 12, true, null),
+//    this and its properties (this.value, this.dataset.id, this.closest('tr')), event,
+//    Number(...), === and !==, and "return" (return false = preventDefault). Several statements with ";".
+//    A form it does not know is written to the console as an error and nothing is done.
+//  - data-style="..." instead of the style attribute: the same style, applied with the CSSOM as soon as
+//    the element enters the page (also those created later with innerHTML). The CSP does not block the
+//    CSSOM, and so the style remains a style of the element: the code that shows and hides with
+//    el.style.display = '' or 'none' keeps working (with a class it would not).
 //
-// Si carica nella <head>, prima del corpo: l'osservatore vede ogni elemento mentre la pagina si
-// costruisce, prima che venga disegnato, e prima che giri qualunque script della pagina.
+// It is loaded in the <head>, before the body: the observer sees every element while the page is
+// being built, before it is drawn, and before any script of the page runs.
 (function () {
     'use strict';
 
-    // Gli eventi che le pagine usano. Quelli che non risalgono (toggle di <details>) si prendono
-    // nella fase di cattura e valgono solo per l'elemento stesso, come i gestori in linea.
+    // The events the pages use. Those that do not bubble (toggle of <details>) are caught
+    // in the capture phase and apply only to the element itself, like inline handlers.
     var EVENTS = ['click', 'change', 'input', 'submit', 'keyup', 'keydown'];
     var TARGET_ONLY = ['toggle'];
-    // I soli metodi che un'azione puo' chiamare su un oggetto (this, event, un elemento).
+    // The only methods an action may call on an object (this, event, an element).
     var METHODS = { closest: true, preventDefault: true, stopPropagation: true };
 
-    // ---------- il linguaggio ----------
+    // ---------- the language ----------
 
     function ActionError(message) { this.message = message; }
 
@@ -142,8 +142,8 @@
         return program;
     }
 
-    // Una funzione del pannello: dichiarata da uno script delle pagine, non del browser. Le funzioni
-    // del browser (fetch, alert, eval, ...) hanno "[native code]" nel loro testo.
+    // A panel function: declared by a page script, not by the browser. The browser's functions
+    // (fetch, alert, eval, ...) have "[native code]" in their text.
     function panelFunction(name) {
         if (!Object.prototype.hasOwnProperty.call(window, name)) return null;
         var f = window[name];
@@ -222,7 +222,7 @@
         var selector = '[' + attr + ']';
         document.addEventListener(type, function (ev) {
             var node = ev.target && ev.target.nodeType === 1 ? ev.target : ev.target && ev.target.parentElement;
-            // Dal bersaglio verso l'alto, come risalgono i gestori in linea; stopPropagation() ferma.
+            // From the target upwards, as inline handlers bubble up; stopPropagation() stops it.
             while (node) {
                 var el = node.closest(selector);
                 if (!el) return;
@@ -239,9 +239,9 @@
         }, true);
     });
 
-    // Per le prove: lo stesso linguaggio, senza eseguire niente. I problemi di un'espressione, in
-    // questa pagina: non si analizza, chiama una funzione che non e' del pannello, o un metodo non
-    // ammesso. Un elenco vuoto = va.
+    // For the tests: the same language, without running anything. The problems of an expression, on
+    // this page: it does not parse, it calls a function that is not the panel's, or a method that is
+    // not allowed. An empty list = it is fine.
     window.panelActionsCheck = function (src) {
         var problems = [];
         var program;
@@ -256,7 +256,7 @@
                 node.a.forEach(walk);
                 return;
             }
-            // Un nome che non e' chiamato (una variabile): evaluate lo rifiuta.
+            // A name that is not called (a variable): evaluate rejects it.
             if (node.k === 'name') problems.push(node.v + ' can only be called');
             ['e', 'l', 'r', 'o'].forEach(function (key) { walk(node[key]); });
             (node.a || []).forEach(walk);
@@ -264,12 +264,12 @@
         return problems;
     };
 
-    // ---------- gli stili ----------
+    // ---------- the styles ----------
 
     var styled = new WeakMap();
 
-    // Le dichiarazioni di data-style, una per una. Quelle che il codice ha gia' messo sull'elemento
-    // (subito dopo averlo creato, prima che arrivasse l'osservatore) restano sue.
+    // The declarations of data-style, one by one. Those the code has already put on the element
+    // (right after creating it, before the observer arrived) remain its own.
     function applyStyle(el) {
         var css = el.getAttribute('data-style');
         if (styled.get(el) === css) return;
@@ -284,8 +284,8 @@
         }
     }
 
-    // Per le prove: se data-style di questo elemento e' stato applicato (dopo, il codice della pagina
-    // puo' averlo cambiato, ed e' giusto).
+    // For the tests: whether this element's data-style has been applied (afterwards, the page's code
+    // may have changed it, and that is fine).
     window.panelStyleApplied = function (el) { return styled.get(el) === el.getAttribute('data-style'); };
 
     function applyStyles(node) {
@@ -295,11 +295,11 @@
         for (var i = 0; i < inner.length; i++) applyStyle(inner[i]);
     }
 
-    // Le pagine costruiscono i pezzi con innerHTML e subito dopo, nella stessa funzione, a volte
-    // mostrano o nascondono qualcosa (el.style.display = ''): lo stile di data-style deve esserci
-    // gia' in quel momento, non dopo, quando arriva l'osservatore. Quindi le tre vie con cui le
-    // pagine scrivono HTML lo applicano subito; l'osservatore resta per tutto il resto (la pagina
-    // mentre si costruisce, gli elementi spostati o clonati).
+    // The pages build the pieces with innerHTML and right after, in the same function, they sometimes
+    // show or hide something (el.style.display = ''): the data-style style must already be there at
+    // that moment, not later, when the observer arrives. So the three ways in which the
+    // pages write HTML apply it at once; the observer remains for everything else (the page
+    // while it is being built, elements moved or cloned).
     function wrapSetter(proto, prop, after) {
         var d = Object.getOwnPropertyDescriptor(proto, prop);
         if (!d || !d.set) return;

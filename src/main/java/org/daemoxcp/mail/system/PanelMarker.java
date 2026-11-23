@@ -17,41 +17,42 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 /**
- * Le firme con cui il pannello riconosce i file che ha scritto lui, e il loro passaggio
- * all'inglese sui server gia' installati (r26, 30/10/2026).
+ * The signatures with which the panel recognises the files it wrote itself, and their switch to
+ * English on the servers already installed (r26, 2026-10-30).
  *
- * <p>Il pannello mette una riga di commento nei file che scrive per intero, e la rilegge prima
- * di toccarli: un file senza firma e' di qualcun altro e non si sovrascrive. Fino a fine ottobre
- * 2026 le firme erano in italiano. Adesso sono in inglese, e quelle di prima stanno in
- * legacy-names.json: chi rilegge riconosce l'una e le altre, cosi' un server installato prima
- * non perde la proprieta' dei suoi file.
+ * <p>The panel puts a comment line in the files it writes in full, and reads it again before
+ * touching them: a file without a signature belongs to someone else and is not overwritten. Until
+ * the end of October 2026 the signatures were in Italian. Now they are in English, and the earlier
+ * ones are in legacy-names.json: whoever reads them again recognises both the current one and the
+ * others, so a server installed earlier does not lose ownership of its files.
  *
- * <p>All'avvio, nei file che portano ancora una firma di prima, la firma diventa quella di
- * adesso, e il file torna uguale a quello che il codice di adesso scriverebbe. Si cambiano SOLO
- * le righe di commento, e lo si controlla prima di scrivere: tolti i commenti, il file nuovo e
- * il vecchio devono essere identici, altrimenti non si scrive. Un commento non cambia quello che
- * il servizio fa, quindi non servono nginx -t ne' reload. La scrittura e' atomica (file
- * temporaneo accanto, stessi permessi e proprietario, rename): nginx e fail2ban possono rileggere
- * il file in qualunque momento.
+ * <p>At startup, in the files that still carry an earlier signature, the signature becomes the
+ * current one, and the file becomes identical to what the current code would write. ONLY the
+ * comment lines are changed, and this is checked before writing: with the comments removed, the
+ * new file and the old one must be identical, otherwise nothing is written. A comment does not
+ * change what the service does, so neither nginx -t nor reload is needed. The write is atomic
+ * (temporary file alongside, same permissions and owner, rename): nginx and fail2ban can re-read
+ * the file at any moment.
  *
- * <p>Quali file: i tre della superficie pubblica sulla 443 (il file di nginx, filtro e jail di
- * fail2ban; sezione "panelSignature") e dovecot.conf (sezione "dovecotSignature": e' la riga che
- * la manutenzione cerca per sapere se la configurazione viene dalla sorgente unica). Il filtro
- * di daemoxcp-mail-auth lo riscrive gia' Fail2banAutoSetup quando non e' uguale a quello di adesso;
- * il blocco di autoconfig sta dentro un file di nginx che non e' del pannello, e non si tocca.
+ * <p>Which files: the three of the public surface on 443 (the nginx file, fail2ban's filter and
+ * jail; section "panelSignature") and dovecot.conf (section "dovecotSignature": it is the line that
+ * the maintenance looks for to know whether the configuration comes from the single source). The
+ * daemoxcp-mail-auth filter is already rewritten by Fail2banAutoSetup when it is not the same as
+ * the current one; the autoconfig block sits inside an nginx file that does not belong to the
+ * panel, and is not touched.
  */
 public final class PanelMarker {
 
     private static final Logger LOGGER = Logger.getLogger(PanelMarker.class.getName());
 
-    /** La firma dei file che il pannello scrive per intero. */
+    /** The signature of the files the panel writes in full. */
     public static final String WRITTEN = "Written by " + Product.NAME;
     static final String SIGNATURE = "panelSignature";
     static final String DOVECOT = "dovecotSignature";
 
     private PanelMarker() {}
 
-    /** Il marcatore di adesso, poi quelli che ha avuto prima. */
+    /** The current marker, then the ones it had before. */
     public static List<String> forms(String section, String current) {
         List<String> out = new ArrayList<>();
         out.add(current);
@@ -59,7 +60,7 @@ public final class PanelMarker {
         return out;
     }
 
-    /** Il file l'ha scritto il pannello: c'e' la firma di adesso o una di prima. */
+    /** The file was written by the panel: the current signature or an earlier one is there. */
     public static boolean writtenByPanel(String content) {
         if (content == null) return false;
         for (String f : forms(SIGNATURE, WRITTEN)) if (content.contains(f)) return true;
@@ -67,9 +68,9 @@ public final class PanelMarker {
     }
 
     /**
-     * Lo stesso testo con i marcatori di adesso al posto di quelli di prima, nelle sole righe di
-     * commento. Le coppie si applicano nell'ordine del file: la piu' lunga prima, perche' una firma
-     * di prima puo' contenerne un'altra.
+     * The same text with the current markers in place of the earlier ones, in the comment lines
+     * only. The pairs are applied in the file's order: the longest first, because an earlier
+     * signature may contain another one.
      */
     public static String current(String content, String section) {
         List<String[]> pairs = LegacyNames.pairs(section);
@@ -82,29 +83,29 @@ public final class PanelMarker {
         return String.join("\n", lines);
     }
 
-    /** Una riga di commento: "#" (quasi tutti i file), "//" (PHP di Roundcube), ";" (php.ini, i pool di php-fpm). */
+    /** A comment line: "#" (almost all files), "//" (Roundcube's PHP), ";" (php.ini, the php-fpm pools). */
     static boolean comment(String line) {
         String l = line.stripLeading();
         return l.startsWith("#") || l.startsWith("//") || l.startsWith(";");
     }
 
-    /** Il testo senza le righe di commento: quello che il servizio legge davvero. */
+    /** The text without the comment lines: what the service really reads. */
     static String withoutComments(String content) {
         StringBuilder b = new StringBuilder();
         for (String l : content.split("\n", -1)) if (!comment(l)) b.append(l).append('\n');
         return b.toString();
     }
 
-    // ===================== la migrazione all'avvio =====================
+    // ===================== the boot migration =====================
 
     enum Outcome { NOTHING, DONE, PARTIAL, NGINX_UNREADABLE }
 
     record Report(Outcome outcome, String detail) {}
 
-    /** Dove stanno i file: fissi sul server, cartelle temporanee nella prova. */
+    /** Where the files are: fixed on the server, temporary folders in the test. */
     record Places(Path f2bDir, Path defaultNginxFolder, Path dovecotConf) {}
 
-    /** Le cartelle che nginx include (nginx -T): vuota senza nginx, null se nginx non risponde. */
+    /** The folders that nginx includes (nginx -T): empty without nginx, null if nginx does not answer. */
     interface Services {
         List<String> nginxFolders();
     }
@@ -139,8 +140,8 @@ public final class PanelMarker {
 
         boolean unreadable = false;
         if (surface) {
-            // Il file di nginx sta in una delle cartelle che nginx include: si chiede a nginx quali.
-            // La jail per ultima: finche' ha la firma di prima, al prossimo avvio si riprova tutto.
+            // The nginx file is in one of the folders nginx includes: we ask nginx which ones.
+            // The jail last: as long as it has the earlier signature, at the next startup everything is retried.
             List<String> folders = sv.nginxFolders();
             if (folders == null) {
                 unreadable = true;
@@ -165,9 +166,9 @@ public final class PanelMarker {
         return new Report(problems.isEmpty() ? Outcome.DONE : Outcome.PARTIAL, detail);
     }
 
-    // ===================== il nome del prodotto nei commenti (17/11/2026) =====================
+    // ===================== the product name in the comments (2026-11-17) =====================
 
-    /** I file dei servizi in cui il pannello ha scritto commenti col nome di prima, uno per uno. */
+    /** The service files in which the panel wrote comments with the earlier name, one by one. */
     static final List<String> PRODUCT_FILES = List.of(
             "/usr/local/etc/dovecot/dovecot.conf", "/usr/local/etc/postfix/main.cf", "/etc/aliases",
             "/usr/local/etc/fail2ban/jail.local", "/usr/local/etc/redis.conf", "/usr/local/etc/clamd.conf",
@@ -178,8 +179,8 @@ public final class PanelMarker {
             "/usr/local/etc/" + Product.SLUG + "/root-secrets.properties");
 
     /**
-     * Le cartelle i cui file (non le sottocartelle) possono avere quei commenti. Non /etc/pf.conf: la sua prima riga
-     * e' quella con cui PfPolicy lo riconosce, e un pf.conf del pannello lo riscrive PfPolicy per intero.
+     * The folders whose files (not the subfolders) may have those comments. Not /etc/pf.conf: its first line is
+     * the one PfPolicy recognises it by, and a pf.conf of the panel is rewritten in full by PfPolicy.
      */
     static final List<String> PRODUCT_FOLDERS = List.of(
             "/usr/local/etc/dovecot/conf.d", "/usr/local/etc/fail2ban/jail.d", "/usr/local/etc/fail2ban/filter.d",
@@ -188,9 +189,9 @@ public final class PanelMarker {
             "/usr/local/etc/nginx/conf.d", "install_scripts");
 
     /**
-     * All'avvio (ProductRename): nei file dei servizi, le righe di commento col nome di prima del prodotto prendono
-     * quello di adesso (sezione "productComments"). Solo i commenti, e lo si controlla per ogni file prima di scrivere
-     * (rewrite): il servizio legge lo stesso file di prima, quindi non serve ricaricare niente.
+     * At startup (ProductRename): in the service files, the comment lines with the product's earlier name take the
+     * current one (section "productComments"). Only the comments, and it is checked for each file before writing
+     * (rewrite): the service reads the same file as before, so nothing needs to be reloaded.
      */
     public static void productCommentsAtBoot() {
         List<String> done = new ArrayList<>(), problems = new ArrayList<>();
@@ -203,9 +204,9 @@ public final class PanelMarker {
     }
 
     /**
-     * I file dei servizi in cui il pannello scrive commenti: PRODUCT_FILES, i file (non le sottocartelle) di
-     * PRODUCT_FOLDERS e delle cartelle che nginx include, e quelli in piu' chiesti da chi chiama. Solo file regolari
-     * fino a 4 MB, nell'ordine in cui sono elencati.
+     * The service files in which the panel writes comments: PRODUCT_FILES, the files (not the subfolders) of
+     * PRODUCT_FOLDERS and of the folders nginx includes, and the extra ones requested by the caller. Only regular
+     * files up to 4 MB, in the order in which they are listed.
      */
     static java.util.Set<Path> serviceFiles(java.util.Collection<String> moreFiles, java.util.Collection<String> moreFolders) {
         java.util.Set<Path> files = new LinkedHashSet<>();
@@ -236,12 +237,12 @@ public final class PanelMarker {
         return files;
     }
 
-    /** Il file c'e' e ha ancora un marcatore di prima in una riga di commento. */
+    /** The file exists and still has an earlier marker in a comment line. */
     static boolean stale(Path p, String section) {
         return stale(p, s -> current(s, section));
     }
 
-    /** Il file c'e' e la funzione ne cambierebbe il testo (solo righe di commento, per chi la passa). */
+    /** The file exists and the function would change its text (only comment lines, for whoever passes it). */
     static boolean stale(Path p, java.util.function.UnaryOperator<String> now) {
         try {
             if (!Files.isRegularFile(p)) return false;
@@ -257,12 +258,12 @@ public final class PanelMarker {
     }
 
     /**
-     * Il file con il testo che da' la funzione, se cambiano soltanto righe di commento: altrimenti non si tocca e lo si
-     * dice in problems. Scrittura atomica, con permessi, proprietario e flag di prima.
+     * The file with the text the function gives, if only comment lines change: otherwise it is not touched and
+     * this is said in problems. Atomic write, with the earlier permissions, owner and flags.
      */
     static boolean rewrite(Path p, java.util.function.UnaryOperator<String> now, List<String> done, List<String> problems) {
         try {
-            // Un collegamento si segue: il file del pannello e' quello a cui punta.
+            // A link is followed: the panel's file is the one it points to.
             Path real = p.toRealPath();
             String before = Files.readString(real, StandardCharsets.UTF_8);
             String after = now.apply(before);
@@ -280,15 +281,16 @@ public final class PanelMarker {
         }
     }
 
-    /** Scrive accanto e sostituisce con un rename, con permessi, proprietario e gruppo di prima. */
+    /** Writes alongside and replaces with a rename, with the earlier permissions, owner and group. */
     static void replaceKeeping(Path p, String content) throws IOException {
-        // Il temporaneo comincia con un punto e non finisce in .conf: ne' nginx ne' fail2ban lo
-        // leggerebbero, se restasse li'.
+        // The temporary file starts with a dot and does not end in .conf: neither nginx nor fail2ban
+        // would read it, if it stayed there.
         Path tmp = p.resolveSibling("." + p.getFileName() + ".daemoxcp-mail.tmp");
         Files.deleteIfExists(tmp);
-        // Un file immutabile (chflags schg) non si sostituisce: si toglie il flag, si scrive, e il flag torna sul
-        // file nuovo. Il pannello stesso lo mette su /var/unbound/forward.conf, perche' local-unbound-setup non lo
-        // riscriva: sul server vero, il 17/11/2026, il commento li' non era cambiato ("Operation not permitted").
+        // An immutable file (chflags schg) cannot be replaced: the flag is removed, the file is written, and the
+        // flag goes back on the new file. The panel itself puts it on /var/unbound/forward.conf, so that
+        // local-unbound-setup does not rewrite it: on the production server, on 2026-11-17, the comment there
+        // had not changed ("Operation not permitted").
         List<String> flags = immutableFlags(p);
         for (String f : flags) chflags("no" + f, p);
         try {
@@ -300,10 +302,10 @@ public final class PanelMarker {
                     Files.setOwner(tmp, a.owner());
                     Files.setAttribute(tmp, "posix:group", a.group());
                 } catch (IOException ignored) {
-                    // Senza permesso di cambiare proprietario resta quello del pannello, che e' root.
+                    // Without permission to change the owner it stays the panel's, which is root.
                 }
             } catch (UnsupportedOperationException ignored) {
-                // File system senza permessi POSIX: solo nelle prove.
+                // File system without POSIX permissions: only in the tests.
             }
             Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } finally {
@@ -316,10 +318,10 @@ public final class PanelMarker {
         }
     }
 
-    /** I flag che rendono un file immutabile anche per root (con securelevel -1 root li toglie e li rimette). */
+    /** The flags that make a file immutable even for root (with securelevel -1 root removes them and puts them back). */
     static final List<String> IMMUTABLE_FLAGS = List.of("schg", "uchg");
 
-    /** I flag immutabili del file, da stat -f %Sf (FreeBSD); nessuno se stat non risponde. */
+    /** The file's immutable flags, from stat -f %Sf (FreeBSD); none if stat does not answer. */
     static List<String> immutableFlags(Path p) {
         Shell.Result r = Shell.run(Duration.ofSeconds(5), "/usr/bin/stat", "-f", "%Sf", p.toString());
         List<String> out = new ArrayList<>();

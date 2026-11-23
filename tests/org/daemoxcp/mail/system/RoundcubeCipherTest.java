@@ -6,7 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Roundcube encrypts with AES-256-CBC and a 32-character key, no longer with DES-EDE3-CBC (reperto 239). Against a
+ * Roundcube encrypts with AES-256-CBC and a 32-character key, no longer with DES-EDE3-CBC (finding 239). Against a
  * fake Roundcube whose logins work only if the configured method and key are a pair PHP accepts:
  *  1. the installer writes a 32-character des_key and cipher_method AES-256-CBC; the new keys are 32 characters of
  *     letters and digits, never the same;

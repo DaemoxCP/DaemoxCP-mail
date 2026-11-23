@@ -20,27 +20,27 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Le sessioni del pannello, nel database (tabella panel_sessions), legate all'avvio del jar.
+ * The panel's sessions, in the database (table panel_sessions), tied to the jar's run.
  *
- *  - il token sta solo nel cookie __Host-DaemoxCPMail: nel database c'e' la sua impronta, un HMAC
- *    con la chiave di QUESTO avvio (reperto 184). La chiave e' di 32 byte casuali, nasce col
- *    processo e sta solo nella sua memoria: mai su disco, mai nel database. Riavviato il jar, la
- *    chiave e' un'altra e nessun token di prima trova piu' la sua riga, nemmeno con una copia del
- *    database o del cookie; e chi legge il database non puo' nemmeno provare un token;
- *  - all'avvio del server web le righe dell'avvio di prima si tolgono (beginRun), cosi' l'elenco
- *    delle sessioni non mostra sessioni che non valgono piu';
- *  - il cookie e' di sessione del browser (senza Max-Age: chiuso il browser, sparisce) e
- *    SameSite=Strict: un link o un modulo da un altro sito arriva al pannello senza sessione;
- *  - una sessione scade dopo 30 minuti senza richieste e comunque dopo 12 ore;
- *  - vale solo con lo stesso browser (impronta dello User-Agent); l'IP non si confronta, perche'
- *    dietro Cloudflare cambia, ma si conserva cifrato per l'elenco delle sessioni;
- *  - il token CSRF non si salva: e' l'HMAC del token di sessione con la chiave di questo avvio.
- *    Prima di entrare vale lo stesso schema con un cookie a parte (__Host-DaemoxCPMailPre), che lega
- *    il token della pagina di accesso a quel browser senza creare niente sul server: anche quello
- *    vale solo fino al riavvio;
- *  - si revoca: all'uscita, dall'elenco delle sessioni, e togliendo l'amministratore (ON DELETE
- *    CASCADE). Prima ogni visita alla pagina di accesso creava una sessione in memoria, e le
- *    sessioni stavano in una lista condivisa senza sincronizzazione.
+ *  - the token is only in the __Host-DaemoxCPMail cookie: the database holds its fingerprint, an HMAC
+ *    with the key of THIS run (finding 184). The key is 32 random bytes, born with the
+ *    process and kept only in its memory: never on disk, never in the database. Once the jar restarts, the
+ *    key is a different one and no earlier token finds its row any more, not even with a copy of the
+ *    database or of the cookie; and whoever reads the database cannot even test a token;
+ *  - when the web server starts, the rows of the previous run are removed (beginRun), so the list
+ *    of sessions does not show sessions that are no longer valid;
+ *  - the cookie is a browser-session cookie (no Max-Age: once the browser is closed, it is gone) and
+ *    SameSite=Strict: a link or a form from another site reaches the panel without a session;
+ *  - a session expires after 30 minutes without requests and in any case after 12 hours;
+ *  - it is valid only with the same browser (fingerprint of the User-Agent); the IP is not compared,
+ *    because behind Cloudflare it changes, but it is kept encrypted for the list of sessions;
+ *  - the CSRF token is not stored: it is the HMAC of the session token with the key of this run.
+ *    Before login the same scheme applies with a separate cookie (__Host-DaemoxCPMailPre), which ties
+ *    the login page's token to that browser without creating anything on the server: that one too
+ *    is valid only until the restart;
+ *  - it can be revoked: on logout, from the list of sessions, and by removing the administrator (ON DELETE
+ *    CASCADE). Before, every visit to the login page created a session in memory, and the
+ *    sessions lived in a shared list without synchronization.
  */
 public final class WebSessions {
 
@@ -51,11 +51,11 @@ public final class WebSessions {
     public static final String PRE_COOKIE = "__Host-DaemoxCPMailPre";
     public static final long IDLE_SECONDS = 30 * 60;
     public static final long ABSOLUTE_SECONDS = 12 * 3600;
-    /** L'ultima attivita' si riscrive al massimo una volta al minuto, non a ogni richiesta. */
+    /** The last activity is rewritten at most once a minute, not on every request. */
     private static final long TOUCH_SECONDS = 60;
     /**
-     * La chiave di questo avvio del jar: le impronte dei token, i token CSRF e quelli di prima
-     * dell'accesso dipendono da lei. Solo in memoria: al riavvio ne nasce un'altra (reperto 184).
+     * The key of this run of the jar: the token fingerprints, the CSRF tokens and the pre-login
+     * tokens depend on it. Only in memory: at restart a new one is born (finding 184).
      */
     private static final byte[] RUN_KEY = new byte[32];
     static {
@@ -64,14 +64,14 @@ public final class WebSessions {
     private static volatile boolean runKeyAdopted = false;
 
     /**
-     * Col pannello separato la chiave e' quella della parte root, che crea le sessioni: la web la chiede alla root all'avvio (l'operazione chiusa session-key del socket) per
-     * riconoscere le sessioni e i token CSRF. Una copia, mai su disco.
+     * With the separated panel the key is the root part's, which creates the sessions: the web part asks the root for it at startup (the socket's closed session-key operation) to
+     * recognize the sessions and the CSRF tokens. A copy, never on disk.
      */
     public static byte[] runKeyForWebPart() {
         return RUN_KEY.clone();
     }
 
-    /** La parte web adotta la chiave della root, una volta sola, prima di servire. */
+    /** The web part adopts the root's key, only once, before serving. */
     public static synchronized void adoptRunKey(byte[] key) {
         if (key == null || key.length != RUN_KEY.length) throw new IllegalArgumentException("session key of the wrong size");
         if (runKeyAdopted) throw new IllegalStateException("session key already adopted");
@@ -79,18 +79,18 @@ public final class WebSessions {
         java.util.Arrays.fill(key, (byte) 0);
         runKeyAdopted = true;
     }
-    /** Un token: 32 byte casuali in base64url, senza "=". Tutto il resto non arriva al database. */
+    /** A token: 32 random bytes in base64url, without "=". Anything else does not reach the database. */
     private static final java.util.regex.Pattern TOKEN = java.util.regex.Pattern.compile("[A-Za-z0-9_-]{43}");
 
-    /** Una sessione valida, con il suo amministratore. */
+    /** A valid session, with its administrator. */
     public record Current(long id, String token, AuthStore.Admin admin, LocalDateTime reauthAt) {
-        /** Vero se l'amministratore ha confermato di essere lui (passkey o codice) negli ultimi secondi dati. */
+        /** True if the administrator confirmed their identity (passkey or code) within the given seconds. */
         public boolean reauthenticatedWithin(long seconds) {
             return reauthAt != null && reauthAt.isAfter(AuthStore.utc(Instant.now().minusSeconds(seconds)));
         }
     }
 
-    /** Una riga dell'elenco delle sessioni di un amministratore. */
+    /** One row of an administrator's list of sessions. */
     public record Listed(long id, String ip, String userAgent, LocalDateTime createdAt, LocalDateTime lastSeenAt) {}
 
     public static boolean wellFormed(String token) {
@@ -103,7 +103,7 @@ public final class WebSessions {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(b);
     }
 
-    /** L'HMAC-SHA256 di un valore con la chiave di questo avvio, per uno scopo dichiarato. */
+    /** The HMAC-SHA256 of a value with the key of this run, for a declared purpose. */
     private static byte[] runMac(String purpose, String value) {
         try {
             javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
@@ -115,8 +115,8 @@ public final class WebSessions {
     }
 
     /**
-     * L'impronta di un token nel database: 64 caratteri esadecimali, come la colonna token_hash.
-     * Pubblica per le prove, che cercano la riga di una sessione.
+     * The fingerprint of a token in the database: 64 hexadecimal characters, like the token_hash column.
+     * Public for the tests, which look up the row of a session.
      */
     public static String tokenHash(String token) {
         return java.util.HexFormat.of().formatHex(runMac("session", token));
@@ -133,7 +133,7 @@ public final class WebSessions {
 
     private static LocalDateTime utc(Instant i) { return LocalDateTime.ofInstant(i, ZoneOffset.UTC); }
 
-    /** Una sessione nuova per un amministratore appena entrato; restituisce il token per il cookie. */
+    /** A new session for an administrator who has just logged in; returns the token for the cookie. */
     public String create(long adminId, String userAgent, String ip) {
         String token = newToken();
         Instant now = Instant.now();
@@ -155,9 +155,9 @@ public final class WebSessions {
     }
 
     /**
-     * L'intestazione Set-Cookie della sessione: solo HTTPS, non leggibile dagli script, mai mandata
-     * da un altro sito (Strict), e senza Max-Age: e' un cookie di sessione del browser, che lo
-     * dimentica quando si chiude. Le 12 ore e i 30 minuti li controlla comunque il server.
+     * The session's Set-Cookie header: HTTPS only, not readable by scripts, never sent
+     * from another site (Strict), and without Max-Age: it is a browser-session cookie, which the browser
+     * forgets when it closes. The 12 hours and the 30 minutes are checked by the server anyway.
      */
     public static String cookieHeader(String token) {
         return COOKIE + "=" + token + "; Path=/; HttpOnly; Secure; SameSite=Strict";
@@ -168,10 +168,10 @@ public final class WebSessions {
     }
 
     /**
-     * Vero se l'ultimo check di questo thread non ha potuto leggere il database: allora "nessuna
-     * sessione" non vuol dire che la sessione e' finita (reperto 185). Durante un riavvio MySQL si
-     * ferma prima del pannello, e il pannello toglieva il cookie a tutti come se la sessione fosse
-     * scaduta; lo stesso per un riavvio di MySQL durante un aggiornamento dei pacchetti.
+     * True if the last check of this thread could not read the database: then "no
+     * session" does not mean that the session is over (finding 185). During a restart MySQL
+     * stops before the panel, and the panel removed everyone's cookie as if the session had
+     * expired; the same for a MySQL restart during a package update.
      */
     private static final ThreadLocal<Boolean> LAST_CHECK_FAILED = ThreadLocal.withInitial(() -> false);
 
@@ -180,11 +180,11 @@ public final class WebSessions {
     }
 
     /**
-     * La sessione del token, se esiste, non e' scaduta, e' dello stesso browser e l'amministratore e' attivo.
+     * The token's session, if it exists, has not expired, is from the same browser and its administrator is active.
      *
-     * <p>Nella parte web, con il suo utente MySQL, le procedure ricevono da qui l'impronta di questo token
-     * (CatalogGuard.useSession): il database ricontrolla la sessione a ogni chiamata. Se la sessione non c'e',
-     * l'impronta si dimentica subito.
+     * <p>In the web part, with its own MySQL user, the procedures receive from here the fingerprint of this token
+     * (CatalogGuard.useSession): the database checks the session again on every call. If the session is not
+     * there, the fingerprint is forgotten at once.
      */
     public Optional<Current> check(String token, String userAgent) {
         Optional<Current> found = lookUp(token, userAgent);
@@ -220,10 +220,11 @@ public final class WebSessions {
     }
 
     /**
-     * La parte root del pannello separato: la sessione di una richiesta che le passa la web, per id. Deve
-     * esserci ancora (non scaduta, non revocata), essere dell'amministratore che dice la web, e lui deve
-     * essere attivo. Il ruolo e la conferma recente sono quelli del database. Il token non c'e' (null): la
-     * root non lo riceve mai, e l'ultima attivita' la aggiorna la web, che ha appena controllato il cookie.
+     * The root part of the separated panel: the session of a request that the web part passes to it, by id.
+     * It must still exist (not expired, not revoked), belong to the administrator the web part names, and
+     * that administrator must be active. The role and the recent confirmation are the database's. The token
+     * is absent (null): the root never receives it, and the last activity is updated by the web part, which
+     * has just checked the cookie.
      */
     public Optional<Current> forwarded(long sessionId, long adminId) {
         LAST_CHECK_FAILED.set(false);
@@ -256,7 +257,7 @@ public final class WebSessions {
         }
     }
 
-    /** Annota che l'amministratore di questa sessione ha appena confermato di essere lui. */
+    /** Records that this session's administrator has just confirmed their identity. */
     public void markReauthenticated(long sessionId) {
         try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_MARK_REAUTHENTICATED)) {
             p.setObject(1, utc(Instant.now()));
@@ -269,7 +270,7 @@ public final class WebSessions {
 
     // ===================== CSRF =====================
 
-    /** Il token CSRF di una sessione: dipende dal token di sessione e da una chiave che sta solo sul server. */
+    /** A session's CSRF token: it depends on the session token and on a key that exists only on the server. */
     public static String csrfToken(String sessionToken) {
         return wellFormed(sessionToken) ? Base64.getUrlEncoder().withoutPadding().encodeToString(runMac("csrf", sessionToken)) : null;
     }
@@ -279,7 +280,7 @@ public final class WebSessions {
         return expected != null && presented != null && DataCrypto.sameHash(expected, presented);
     }
 
-    /** Il valore del cookie da prima del login: uno nuovo se manca o non ha la forma giusta. */
+    /** The value of the pre-login cookie: a new one if it is missing or not well-formed. */
     public static String preLoginCookieValue(String current) {
         return wellFormed(current) ? current : newToken();
     }
@@ -297,13 +298,14 @@ public final class WebSessions {
         return expected != null && presented != null && DataCrypto.sameHash(expected, presented);
     }
 
-    // ===================== Revoca ed elenco =====================
+    // ===================== Revocation and list =====================
 
     /**
-     * L'inizio di un avvio del server web (SSLMailServer.start, dopo aver preso la porta): le
-     * sessioni dell'avvio di prima non valgono gia' piu' (la chiave e' un'altra) e qui si tolgono
-     * anche dal database, cosi' non compaiono nell'elenco. Restituisce quante erano, -1 se il
-     * database non risponde: in quel caso restano righe morte, che la pulizia delle scadute toglie.
+     * The start of a run of the web server (SSLMailServer.start, after taking the port): the
+     * sessions of the previous run are already invalid (the key is a different one) and here they
+     * are also removed from the database, so they do not show in the list. Returns how many there
+     * were, -1 if the database does not answer: in that case dead rows remain, which the cleanup of
+     * expired sessions removes.
      */
     public int beginRun() {
         try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_BEGIN_RUN)) {
@@ -324,7 +326,7 @@ public final class WebSessions {
         }
     }
 
-    /** Toglie una sessione dell'amministratore (dall'elenco). Falso se non e' sua o non c'e'. */
+    /** Removes one of the administrator's sessions (from the list). False if it is not theirs or not there. */
     public boolean revokeById(long id, long adminId) {
         try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_REVOKE_BY_ID)) {
             p.setLong(1, id);
@@ -336,7 +338,7 @@ public final class WebSessions {
         }
     }
 
-    /** Toglie tutte le sessioni dell'amministratore tranne quella da tenere (-1: tutte). */
+    /** Removes all of the administrator's sessions except the one to keep (-1: all of them). */
     public int revokeOthers(long adminId, long keepId) {
         try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_REVOKE_OTHERS)) {
             p.setLong(1, adminId);
@@ -348,7 +350,7 @@ public final class WebSessions {
         }
     }
 
-    /** Le sessioni ancora valide dell'amministratore, la piu' recente prima. */
+    /** The administrator's sessions that are still valid, most recent first. */
     public List<Listed> list(long adminId) {
         List<Listed> out = new ArrayList<>();
         Instant now = Instant.now();
@@ -366,7 +368,7 @@ public final class WebSessions {
         return out;
     }
 
-    /** Quante sessioni valide ci sono in tutto (per i test e la diagnostica). */
+    /** How many valid sessions there are in total (for the tests and diagnostics). */
     public int count() {
         Instant now = Instant.now();
         try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_COUNT)) {

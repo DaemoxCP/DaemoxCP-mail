@@ -16,26 +16,25 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Il processo di Dovecot che cerca le password (auth-worker) non gira piu' da root.
+ * Dovecot's process that looks up passwords (auth-worker) no longer runs as root.
  *
- * Misurato il 07/11/2026 sul server vero e sulla VM (Dovecot 2.3.21): `dovecot/auth -w` gira da
- * root, perche' nella 2.3 il suo utente predefinito e' root. Root gli servirebbe solo per PAM,
- * /etc/passwd o /etc/shadow; qui le password stanno in MySQL (passdb sql) e l'utente master nel
- * file master-users (passwd-file), quindi gli basta l'utente interno di Dovecot. Provato sulla VM:
- * con `service auth-worker { user = dovecot }` il processo gira come dovecot, un accesso vero
- * riesce, una password sbagliata e' rifiutata, e dovecot-sql.conf puo' restare 0600 (Dovecot lo
- * legge prima di cedere i privilegi).
+ * Measured on 2026-11-07 on the production server and on the VM (Dovecot 2.3.21): `dovecot/auth -w` runs
+ * as root, because in 2.3 its default user is root. It would need root only for PAM, /etc/passwd or
+ * /etc/shadow; here the passwords are in MySQL (passdb sql) and the master user in the master-users file
+ * (passwd-file), so Dovecot's internal user is enough. Tested on the VM: with
+ * `service auth-worker { user = dovecot }` the process runs as dovecot, a real login succeeds, a wrong
+ * password is rejected, and dovecot-sql.conf can stay 0600 (Dovecot reads it before dropping privileges).
  *
- * Lo dice anche il manuale di Dovecot 2.3 (configuration_manual/service_configuration, sezione
- * auth-worker): root e' il predefinito solo perche' PAM di solito legge /etc/shadow, e se non serve
- * conviene cambiarlo, per esempio in $default_internal_user. Si scrive il nome dell'utente e non
- * la variabile, perche' nella 2.4 la sintassi delle variabili e' cambiata e il nome vale per tutte e due.
+ * The Dovecot 2.3 manual says so too (configuration_manual/service_configuration, auth-worker section):
+ * root is the default only because PAM usually reads /etc/shadow, and if it is not needed it is better
+ * to change it, for example to $default_internal_user. The user's name is written, not the variable,
+ * because in 2.4 the variable syntax changed and the name works for both.
  *
- * L'installatore lo scrive da adesso (DovecotConfig, conf.d/10-auth-worker.conf); sui server
- * installati prima lo fa questa riparazione all'avvio, con lo stesso file. Prima di toccare
- * qualcosa controlla che l'autenticazione funzioni; dopo il reload controlla che funzioni ancora e
- * che nessun auth-worker sia rimasto root. Se qualcosa non torna toglie il file e ricarica: Dovecot
- * resta com'era. Al secondo avvio non fa niente e non scrive niente.
+ * The installer writes it from now on (DovecotConfig, conf.d/10-auth-worker.conf); on servers installed
+ * earlier this boot repair does it, with the same file. Before touching anything it checks that
+ * authentication works; after the reload it checks that it still works and that no auth-worker is left
+ * running as root. If something does not add up it removes the file and reloads: Dovecot stays as it
+ * was. At the second startup it does nothing and writes nothing.
  */
 public final class DovecotAuthWorker {
 
@@ -46,13 +45,13 @@ public final class DovecotAuthWorker {
     static final String CONF_D = "/usr/local/etc/dovecot/conf.d";
     static final String FILE_NAME = "10-auth-worker.conf";
 
-    /** I driver che leggono file di sistema o parlano con PAM: con loro auth-worker deve restare root. */
+    /** The drivers that read system files or talk to PAM: with them auth-worker must stay root. */
     static final Set<String> NEED_ROOT = Set.of("pam", "passwd", "shadow", "bsdauth", "checkpassword", "vpopmail");
 
-    /** Un indirizzo che non esiste: la ricerca passa da auth-worker e da MySQL senza trovare nessuno. */
+    /** An address that does not exist: the lookup goes through auth-worker and MySQL without finding anyone. */
     static final String PROBE = "daemoxcp-mail-auth-probe@invalid";
 
-    /** Uscite di `doveadm auth lookup`: trovato, oppure l'utente non c'e' (EX_NOUSER). Il resto e' un guasto. */
+    /** Exit codes of `doveadm auth lookup`: found, or the user is not there (EX_NOUSER). Anything else is a fault. */
     static final Set<Integer> LOOKUP_OK = Set.of(0, 67);
 
     private static final Pattern USER_NAME = Pattern.compile("[a-z_][a-z0-9_-]{0,31}");
@@ -64,7 +63,7 @@ public final class DovecotAuthWorker {
 
     record Decision(Action action, String reason) {}
 
-    /** Il contenuto del file: lo stesso per l'installatore (DovecotConfig) e per la riparazione. */
+    /** The content of the file: the same for the installer (DovecotConfig) and for the repair. */
     public static String fileContent(String user) {
         return "# " + PanelMarker.WRITTEN + ".\n"
              + "# The process that looks up passwords (auth-worker) does not need root: the passwords\n"
@@ -75,7 +74,7 @@ public final class DovecotAuthWorker {
              + "}\n";
     }
 
-    /** I driver di passdb e userdb, dall'uscita di `doveconf -n`. */
+    /** The passdb and userdb drivers, from the output of `doveconf -n`. */
     static Set<String> drivers(String doveconfN) {
         Set<String> out = new TreeSet<>();
         if (doveconfN == null) return out;
@@ -85,12 +84,12 @@ public final class DovecotAuthWorker {
     }
 
     /**
-     * Che cosa fare. Funzione pura, per provarla.
+     * What to do. A pure function, so that it can be tested.
      *
-     * @param workerUser l'utente di auth-worker per `doveconf -h service/auth-worker/user` ("" = root)
-     * @param doveconfN  l'uscita di `doveconf -n`
-     * @param internal   l'utente interno di Dovecot (`doveconf -h default_internal_user`)
-     * @param internalExists se quell'utente c'e' sul sistema
+     * @param workerUser the auth-worker user from `doveconf -h service/auth-worker/user` ("" = root)
+     * @param doveconfN  the output of `doveconf -n`
+     * @param internal   Dovecot's internal user (`doveconf -h default_internal_user`)
+     * @param internalExists whether that user exists on the system
      */
     static Decision decide(String workerUser, String doveconfN, String internal, boolean internalExists) {
         String u = workerUser == null ? "" : workerUser.trim();
@@ -124,7 +123,7 @@ public final class DovecotAuthWorker {
         }
     }
 
-    /** Scrive il file, valida, ricarica e verifica; se la verifica non torna, rimette com'era. */
+    /** Writes the file, validates, reloads and verifies; if the verification fails, puts things back as they were. */
     static boolean apply(String user) throws Exception {
         if (!running()) {
             LOGGER.info("[DovecotAuthWorker] Dovecot is not running: auth-worker left as it is, retrying at the next start");
@@ -168,7 +167,7 @@ public final class DovecotAuthWorker {
         }
     }
 
-    /** Dopo il reload: la ricerca passa ancora, e gli auth-worker accesi girano tutti con l'utente giusto. */
+    /** After the reload: the lookup still goes through, and the running auth-workers all run as the right user. */
     static String verify(String user) throws InterruptedException {
         for (int i = 0; i < 10; i++) {
             int rc = lookup();
@@ -198,7 +197,7 @@ public final class DovecotAuthWorker {
         return ok;
     }
 
-    /** Gli utenti dei processi `dovecot/auth -w` accesi adesso. */
+    /** The users of the `dovecot/auth -w` processes running right now. */
     static List<String> workerUsers() {
         Shell.Result ps = Shell.run(Duration.ofSeconds(10), "ps", "-axww", "-o", "user=", "-o", "command=");
         List<String> out = new ArrayList<>();

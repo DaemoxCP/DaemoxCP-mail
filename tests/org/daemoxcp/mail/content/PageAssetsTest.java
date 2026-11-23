@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * The pages without inline code, for the Content-Security-Policy without 'unsafe-inline' (reperto 178).
+ * The pages without inline code, for the Content-Security-Policy without 'unsafe-inline' (finding 178).
  *
  *  1. PageAssets.externalize: every &lt;script&gt; without src and every &lt;style&gt; becomes a file
  *     named after its content; scripts with src stay; the same content is the same file;

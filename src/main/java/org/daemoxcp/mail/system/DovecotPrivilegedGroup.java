@@ -20,23 +20,25 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
- * I processi delle caselle di Dovecot senza il gruppo mail (reperto 221).
+ * The processes of Dovecot's mailboxes without the mail group (finding 221).
  *
- * <p>Il pannello scriveva {@code mail_privileged_group = mail} in dovecot.conf, 2.3 e 2.4. Con quello ogni processo di
- * una casella (imap, pop3, lmtp, managesieve: quelli che parlano con la rete) tiene il gruppo mail come gruppo salvato e
- * se lo puo' riprendere quando vuole: misurato sulla VM, {@code procstat -s} di un imap di vmail da' SVGID 6. Il gruppo
- * mail scrive in /var/mail, dove stanno le regole Sieve del pannello.
+ * <p>The panel wrote {@code mail_privileged_group = mail} in dovecot.conf, 2.3 and 2.4. With that, every process of
+ * a mailbox (imap, pop3, lmtp, managesieve: the ones that talk to the network) keeps the mail group as its saved
+ * group and can take it back whenever it wants: measured on the VM, {@code procstat -s} of a vmail imap gives
+ * SVGID 6. The mail group writes in /var/mail, where the panel's Sieve rules are.
  *
- * <p>Non serviva: la documentazione di Dovecot (2.3, wiki MailLocation.mbox, QuickConfiguration, BasicConfiguration) lo
- * usa solo per creare la INBOX e i file di blocco delle caselle mbox in /var/mail. Il pannello tiene la posta in
- * Maildir sotto /var/vmail. Misurato sulla VM senza la riga: accesso IMAP, SMTP AUTH, ManageSieve e consegna con le
- * regole del pannello tutti a posto, e l'imap con SVGID 5000 invece di 6. Sulla 2.4 non misurato.
+ * <p>It was not needed: the Dovecot documentation (2.3, wiki MailLocation.mbox, QuickConfiguration,
+ * BasicConfiguration) uses it only to create the INBOX and the lock files of mbox mailboxes in /var/mail. The panel
+ * keeps the mail in Maildir under /var/vmail. Measured on the VM without the line: IMAP login, SMTP AUTH,
+ * ManageSieve and delivery with the panel's rules all fine, and the imap with SVGID 5000 instead of 6. On 2.4 not
+ * measured.
  *
- * <p>L'installatore non la scrive piu' (DovecotConfig); sui server installati prima la toglie questo passaggio, solo se
- * e' la riga esatta del pannello, in un dovecot.conf scritto dal pannello, e se Dovecot non tiene posta in mbox. Dopo:
- * doveconf deve accettare il file e non dare piu' il gruppo, Dovecot ricaricarsi, e un imap vero di una casella entrare
- * e girare senza il gruppo mail. Se una cosa sola non torna, il file torna com'era e Dovecot si ricarica. Le sessioni gia'
- * aperte tengono il gruppo finche' non si ricollegano. Al secondo avvio non trova niente da fare.
+ * <p>The installer no longer writes it (DovecotConfig); on servers installed earlier this pass removes it, only if
+ * it is the panel's exact line, in a dovecot.conf written by the panel, and if Dovecot does not keep mail in mbox.
+ * Afterwards: doveconf must accept the file and no longer give the group, Dovecot must reload, and a real imap of a
+ * mailbox must log in and run without the mail group. If a single thing does not add up, the file goes back to how
+ * it was and Dovecot reloads. Sessions already open keep the group until they reconnect. At the second startup it
+ * finds nothing to do.
  */
 public final class DovecotPrivilegedGroup {
 
@@ -44,10 +46,13 @@ public final class DovecotPrivilegedGroup {
 
     static final Path CONF = Path.of("/usr/local/etc/dovecot/dovecot.conf");
     static final String LINE = "mail_privileged_group = mail\n";
-    /** La prima riga del dovecot.conf che scrive il pannello, 2.3 e 2.4 (DovecotConfig). */
+    /** The first line of the dovecot.conf that the panel writes, 2.3 and 2.4 (DovecotConfig). */
     static final List<String> HEADERS = headers();
 
-    /** Le due prime righe (2.3 e 2.4) con la firma di adesso e con quelle di prima (sezione "dovecotSignature"). */
+    /**
+     * The first two lines (2.3 and 2.4) with the current signature and with the previous ones (section
+     * "dovecotSignature").
+     */
     private static List<String> headers() {
         List<String> out = new java.util.ArrayList<>();
         for (String s : PanelMarker.forms("dovecotSignature", org.daemoxcp.mail.scripts.DovecotConfig.SIGNATURE)) {
@@ -64,11 +69,12 @@ public final class DovecotPrivilegedGroup {
 
     private DovecotPrivilegedGroup() {}
 
-    // ===================== Funzioni pure =====================
+    // ===================== Pure functions =====================
 
     /**
-     * dovecot.conf senza la riga del pannello, o null se non c'e' niente da fare: non e' il file del pannello, la riga
-     * non c'e' (gia' fatto), c'e' due volte o scritta in un altro modo (allora non e' sua, e resta com'e').
+     * dovecot.conf without the panel's line, or null if there is nothing to do: it is not the panel's file, the
+     * line is not there (already done), it is there twice or written another way (then it is not the panel's, and
+     * it stays as it is).
      */
     static String migrated(String conf) {
         if (conf == null || HEADERS.stream().noneMatch(conf::startsWith)) return null;
@@ -81,12 +87,12 @@ public final class DovecotPrivilegedGroup {
     private static final Pattern MBOX = Pattern.compile(
             "(?m)^\\s*(mail_location\\s*=\\s*mbox:|mail_driver\\s*=\\s*mbox\\s*$|mail_inbox_path\\s*=)|INBOX=/var/mail");
 
-    /** Vero se, secondo `doveconf -n`, Dovecot tiene posta in mbox: li' il gruppo mail serve per /var/mail. */
+    /** True if, according to `doveconf -n`, Dovecot keeps mail in mbox: there the mail group is needed for /var/mail. */
     static boolean usesMbox(String doveconfN) {
         return doveconfN != null && MBOX.matcher(doveconfN).find();
     }
 
-    /** Il numero del gruppo dal testo di /etc/group, o -1. */
+    /** The group's number from the text of /etc/group, or -1. */
     static int gidOf(String groupFile, String name) {
         if (groupFile == null) return -1;
         for (String l : groupFile.split("\n")) {
@@ -97,8 +103,8 @@ public final class DovecotPrivilegedGroup {
     }
 
     /**
-     * Vero se la riga di `procstat -s` (PID COMM EUID RUID SVUID EGID RGID SVGID UMASK FLAGS GROUPS) ha il gruppo fra
-     * effettivo, reale, salvato o aggiuntivi.
+     * True if the `procstat -s` line (PID COMM EUID RUID SVUID EGID RGID SVGID UMASK FLAGS GROUPS) has the group
+     * among the effective, real, saved or supplementary ones.
      */
     static boolean keepsGroup(String procstatLine, int gid) {
         String[] t = procstatLine.trim().split("\\s+");
@@ -109,9 +115,9 @@ public final class DovecotPrivilegedGroup {
         return false;
     }
 
-    // ===================== All'avvio =====================
+    // ===================== At startup =====================
 
-    /** All'avvio della parte root. */
+    /** At the start of the root part. */
     public static void ensureAtBoot() {
         try {
             String r = ensure();
@@ -123,7 +129,7 @@ public final class DovecotPrivilegedGroup {
         }
     }
 
-    /** Null se non c'era niente da fare; altrimenti com'e' andata (DONE, ROLLED_BACK, o perche' resta com'e'). */
+    /** Null if there was nothing to do; otherwise how it went (DONE, ROLLED_BACK, or why it stays as it is). */
     static synchronized String ensure() throws Exception {
         if (!Files.isRegularFile(CONF, LinkOption.NOFOLLOW_LINKS) || !Files.isExecutable(Path.of(DOVECONF))) return null;
         String before = new String(RootOnlyPath.read(CONF, 1 << 20), StandardCharsets.UTF_8);
@@ -151,7 +157,10 @@ public final class DovecotPrivilegedGroup {
                 + " they reconnect";
     }
 
-    /** Dopo il reload: un imap vero della casella entra, e gira senza il gruppo. Riprova per 10 s: auth si riavvia. */
+    /**
+     * After the reload: a real imap of the mailbox logs in, and runs without the group. Retries for 10 s: auth
+     * restarts.
+     */
     static String verify(String mailbox, int gid) throws Exception {
         if (gid < 0) return "the group mail is not in " + GROUPS;
         String last = "";
@@ -165,8 +174,9 @@ public final class DovecotPrivilegedGroup {
     }
 
     /**
-     * Un imap vero della casella, come lo fa partire Dovecot con la sua configurazione: {@code doveadm exec imap -u}, che
-     * diventa imap (stesso pid). Appena dice PREAUTH, la sua riga di `procstat -s`; poi LOGOUT. {riga o null, uscita}.
+     * A real imap of the mailbox, as Dovecot starts it with its configuration: {@code doveadm exec imap -u},
+     * which becomes imap (same pid). As soon as it says PREAUTH, its `procstat -s` line; then LOGOUT.
+     * {line or null, exit code}.
      */
     static String[] userProcess(String mailbox) throws Exception {
         ProcessBuilder pb = new ProcessBuilder(DOVEADM, "exec", "imap", "-u", mailbox).redirectErrorStream(true);
@@ -180,7 +190,7 @@ public final class DovecotPrivilegedGroup {
                     if (l.startsWith("* PREAUTH")) in.countDown();
                 }
             } catch (IOException ignored) {
-                // il processo e' finito
+                // the process has ended
             }
         });
         String line = null;
@@ -193,7 +203,7 @@ public final class DovecotPrivilegedGroup {
             try (OutputStream o = p.getOutputStream()) {
                 o.write("a LOGOUT\r\n".getBytes(StandardCharsets.US_ASCII));
             } catch (IOException ignored) {
-                // gia' uscito
+                // already exited
             }
             if (!p.waitFor(10, TimeUnit.SECONDS)) p.destroyForcibly();
             reader.join(Duration.ofSeconds(5));
@@ -203,7 +213,7 @@ public final class DovecotPrivilegedGroup {
         synchronized (out) { return new String[]{line, out.toString()}; }
     }
 
-    // ===================== I pezzi =====================
+    // ===================== The pieces =====================
 
     static boolean running() {
         return Shell.run(Duration.ofSeconds(15), "service", "dovecot", "status").success();

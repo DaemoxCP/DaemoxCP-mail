@@ -28,7 +28,7 @@ import java.util.Map;
  *    delivers nothing;
  *  - the "timezone" script, which wrote 1.1.1.1 into resolv.conf: with the local resolver on it
  *    touches nothing, without it it does what it did before.
- * The real resolver, on a real machine, is measured by the installation from scratch (reperti).
+ * The real resolver, on a real machine, is measured by the installation from scratch (findings).
  *
  * It runs on the VM, like the other script tests:
  *   javac -cp &lt;dir&gt;/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/scripts/LocalResolverTest.java

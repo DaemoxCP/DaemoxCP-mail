@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The panel's Sieve rules do what they say: no keep forced at the end of the script (reperto 216).
+ * The panel's Sieve rules do what they say: no keep forced at the end of the script (finding 216).
  *
  * Until 09/11/2026 SieveGenerator ended every script with "# Default action" and an explicit "keep;". The message then
  * always stayed in INBOX: a "move" filter left it in the folder AND in INBOX (measured on the VM: doveadm search gave

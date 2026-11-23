@@ -23,28 +23,28 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Dove root scrive solo se nessun altro puo' cambiare il percorso (reperto 221).
+ * Where root writes only if nobody else can change the path (finding 221).
  *
- * <p>Le regole Sieve del pannello stanno in /var/mail/sieve, di root, ma /var/mail e' root:mail 0775 (FreeBSD, mtree): con
- * il gruppo mail si rinominava /var/mail/sieve intera e se ne metteva un'altra al suo posto, misurato sulla VM. E il
- * pannello scriveva le regole da root seguendo i collegamenti (SafeNames.under guarda solo il testo del percorso): un
- * .dovecot.sieve che era un collegamento faceva riscrivere a root il file a cui puntava (di nobody, 0600). Insieme: chi
- * aveva il gruppo mail (postfix, clamav, dma che e' setgid mail e lo lancia chiunque, e i processi delle caselle di
- * Dovecot con mail_privileged_group) faceva riscrivere a root un file qualunque.
+ * <p>The panel's Sieve rules are in /var/mail/sieve, owned by root, but /var/mail is root:mail 0775 (FreeBSD, mtree): with
+ * the mail group one could rename the whole /var/mail/sieve and put another one in its place, measured on the VM. And the
+ * panel wrote the rules as root following links (SafeNames.under looks only at the text of the path): a
+ * .dovecot.sieve that was a link made root rewrite the file it pointed to (owned by nobody, 0600). Together: whoever
+ * had the mail group (postfix, clamav, dma which is setgid mail and anyone can run, and the Dovecot mailbox
+ * processes with mail_privileged_group) could make root rewrite any file.
  *
- * <p>Qui le regole per root:
+ * <p>Here the rules for root:
  * <ul>
- *   <li>ogni cartella da / a quella in cui si scrive e' una cartella vera (mai un collegamento) di root, o dell'utente
- *       del processo; nessun altro ci scrive. Sopra quella in cui si scrive basta il bit sticky (come /tmp, e /var/mail
- *       dal reperto 221): chi scrive li' non puo' rinominare ne' togliere quello che e' di root. Cosi' nessun altro puo'
- *       cambiare il percorso fra il controllo e la scrittura, e i passi dopo per percorso sono sicuri;</li>
- *   <li>il file si scrive nuovo accanto, con un nome a caso che non c'e' (CREATE_NEW: un nome gia' presente, anche un
- *       collegamento, non si apre), proprietario, gruppo e permessi dati senza seguire collegamenti, poi rename sul nome
- *       vero: un collegamento li' viene sostituito, mai seguito, e Dovecot vede il file tutto o niente;</li>
- *   <li>se una cartella non passa, non si scrive niente: il motivo va nel registro di chi chiama.</li>
+ *   <li>every folder from / to the one being written into is a real folder (never a link) owned by root, or by the user
+ *       of the process; nobody else writes in it. Above the one being written into the sticky bit is enough (like /tmp,
+ *       and /var/mail since finding 221): whoever writes there cannot rename or remove what belongs to root. So nobody
+ *       else can change the path between the check and the write, and the later steps by path are safe;</li>
+ *   <li>the file is written new next to it, with a random name that does not exist (CREATE_NEW: a name already present,
+ *       even a link, is not opened), owner, group and permissions set without following links, then rename onto the
+ *       real name: a link there is replaced, never followed, and Dovecot sees the file whole or not at all;</li>
+ *   <li>if a folder does not pass, nothing is written: the reason goes into the caller's log.</li>
  * </ul>
- * Misurato sulla VM (OpenJDK 25 su FreeBSD 15.1): CREATE_NEW su un collegamento da' FileAlreadyExists, il rename sopra un
- * collegamento lascia intatto il file a cui puntava, "unix:mode" legge e scrive il bit sticky.
+ * Measured on the VM (OpenJDK 25 on FreeBSD 15.1): CREATE_NEW on a link gives FileAlreadyExists, the rename over a
+ * link leaves the file it pointed to intact, "unix:mode" reads and writes the sticky bit.
  */
 public final class RootOnlyPath {
 
@@ -54,7 +54,7 @@ public final class RootOnlyPath {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final Set<PosixFilePermission> FOLDER_MODE = PosixFilePermissions.fromString("rwxr-xr-x");
 
-    /** L'utente del processo: root per la parte root. Una cartella sua non la cambia nessun altro. */
+    /** The user of the process: root for the root part. A folder of its own cannot be changed by anyone else. */
     private static final int SELF = selfUid();
 
     private static int selfUid() {
@@ -66,14 +66,15 @@ public final class RootOnlyPath {
     }
 
     /**
-     * Null se da / fino a dir ogni cartella e' una cartella vera di root (o del processo) che nessun altro puo' cambiare;
-     * altrimenti il motivo. Sopra dir chi scrive e' ammesso solo col bit sticky; dir stessa no.
+     * Null if from / down to dir every folder is a real folder owned by root (or by the process) that nobody else can
+     * change; otherwise the reason. Above dir, others writing is allowed only with the sticky bit; in dir itself it is
+     * not.
      */
     public static String problem(Path dir) {
         return chain(dir, false);
     }
 
-    /** Come problem(), ma anche dir puo' essere sticky: ci si fanno solo cartelle, controllate una per una dopo. */
+    /** Like problem(), but dir can be sticky too: only folders are made in it, checked one by one afterwards. */
     static String chain(Path dir, boolean lastMayBeSticky) {
         Path d = dir.toAbsolutePath().normalize();
         List<Path> levels = new ArrayList<>();
@@ -91,7 +92,7 @@ public final class RootOnlyPath {
         return null;
     }
 
-    /** Una cartella sola: vera, di root o del processo, scritta da altri solo se sticky e se e' ammesso. */
+    /** A single folder: real, owned by root or by the process, writable by others only if sticky and if that is allowed. */
     static String level(Path p, boolean stickyAllowed) {
         Map<String, Object> a;
         try {
@@ -116,12 +117,12 @@ public final class RootOnlyPath {
     }
 
     /**
-     * Le cartelle sotto base, fatte se mancano (del processo, rwxr-xr-x, il gruppo da quella sopra come fa BSD), e
-     * controllate una per una: un nome gia' presente che non e' una cartella vera di root fa fallire tutto. Base deve
-     * passare il controllo, e puo' essere sticky (come /var/mail).
+     * The folders under base, made if missing (owned by the process, rwxr-xr-x, the group from the one above as BSD
+     * does), and checked one by one: a name already present that is not a real folder owned by root makes everything
+     * fail. Base must pass the check, and can be sticky (like /var/mail).
      *
-     * @return l'ultima cartella
-     * @throws IOException col motivo, se una cartella non passa
+     * @return the last folder
+     * @throws IOException with the reason, if a folder does not pass
      */
     public static Path folders(Path base, String... names) throws IOException {
         Path cur = base.toAbsolutePath().normalize();
@@ -133,7 +134,7 @@ public final class RootOnlyPath {
                 Files.createDirectory(next);
                 Files.getFileAttributeView(next, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS).setPermissions(FOLDER_MODE);
             } catch (FileAlreadyExistsException e) {
-                // c'e' gia': il controllo qui sotto dice se va bene
+                // already there: the check below says whether it is fine
             }
             why = level(next, false);
             if (why != null) throw new IOException(why);
@@ -143,11 +144,11 @@ public final class RootOnlyPath {
     }
 
     /**
-     * Mette in dir/name il contenuto, in un colpo solo e senza seguire collegamenti: file nuovo accanto con un nome a
-     * caso, proprietario, gruppo e permessi dati (null: quelli del processo, il gruppo della cartella, rw-------), poi
-     * rename sul nome. dir deve passare {@link #problem(Path)}.
+     * Puts the content into dir/name, in one go and without following links: a new file next to it with a random
+     * name, owner, group and permissions set (null: those of the process, the folder's group, rw-------), then
+     * rename onto the name. dir must pass {@link #problem(Path)}.
      *
-     * @throws IOException col motivo; dir/name resta com'era
+     * @throws IOException with the reason; dir/name stays as it was
      */
     public static void replace(Path dir, String name, byte[] content, UserPrincipal owner, GroupPrincipal group,
                                Set<PosixFilePermission> mode) throws IOException {
@@ -168,15 +169,15 @@ public final class RootOnlyPath {
             if (mode != null) v.setPermissions(mode);
             Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
-            try { Files.deleteIfExists(tmp); } catch (IOException ignored) { /* resta, col suo nome a caso */ }
+            try { Files.deleteIfExists(tmp); } catch (IOException ignored) { /* stays, with its random name */ }
             throw e;
         }
     }
 
     /**
-     * Un file vero (mai un collegamento) di una cartella che passa {@link #problem(Path)}, fino a max byte.
+     * A real file (never a link) in a folder that passes {@link #problem(Path)}, up to max bytes.
      *
-     * @throws IOException col motivo
+     * @throws IOException with the reason
      */
     public static byte[] read(Path file, int max) throws IOException {
         Path f = file.toAbsolutePath().normalize();
