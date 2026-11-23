@@ -47,7 +47,7 @@ public class ModifyData {
     }
 
     private void initializeComponents() {
-        // Panel settings only
+        // Panel settings only: its port and its name
         this.panelPort = new TextBox(new TerminalSize(40, 1));
         this.panelHost = new TextBox(new TerminalSize(40, 1));
         this.panelSslCert = new TextBox(new TerminalSize(40, 3));

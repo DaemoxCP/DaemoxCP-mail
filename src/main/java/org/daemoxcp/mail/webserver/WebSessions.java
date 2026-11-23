@@ -64,7 +64,8 @@ public final class WebSessions {
     private static volatile boolean runKeyAdopted = false;
 
     /**
-     * With the separated panel the key is the root part's, which creates the sessions: the web part asks the root for it at startup (the socket's closed session-key operation) to
+     * With the separated panel the key is the root part's, which creates the sessions: the web part asks
+     * the root for it at startup (the socket's closed session-key operation) to
      * recognize the sessions and the CSRF tokens. A copy, never on disk.
      */
     public static byte[] runKeyForWebPart() {
