@@ -160,6 +160,7 @@ public final class PanelSeparation {
             String jar = jarPath(), java = javaPath();
             if (jar == null || java == null) return "the panel's jar or java cannot be found";
             if (!asUser("/bin/test", "-r", jar)) return "the user " + USER + " cannot read " + jar;
+            if (!asUser("/bin/test", "-x", workDir())) return "the user " + USER + " cannot enter " + workDir();
             if (!asUser("/bin/test", "-x", java)) return "the user " + USER + " cannot run " + java;
             String files = prepareFiles();
             if (files != null) return files;
@@ -448,11 +449,18 @@ public final class PanelSeparation {
      * 2026-11-23). daemon(8) needs root only to change user (its manual: "-u" requires superuser privileges); a
      * supervisor already running as daemoxcp_mail restarts its child as daemoxcp_mail without it.
      */
+    /** The root part's working directory (the rc script starts it in the panel's folder): the web part starts there too. */
+    static String workDir() {
+        return Path.of("").toAbsolutePath().toString();
+    }
+
     static List<String> command(String javaBin, String jar) {
         // env(1) sets HOME, USER and SHELL as daemon(8) -u did ("Environment variables HOME, USER, and SHELL are set
-        // accordingly"), still without a shell.
+        // accordingly"), still without a shell. And -C goes back to the root part's folder: chroot(8) changes the
+        // working directory to the new root, /, and the web part finds its files from the folder it starts in
+        // (measured on the VM on 2026-11-23: "path to 'database/daemoxcp-mail.db': '/database' does not exist").
         List<String> cmd = new ArrayList<>(List.of("/usr/sbin/chroot", "-u", USER, "-g", GROUP, "-G", GROUP, "/",
-                "/usr/bin/env", "HOME=" + HOME, "USER=" + USER, "SHELL=" + SHELL,
+                "/usr/bin/env", "-C", workDir(), "HOME=" + HOME, "USER=" + USER, "SHELL=" + SHELL,
                 "/usr/sbin/daemon", "-r", "-R", "5",
                 "-P", supervisorPid().toString(), "-p", webPid().toString(), "-o", webLog.toString(), "-H", "-t", TITLE, javaBin));
         for (String a : java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()) {

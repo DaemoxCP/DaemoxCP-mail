@@ -292,9 +292,14 @@ public final class ServiceUsers {
         for (Service s : services.values())
             for (String u : s.users)
                 if (!"root".equals(u)) byUser.computeIfAbsent(u, k -> new java.util.TreeSet<>()).add(s.name);
-        for (Map.Entry<String, Set<String>> e : byUser.entrySet())
-            if (e.getValue().size() > 1)
-                problems.add(new Problem("shared", String.join(", ", e.getValue()), e.getKey(), String.join(" and ", e.getValue())));
+        for (Map.Entry<String, Set<String>> e : byUser.entrySet()) {
+            Set<String> names = new java.util.TreeSet<>(e.getValue());
+            // A php-fpm master that is not root runs its pools as its own user (www.conf.default: user and group "can be
+            // used only if the master process running user is root"): master and pool are one program, not two services.
+            if (names.contains("php-fpm") && names.stream().anyMatch(n -> n.startsWith("php-fpm pool "))) names.remove("php-fpm");
+            if (names.size() > 1)
+                problems.add(new Problem("shared", String.join(", ", names), e.getKey(), String.join(" and ", names)));
+        }
 
         // The configured pools, including those without processes at the moment.
         Set<String> webUsers = new LinkedHashSet<>(List.of(RoundcubeUser.WEB_GROUP));

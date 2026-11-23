@@ -65,9 +65,12 @@ public class PanelSeparationTest {
         List<String> cmd = PanelSeparation.command("/usr/local/openjdk25/bin/java", "/home/panel/daemoxcp-mail-1.0.jar");
         String line = String.join(" ", cmd);
         check("daemon(8) itself is started as daemoxcp_mail, without a shell (" + line + ")",
-                line.startsWith("/usr/sbin/chroot -u daemoxcp_mail -g daemoxcp_mail -G daemoxcp_mail / /usr/bin/env HOME="
+                line.startsWith("/usr/sbin/chroot -u daemoxcp_mail -g daemoxcp_mail -G daemoxcp_mail / /usr/bin/env -C "
+                        + System.getProperty("user.dir") + " HOME="
                         + PanelSeparation.HOME + " USER=daemoxcp_mail SHELL=" + PanelSeparation.SHELL + " /usr/sbin/daemon ")
                 && line.contains(" -r ") && line.contains(" -H "));
+        check("  it starts in the root part's folder, not in chroot's / (" + PanelSeparation.workDir() + ")",
+                PanelSeparation.workDir().equals(System.getProperty("user.dir")) && !"/".equals(PanelSeparation.workDir()));
         check("  so it does not change user itself: no -u for daemon(8)", !line.substring(line.indexOf("/usr/sbin/daemon")).contains(" -u "));
         check("its pidfiles are in the web part's own folder, not in root's",
                 PanelSeparation.supervisorPid().getParent().equals(PanelSeparation.webRunDir())
